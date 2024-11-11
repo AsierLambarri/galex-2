@@ -207,7 +207,7 @@ def __cm_mfrac_method__(pos,
     trace_delta = np.array([1])
     converged = False
     for i in range(100):
-        rhalf = half_mass_radius(pos, mass,  center=center, mfrac=mfrac)
+        rhalf, _ = half_mass_radius(pos, mass,  center=center, mfrac=mfrac)
         mask = np.linalg.norm(pos - center, axis=1) <= rhalf
         npart = len(pos[mask])
         
@@ -504,9 +504,9 @@ def half_mass_radius(pos,
         raise Exception(f"Could not converge on {mfrac:.2f} mass radius!")
     else:
         try:
-            return halfmass_zero.root * coords.units
+            return halfmass_zero.root * coords.units, center
         except:
-            return halfmass_zero.root
+            return halfmass_zero.root, center
             
 
 
