@@ -1,0 +1,62 @@
+TODO.LIST
+---------
+
+Implement everything into classes:
+	-zHalo for a halo at a given z. Has all quantities of interest
+	-profile for creating the profiles
+	-simulation for doing the initial processing of merger trees
+	 and finding halos of interest. This returns zHalo instances.
+	 FUNCTION TO CONVERT zHALO TO DATAFRAME.
+        -Halo class that generalizes zHalo to a number of redshifts. Halo and
+   	 zHalo dont include particle data, only simple quantities such as center,
+	 rvir, mass, rH, Mdyn etc.
+
+Divide current script into multiple callable functions:
+	-One for creating the ARRAKIHS_Infall table at Rref
+	-One to compute quantities such as rH, Mdyn etc
+	-One for plotting the comparison. User can provide tables.
+	 Give keys to variables.
+	-Utilities to compute velocity and (surf) density profiles
+
+Add option to track a given set of halos backwards in time:
+	-To a given set of R/Rvir values
+	-Make full traceback
+	-¿Some kind of continuity into the tracking? Since prior to the
+	 infall the halo has accretions and star formation, doesnt seem
+	 proper (Ramon does explicitly say his approach doesnt include
+	 particle accretion).
+
+Initial merger tree processing, as general as possible:
+	-Include option for user specified parameters so that the names do
+	 not need to include. Use ytree, so need ytree compatible.
+	-Add option for user provided tables. Along with saving and loading, so
+	 that tables are created onloy once
+	-Add option to create ARRAKIHS_Infall tables based on arbitrary variables
+	 and not only R/Rvir (maybe R/Rsplashback etc.)
+ 	-Add option to select halos at z=0 in a certain region of the 
+	 simulation (needs to have a MW-like or more massive host inside; make a 
+	 REQUISITE OF THIS).
+
+
+something like:
+>>> simulation = pkg.simulation(..., zoomin=False) #loads whole simulation
+>>> region_of_interest = pkg.zoomin(...region to zoom in...) # zone which i want to compute merger trees of
+>>>                                                          # not required if zoomin=True
+>>> region_of_interest.create_merger_table(... add some parameters ¿? maybe mass threshold ...)
+>>> region_of_interest.merger_table.to_csv(... change column names ¿? maybe directly pandas maybe something a bit extra  ...)
+>>>
+>>> ... region_of_interest would inherit information of snap equivalences, catalogue and snapshot directory etc
+>>> region_of_interest.find_candidates(Rvir=X, constraints={...})   # constraints that i now pass in config.yaml
+>>>                                                                 # other parameters; pdir, cataloguedir are inherited
+>>>                                                                 # from the simulation
+>>> region_of_interest.candidates                                                              
+>>> region_of_interest.computeX_for_candidates(... list of things to compute ...)
+>>> region_of_interest.candidates[0]  <-- returns an instance of zHalo. Can act with profiles etc
+>>> region_of_interest.candidates.to_df
+>>> region_of_interest.trace_back_candidates(Rvir=[...], ...) #traces back the candidates to desired Rvirs
+>>>                                                           #and computes same quantities as before
+>>> region_of_interest.candidates[0]  <--- now returns an instance of Halo, containing various quantities across different Rvirs                                                   
+>>>                                        If saved now, candidates would produce multiple dataframes, one for each zHalo instance.
+	
+	
+
