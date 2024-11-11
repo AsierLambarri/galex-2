@@ -7,9 +7,11 @@ import argparse
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from lmfit import Model
 from limepy import limepy
 from copy import copy, deepcopy
 from astropy.table import Table
+from scipy.stats import binned_statistic
 from unyt import unyt_array, unyt_quantity
 import matplotlib.pyplot as plt
 import smplotlib
@@ -82,6 +84,7 @@ else:
     os.mkdir(outdir)
 
 os.mkdir(outdir + "/particle_data")
+os.mkdir(outdir + "/los_vel")
 
 
 pdir = config_yaml['dir_snapshots']
@@ -211,6 +214,19 @@ arrakihs_v2.to_csv(outdir + "/" + f"ARRAKIHS_Infall_CosmoV18_{code}.csv", index=
 arrakihs_v2['rh_stars_physical'] = pd.Series()
 arrakihs_v2['rh_dm_physical'] = pd.Series()
 arrakihs_v2['Mdyn'] = pd.Series()
+arrakihs_v2['sigma*'] = pd.Series()
+arrakihs_v2["e_sigma*"] = pd.Series()
+
+N = 16
+nx = int(np.ceil(np.sqrt(N)))
+ny = int(N/nx)
+
+
+def Gaussian(v, A, mu, sigma):
+    return A * np.exp( -(v - mu)**2 / (2*sigma**2) )
+    
+gaussianModel = Model(Gaussian,independent_vars=['v'], nan_policy="omit")
+
 
 for uid in arrakihs_v2['uid'].values:
     halo, sp = load_halo_rockstar(arrakihs_v2, snapequiv, pdir, uid=uid)
@@ -265,7 +281,93 @@ for uid in arrakihs_v2['uid'].values:
     print(f"Mdyn: {(dm_mdyn_cont + st_mdyn_cont):.3e}")
 
 
+    #########################################################################################################################################################################################################
 
+
+    lines_of_sight = random_vector_spherical(N=N)
+    
+    center_stars = refine_center(st_pos[st_mask], st_mass[st_mask], method="iterative", delta=1E-2, m=2, nmin=20)
+    if center_stars['converged'] is False or mass.sum().value < 2E6:
+        center_stars = refine_center(st_pos[st_mask], st_mass[st_mask], method="hm", delta=1E-2, m=2, mfrac=0.5)
+    
+    center = unyt_array(center_stars['center'], 'kpc')    
+    sp_stars = ds.sphere(center, (0.64, 'kpc'))
+    cm_vel = np.average(sp_stars['stars','particle_velocity'], axis=0, weights=sp_stars['stars', 'particle_mass']).in_units("km/s")
+
+    sigma_los = []
+    e_sigma_los = []
+    
+    fig, axes = plt.subplots(nx, ny, figsize=(ny * 8, nx * 8))
+    plt.subplots_adjust(wspace=0.13, hspace=0.13)
+    
+    for i, los in enumerate(lines_of_sight):
+        cyl = ds.disk(center, los, radius=(0.8, "kpc"), height=(np.inf, "kpc"), data_source=sp)
+        pvels = LOS_velocity(cyl['stars', 'particle_velocity'].in_units("km/s") - cm_vel, los)
+
+        fv_binned, binedges, _ = binned_statistic(pvels, np.ones_like(pvels), statistic="count", bins=np.histogram_bin_edges(pvels, bins="fd"))
+        bincenters = 0.5 * (binedges[1:] + binedges[:-1])
+
+        params = gaussianModel.make_params(A={'value': 1E3, 'min': 0, 'max': 1E10, 'vary': True},
+                                           mu={'value': 0, 'min': -50, 'max': 50, 'vary': True},
+                                           sigma={'value': 50, 'min': 0, 'max': 2E2, 'vary': True}
+                                          )
+        result = gaussianModel.fit(fv_binned, v=bincenters, params = params)
+        
+        sigma_los.append(result.params['sigma'].value)
+        e_sigma_los.append(result.params['sigma'].stderr)
+
+        ax = axes.flatten()[i]
+        v = np.linspace(-250, 250, 1000)
+        evals = result.eval(v=v)
+        
+        ax.set_title(f"sigma={result.params['sigma'].value:.1f} ± {result.params['sigma'].stderr:.2f} km/s in L.O.S.={np.round(los,2)}")
+        ax.text(0, 1.03 * fv_binned.max(), r"$N_{max}=$"+f"{fv_binned.max()}", ha="center", va="bottom", fontsize="small", color="black")
+        ax.hist(pvels, bins=binedges)
+        ax.axvline(0, color="blue")
+        ax.plot(v, evals, color="red")
+        
+        ax.set_xlim(-230, 230)
+        ax.set_yticklabels([])
+
+        if i >= N-ny:
+            ax.set_xlabel(r"$\sigma_{*, LOS}$ [km/s]")
+
+    plt.savefig(outdir + "/los_vel" + f"/{subtree}.{snap}.png")
+    plt.close()
+
+    sigma_los = np.array(sigma_los)
+    e_sigma_los = np.array(e_sigma_los)
+
+    arrakihs_v2['sigma*'].loc[halo.index] =  np.mean(sigma_los)  
+    arrakihs_v2['e_sigma*'].loc[halo.index] = np.maximum(np.std(sigma_los), np.sqrt(1 / np.sum(1 / e_sigma_los**2)))
+
+    print(f"Mean sigma LOS = {np.mean(sigma_los):.1f}, std sigma LOS = {np.std(sigma_los):.2f}, ext_sigma sigma LOS = {np.sqrt(1 / np.sum(1 / e_sigma_los**2)):.2f}")
 
 sys.exit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
