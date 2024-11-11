@@ -112,7 +112,7 @@ def load_halo_rockstar(
     else: sp = ds.sphere( (halocen, catalogue_units['length']), (halovir, catalogue_units['length']) )
 
 
-    return halo, sp, ds
+    return halo, sp
 
  
 
