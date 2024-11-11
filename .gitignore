@@ -1,4 +1,14 @@
 .ipynb_checkpoints
+./lib/mergertrees/.ipynb_checkpoints
+./lib/loaders/.ipynb_checkpoints
+./lib/galan/.ipynb_checkpoints
+
+
+./lib/mergertrees/__pycache__
+./lib/loaders/__pycache__
+./lib/galan/__pycache__
+
+__pycache__
 output_*
 *.out
 *.yaml
