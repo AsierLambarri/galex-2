@@ -13,3 +13,4 @@ constraints:
     stellar_low:  4E5
     stellar_high: inf
 Rvir:             [1,2,3,4]
+comparison_plot:  True

@@ -343,28 +343,216 @@ for uid in arrakihs_v2['uid'].values:
 
     print(f"Mean sigma LOS = {np.mean(sigma_los):.1f}, std sigma LOS = {np.std(sigma_los):.2f}, ext_sigma sigma LOS = {np.sqrt(1 / np.sum(1 / e_sigma_los**2)):.2f}")
 
-sys.exit()
+arrakihs_v2.to_csv(outdir + "/" + f"ARRAKIHS_Infall_CosmoV18_{code}.csv", index=False)
 
 
 
+if config_yaml['comparison_plot']:
+    from astropy.table import Table, join, Column, conf
+    from cmdstanpy import CmdStanModel
 
 
+    candidates = Table.read(, format="csv")
+    mccon = Table.read('./DwarfProperties/data/LocalGroup/McConnachie_properties_complete.dat', format = "ascii.fixed_width", delimiter="\t")
+    mccon2 = Table.read('./DwarfProperties/data/LocalGroup/McConnachie_2012.csv')
+    globc = Table.read("./DwarfProperties/data/GC_Harris1997.dat", format="ascii.csv",delimiter=";", comment="#")
+    
+    my_model = CmdStanModel(stan_file="linear_noErrors_robust.stan", cpp_options={'STAN_THREADS':'true'})
 
+    dwarf_data = {
+    "N": len(mccon['VMag'].value),
+    "M": len(candidates['Mdyn'].value),
+    "x": np.log10(mccon['Mdyn'].value*1E6).tolist(),
+    "y": mccon['VMag'].value.tolist(),
+    'xeval' : np.log10(candidates['Mdyn'].value).tolist()
+    }
+    
+    fit = my_model.sample(data=dwarf_data, chains=4, iter_sampling=5000, show_console=False)
+    df = fit.draws_pd()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    trans_dict = {'dIrr/dSph': "p",
+                  'dIrr': "*",
+                  'dE/dSph': "h",
+                  'cE': "D",
+                  "Sc": "P",
+                  'Irr': "s", 
+                  '????': "x",
+                  '(d)Irr?': "s",
+                  'dSph' : "o",
+                  'dSph?': "o"
+                 }
+    import matplotlib.gridspec as gridspec
+    
+    plt.rcParams['axes.linewidth'] = 1.1
+    plt.rcParams['xtick.major.width'] = 1.1
+    plt.rcParams['xtick.minor.width'] = 1.1
+    plt.rcParams['ytick.major.width'] = 1.1
+    plt.rcParams['ytick.minor.width'] = 1.1
+    
+    plt.rcParams['xtick.major.size'] = 7
+    plt.rcParams['ytick.major.size'] = 7
+        
+    fig = plt.figure(figsize=(1.5*1.8*9,1.8*9))
+    
+    
+    gs = gridspec.GridSpec(2, 3, hspace=0, wspace=0)
+    
+    ax1 = fig.add_subplot(gs[0])  
+    ax2 = fig.add_subplot(gs[1])  
+    ax3 = fig.add_subplot(gs[4])  
+    ax4 = fig.add_subplot(gs[3])  
+    ax5 = fig.add_subplot(gs[2])  
+    ax6 = fig.add_subplot(gs[5])  
+    
+    
+    i = 0
+    for key, value in trans_dict.items():
+        morph_mccon = mccon2[mccon2['MType'] == key]
+        
+        if key != "dSph?" and key != "(d)Irr?":
+            ax1.scatter([np.nan],[np.nan], marker=value, color="black", s=70, label=f"{key}") 
+    
+            
+        if i==8:
+            a1 = ax1.scatter(morph_mccon['R2'][morph_mccon['SubG'] == "MW"], morph_mccon['VMag'][morph_mccon['SubG'] == "MW"], marker=value, color="red", s=70, label=f"Milky-Way group")
+            a2 = ax1.scatter(morph_mccon['R2'][morph_mccon['SubG'] == "M31"], morph_mccon['VMag'][morph_mccon['SubG'] == "M31"], marker=value, color="blue",s=70, label=f"Andromeda gruop")
+            a3 = ax1.scatter(morph_mccon['R2'][(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] <= 1000)], morph_mccon['VMag'][(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] <= 1000)], marker=value, color="green", s=70, label=f"Local group "+r"($D_{LG} \leq 1Mpc$)")
+            a4 = ax1.scatter(morph_mccon['R2'][(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] > 1000)], morph_mccon['VMag'][(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] > 1000)], marker=value, color="magenta", s=70, label=f"Nearby galaxies "+r"($D_{LG} > 1Mpc$)")
+        else:
+            ax1.scatter(morph_mccon['R2'][morph_mccon['SubG'] == "MW"], morph_mccon['VMag'][morph_mccon['SubG'] == "MW"], marker=value, color="red", s=70 )
+            ax1.scatter(morph_mccon['R2'][morph_mccon['SubG'] == "M31"], morph_mccon['VMag'][morph_mccon['SubG'] == "M31"], marker=value, color="blue",s=70 )
+            ax1.scatter(morph_mccon['R2'][(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] <= 1000)], morph_mccon['VMag'][(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] <= 1000)], marker=value, color="green", s=70 )
+            ax1.scatter(morph_mccon['R2'][(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] > 1000)], morph_mccon['VMag'][(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] > 1000)], marker=value, color="magenta", s=70 ) 
+    
+    
+        
+        ax1.set_xscale("log")
+        ax1.invert_yaxis()
+        ax1.set_xlim(1,7000)
+        ax1.set_ylim(0, -19)
+        ax1.set_xlabel(r"$r_h$ [pc]")
+        ax1.set_xticklabels([0, 1, 10, 100, 1000])
+        ax1.set_ylabel(r"$M_V$ [mag]" )
+        ax1.legend()
+    
+        i += 1
+        
+        
+        
+        
+        y = morph_mccon['R2'] 
+        x = morph_mccon['Mdyn'] * 1E6 
+        ax3.scatter(x[morph_mccon['SubG'] == "MW"], y[morph_mccon['SubG'] == "MW"], marker=value, color="red", s=70, )
+        ax3.scatter(x[morph_mccon['SubG'] == "M31"], y[morph_mccon['SubG'] == "M31"], marker=value, color="blue",s=70, )
+        ax3.scatter(1E6 * morph_mccon['Mdyn'][(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] <= 1000)], morph_mccon['R2'][(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] <= 1000)], marker=value, color="green", s=70, )
+        ax3.scatter(1E6 * morph_mccon['Mdyn'][(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] > 1000)], morph_mccon['R2'][(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] > 1000)], marker=value, color="magenta", s=70, )
+        
+        ax3.set_ylabel(r"$r_h$ [pc]")
+        ax3.set_xlabel(r"$M_{dyn} (\leq r_h) \ \ [M_\odot]$")
+        ax3.loglog()
+        ax3.set_xlim(1E5, 1E10)
+        ax3.set_ylim(ax1.get_xlim())
+        ax3.set_yticklabels(ax1.get_xticklabels())
+        
+        
+        
+        
+        
+        
+        y = morph_mccon['VMag']
+        x = 1E6 * morph_mccon['Mdyn']
+        ax2.scatter(x[morph_mccon['SubG'] == "MW"], y[morph_mccon['SubG'] == "MW"], marker=value, color="red", s=70, )
+        ax2.scatter(x[morph_mccon['SubG'] == "M31"], y[morph_mccon['SubG'] == "M31"], marker=value, color="blue",s=70, )
+        ax2.scatter(x[(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] <= 1000)], y[(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] <= 1000)], marker=value, color="green", s=70, )
+        ax2.scatter(x[(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] > 1000)], y[(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] > 1000)], marker=value, color="magenta", s=70, )
+        
+        
+         
+        
+        
+        ax2.set_xscale("log")
+        ax2.invert_yaxis()
+        ax2.set_ylim(ax1.get_ylim())
+        ax2.set_ylabel(None)
+        ax2.set_yticklabels([])
+        ax2.set_xticklabels([])
+        ax2.set_xlabel(None)
+        ax2.set_xlim(ax3.get_xlim())
+    
+    
+    
+        x = morph_mccon['sigma*']
+        y = morph_mccon['R2']
+        ax6.scatter(x[morph_mccon['SubG'] == "MW"], y[morph_mccon['SubG'] == "MW"], marker=value, s=70, color="red")
+        ax6.scatter(x[morph_mccon['SubG'] == "M31"], y[morph_mccon['SubG'] == "M31"],  marker=value, s=70, color="blue")
+        #ax6.scatter(x[(morph_mccon['SubG'] == "Rest")], y[(morph_mccon['SubG'] == "Rest")], marker=value, s=70, color="green")
+        ax6.scatter(x[(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] <= 1000)], y[(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] <= 1000)], marker=value, color="green", s=70, )
+        ax6.scatter(x[(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] > 1000)], y[(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] > 1000)], marker=value, color="magenta", s=70, )
+        
+        ax6.set_xscale("log")
+        ax6.set_yscale("log")
+        ax6.set_xlim(2, 100)
+        ax6.set_xlabel(r"$\sigma_*$ [km/s]")
+        ax6.set_ylabel("")
+        ax6.set_yticklabels([])
+        ax6.set_ylim(ax3.get_ylim())
+    
+    
+    
+    
+    
+        x = morph_mccon['sigma*']
+        y = morph_mccon['VMag']
+        ax5.scatter(x[morph_mccon['SubG'] == "MW"], y[morph_mccon['SubG'] == "MW"], marker=value, s=70, color="red")
+        ax5.scatter(x[morph_mccon['SubG'] == "M31"], y[morph_mccon['SubG'] == "M31"],  marker=value, s=70, color="blue")
+        ax5.scatter(x[(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] <= 1000)], y[(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] <= 1000)], marker=value, color="green", s=70, )
+        ax5.scatter(x[(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] > 1000)], y[(morph_mccon['SubG'] == "Rest") & (morph_mccon['D(LG)'] > 1000)], marker=value, color="magenta", s=70, )    
+        
+        
+        ax5.set_xscale("log")
+        ax5.set_yscale("linear")
+        ax5.set_xlim(ax6.get_xlim())
+        ax5.set_xlabel("")
+        ax5.set_ylabel("")
+        ax5.set_yticklabels([])
+        ax5.set_xticklabels([])
+        ax5.set_ylim(ax1.get_ylim())
+    
+    
+    legend_GC = ax1.scatter(60/206265 * globc['Rh']  * globc['Rsun'] * 1E3, globc['MVt'], s=20, label="MW globular clusters")
+    
+    
+    for i in range(1,37):
+        st = f"dpp[{i}]"
+        ax1.errorbar(candidates['rh_stars_physical'].value[i-1]*1E3, df[st].mean(), yerr=df[st].std()*0, marker="^", color="black")
+    
+    
+    legenc_candidates = ax3.scatter(candidates['Mdyn'], candidates['rh_stars_physical'] * 1E3, marker="^", label="Agora ART-I Satellites")
+    
+    
+    bf = ax2.plot(md, df['beta0'].mean() + df['beta1'].mean()*np.log10(md), lw=2, zorder=10, label="Best Fit")
+    
+    for beta0, beta1 in df[['beta0', 'beta1']].values[::1]:
+        ax2.plot(md, beta0 + beta1 * np.log10(md), lw=1, alpha=0.1, color="lightblue", zorder=-1)
+    
+    ax6.scatter(candidates['sigma*'] , candidates['rh_stars_physical'] * 1E3, marker="^")
+    
+    ax5.scatter(candidates['sigma*'] , df['beta0'].mean() + df['beta1'].mean() * np.log10(candidates['Mdyn']), marker="^")
+    
+    
+    ax2.legend()
+    ax3.legend()
+    ax1.legend(loc='lower center', bbox_to_anchor=(0.5, -0.8), fancybox=True)
+    
+    
+    
+    
+    ax4.remove()
+    plt.savefig(outdir + "/" +f"ARTI_sat_comparison.png")
+    plt.close()
+    print(f"FINISHED !")
+else:
+    print(f"FINISHED !")
 
 
 
