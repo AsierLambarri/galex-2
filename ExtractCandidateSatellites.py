@@ -243,7 +243,7 @@ gaussianModel = Model(Gaussian,independent_vars=['v'], nan_policy="omit")
 
 
 for uid in arrakihs_v2['uid'].values:
-    halo, sp = load_halo_rockstar(arrakihs_v2, snapequiv, pdir, uid=uid)
+    halo, sp, ds = load_halo_rockstar(arrakihs_v2, snapequiv, pdir, uid=uid)
     halocen, halovir = sp.center.in_units("kpccm"), sp.radius.in_units("kpccm")
 
     subid = int(halo['Sub_tree_id'].values[0])
@@ -304,7 +304,7 @@ for uid in arrakihs_v2['uid'].values:
         print(center_stars)
     
     center = unyt_array(center_stars['center'], 'kpc')    
-    sp_stars = sp.ds.sphere(center, (0.64, 'kpc'))
+    sp_stars = ds.sphere(center, (0.64, 'kpc'))
     cm_vel = np.average(sp_stars['stars','particle_velocity'], axis=0, weights=sp_stars['stars', 'particle_mass']).in_units("km/s")
 
     sigma_los = []
@@ -314,7 +314,7 @@ for uid in arrakihs_v2['uid'].values:
     plt.subplots_adjust(wspace=0.13, hspace=0.13)
     
     for i, los in enumerate(lines_of_sight):
-        cyl = sp.ds.disk(center, los, radius=(0.8, "kpc"), height=(np.inf, "kpc"), data_source=sp)
+        cyl = ds.disk(center, los, radius=(0.8, "kpc"), height=(np.inf, "kpc"), data_source=sp)
         pvels = LOS_velocity(cyl['stars', 'particle_velocity'].in_units("km/s") - cm_vel, los)
 
         fv_binned, binedges, _ = binned_statistic(pvels, np.ones_like(pvels), statistic="count", bins=np.histogram_bin_edges(pvels, bins="fd"))
