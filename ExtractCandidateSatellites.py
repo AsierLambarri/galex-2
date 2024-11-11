@@ -78,13 +78,31 @@ with open(args.file, "r") as file:
 
 code = config_yaml['code']
 outdir = config_yaml['output_dir'] + "_" + code
-if os.path.isdir(outdir):
-    clear_directory(outdir)
-else:
-    os.mkdir(outdir)
 
-os.mkdir(outdir + "/particle_data")
-os.mkdir(outdir + "/los_vel")
+skip_candidates = False
+if 'candidates' in list(config_yaml.keys()):
+    if config_yaml['candidates'] is not None:
+        skip_candidates = True
+    else:
+        if os.path.isdir(outdir):
+            clear_directory(outdir)
+            os.mkdir(outdir + "/particle_data")
+            os.mkdir(outdir + "/los_vel")
+        else:
+            os.mkdir(outdir)
+            os.mkdir(outdir + "/particle_data")
+            os.mkdir(outdir + "/los_vel")
+else:
+    if os.path.isdir(outdir):
+        clear_directory(outdir)
+        os.mkdir(outdir + "/particle_data")
+        os.mkdir(outdir + "/los_vel")
+    else:
+        os.mkdir(outdir)
+        os.mkdir(outdir + "/particle_data")
+        os.mkdir(outdir + "/los_vel")
+
+
 
 
 pdir = config_yaml['dir_snapshots']
@@ -113,9 +131,6 @@ zlow, zhigh = (
 )
 Rvir_extra = list([ R for R in config_yaml['Rvir'] if R != 1])
 
-#constrainedTree = CompleteTree[(zlow <= CompleteTree['Redshift']) & (CompleteTree['Redshift'] <= zhigh) & 
-#                               (mlow <= CompleteTree['mass']) & (CompleteTree['mass'] <= mhigh)].sort_values(by=['Sub_tree_id'], ascending=[True])
-
 
 constrainedTree_R1 = CompleteTree[(np.abs(CompleteTree['R/Rvir'] - 1) < 0.10) & (mlow <= CompleteTree['mass']) & (CompleteTree['mass'] <= mhigh) &
                                   (zlow <= CompleteTree['Redshift']) & (CompleteTree['Redshift'] <= zhigh)].sort_values(by=['Snapshot', 'Sub_tree_id'], ascending=[True, True])
@@ -124,92 +139,97 @@ unique_subtrees = np.unique(constrainedTree_R1['Sub_tree_id'])
 
 CrossingSats_R1 = pd.DataFrame(columns=constrainedTree_R1.columns)
 
-verbose = False
-for subtree in tqdm(unique_subtrees):
-    crossing_subtree = constrainedTree_R1[constrainedTree_R1['Sub_tree_id'] == subtree]
-    crossing_subtree.sort_values("Snapshot")
+if skip_candidates == False:
 
-    crossings_list, indexes_list = isolate_sequences(crossing_subtree['Snapshot'].values, crossing_subtree.index)
+    verbose = False
+    for subtree in tqdm(unique_subtrees):
+        crossing_subtree = constrainedTree_R1[constrainedTree_R1['Sub_tree_id'] == subtree]
+        crossing_subtree.sort_values("Snapshot")
     
-    cross_redshifts = []
-    cross_indexes = []
-    for cross_snapnums, indexes in zip(crossings_list, indexes_list):
-        crossing_subtree_subseq = crossing_subtree.loc[indexes]
-        delta_RRvir = crossing_subtree_subseq['R/Rvir'].values - 1
-        redshifts = crossing_subtree_subseq['Redshift'].values
-
-
-        if True in (delta_RRvir > 0):
-            RRvir_plus = delta_RRvir[delta_RRvir > 0]
-            RRvir_plus_minimum = RRvir_plus.min()
-            ipos_min = np.where(delta_RRvir == RRvir_plus_minimum)[0][0]       
-            cross_redshifts.append(redshifts[ipos_min])
-            cross_indexes.append(indexes[ipos_min])
-        else:
-            pass
-    
-    crossings_df = crossing_subtree.loc[cross_indexes]
-    CrossingSats_R1 = pd.concat([CrossingSats_R1, crossings_df])
-    
-    if verbose:
-        print(f"\nSUBTREE: {subtree}. First Crossing Redshift: {cross_redshifts}, {cross_indexes}")
-        pp.pprint(crossing_subtree[['Halo_ID','Snapshot','Redshift','uid','mass','R/Rvir']])
-        print(crossings_list, indexes_list)
-        print(crossing_subtree.loc[cross_indexes][['Halo_ID','Snapshot','Redshift','uid','mass','R/Rvir']])
-
-
-CrossingSats_R1['has_stars'] = pd.Series()
-CrossingSats_R1['has_galaxy'] = pd.Series()
-CrossingSats_R1['delta_rel'] = pd.Series()
-CrossingSats_R1['stellar_mass'] = pd.Series()
-
-
-for snapnum in np.unique(CrossingSats_R1['Snapshot'].values):
-    filtered_halos  = CrossingSats_R1[(CrossingSats_R1['Snapshot'] == snapnum)]
-    fn = snapequiv[snapequiv['snapid'] == snapnum]['snapshot'].value[0]
-    ds = yt.load(pdir + fn)
-    
-    print(f"\n##########  {snapnum}  ##########")
-    
-    for index in filtered_halos.index:
-        filtered_node = filtered_halos.loc[[index]]
-        istars, mask_stars, sp, delta_rel = compute_stars_in_halo(filtered_node, ds, verbose=True)
+        crossings_list, indexes_list = isolate_sequences(crossing_subtree['Snapshot'].values, crossing_subtree.index)
         
-        hasstars = np.count_nonzero(mask_stars) != 0
-        hassgal = np.count_nonzero(mask_stars) >= 6
+        cross_redshifts = []
+        cross_indexes = []
+        for cross_snapnums, indexes in zip(crossings_list, indexes_list):
+            crossing_subtree_subseq = crossing_subtree.loc[indexes]
+            delta_RRvir = crossing_subtree_subseq['R/Rvir'].values - 1
+            redshifts = crossing_subtree_subseq['Redshift'].values
+    
+    
+            if True in (delta_RRvir > 0):
+                RRvir_plus = delta_RRvir[delta_RRvir > 0]
+                RRvir_plus_minimum = RRvir_plus.min()
+                ipos_min = np.where(delta_RRvir == RRvir_plus_minimum)[0][0]       
+                cross_redshifts.append(redshifts[ipos_min])
+                cross_indexes.append(indexes[ipos_min])
+            else:
+                pass
         
-        CrossingSats_R1['has_stars'].loc[index] = hasstars 
-        CrossingSats_R1['has_galaxy'].loc[index] = hassgal
-        CrossingSats_R1['delta_rel'].loc[index] = float(delta_rel)
-        if hasstars:
-            print(sp['stars','particle_mass'][mask_stars].sum().in_units("Msun").value)
-            CrossingSats_R1['stellar_mass'].loc[index] = sp['stars','particle_mass'][mask_stars].sum().in_units("Msun").value
+        crossings_df = crossing_subtree.loc[cross_indexes]
+        CrossingSats_R1 = pd.concat([CrossingSats_R1, crossings_df])
+        
+        if verbose:
+            print(f"\nSUBTREE: {subtree}. First Crossing Redshift: {cross_redshifts}, {cross_indexes}")
+            pp.pprint(crossing_subtree[['Halo_ID','Snapshot','Redshift','uid','mass','R/Rvir']])
+            print(crossings_list, indexes_list)
+            print(crossing_subtree.loc[cross_indexes][['Halo_ID','Snapshot','Redshift','uid','mass','R/Rvir']])
+    
+    
+    CrossingSats_R1['has_stars'] = pd.Series()
+    CrossingSats_R1['has_galaxy'] = pd.Series()
+    CrossingSats_R1['delta_rel'] = pd.Series()
+    CrossingSats_R1['stellar_mass'] = pd.Series()
+    
+    
+    for snapnum in np.unique(CrossingSats_R1['Snapshot'].values):
+        filtered_halos  = CrossingSats_R1[(CrossingSats_R1['Snapshot'] == snapnum)]
+        fn = snapequiv[snapequiv['snapid'] == snapnum]['snapshot'].value[0]
+        ds = yt.load(pdir + fn)
+        
+        print(f"\n##########  {snapnum}  ##########")
+        
+        for index in filtered_halos.index:
+            filtered_node = filtered_halos.loc[[index]]
+            istars, mask_stars, sp, delta_rel = compute_stars_in_halo(filtered_node, ds, verbose=True)
+            
+            hasstars = np.count_nonzero(mask_stars) != 0
+            hassgal = np.count_nonzero(mask_stars) >= 6
+            
+            CrossingSats_R1['has_stars'].loc[index] = hasstars 
+            CrossingSats_R1['has_galaxy'].loc[index] = hassgal
+            CrossingSats_R1['delta_rel'].loc[index] = float(delta_rel)
+            if hasstars:
+                print(sp['stars','particle_mass'][mask_stars].sum().in_units("Msun").value)
+                CrossingSats_R1['stellar_mass'].loc[index] = sp['stars','particle_mass'][mask_stars].sum().in_units("Msun").value
+    
+            if hassgal:
+                np.savetxt(outdir + "/" + f"particle_data/stars_{int(filtered_node['Sub_tree_id'].values)}.{int(snapnum)}.pids", istars, fmt="%i")            
+    
+    
+    
+            print(f"\n uid: {filtered_node['uid'].values}, subtree: {filtered_node['Sub_tree_id'].values}.")
+            print(f"Stars found: {hasstars}.")
+            print(f"Galaxies found: {hassgal}. Np: {np.count_nonzero(mask_stars)}.")  
+    
+    
+    
+    
+    CrossingSats_R1.to_csv(outdir + "/" + f"candidate_satellites_{code}.csv", index=False)
+    
+    CrossingSats_R1 = CrossingSats_R1[CrossingSats_R1['has_galaxy']]
+    
+    
+    arrakihs_v2 = CrossingSats_R1[ (CrossingSats_R1['stellar_mass'] <= stellar_high) & (stellar_low <= CrossingSats_R1['stellar_mass']) ].sort_values("Redshift", ascending=False)
+    
+    
+    
+    arrakihs_v2 = arrakihs_v2[~arrakihs_v2.duplicated(['Sub_tree_id'], keep='first').values].sort_values("Sub_tree_id")
+    
+    arrakihs_v2.to_csv(outdir + "/" + f"ARRAKIHS_Infall_CosmoV18_{code}.csv", index=False)
 
-        if hassgal:
-            np.savetxt(outdir + "/" + f"particle_data/stars_{int(filtered_node['Sub_tree_id'].values)}.{int(snapnum)}.pids", istars, fmt="%i")            
-
-
-
-        print(f"\n uid: {filtered_node['uid'].values}, subtree: {filtered_node['Sub_tree_id'].values}.")
-        print(f"Stars found: {hasstars}.")
-        print(f"Galaxies found: {hassgal}. Np: {np.count_nonzero(mask_stars)}.")  
-
-
-
-
-CrossingSats_R1.to_csv(outdir + "/" + f"candidate_satellites_{code}.csv", index=False)
-
-CrossingSats_R1 = CrossingSats_R1[CrossingSats_R1['has_galaxy']]
-
-
-arrakihs_v2 = CrossingSats_R1[ (CrossingSats_R1['stellar_mass'] <= stellar_high) & (stellar_low <= CrossingSats_R1['stellar_mass']) ].sort_values("Redshift", ascending=False)
-
-
-
-arrakihs_v2 = arrakihs_v2[~arrakihs_v2.duplicated(['Sub_tree_id'], keep='first').values].sort_values("Sub_tree_id")
-
-arrakihs_v2.to_csv(outdir + "/" + f"ARRAKIHS_Infall_CosmoV18_{code}.csv", index=False)
-
+else:
+    print(f"ARRAKIHS table has been found!")
+    arrakihs_v2 = pd.read_csv(outdir + "/" + f"ARRAKIHS_Infall_CosmoV18_{code}.csv")
 
 arrakihs_v2['rh_stars_physical'] = pd.Series()
 arrakihs_v2['rh_dm_physical'] = pd.Series()
@@ -230,10 +250,10 @@ gaussianModel = Model(Gaussian,independent_vars=['v'], nan_policy="omit")
 
 for uid in arrakihs_v2['uid'].values:
     halo, sp = load_halo_rockstar(arrakihs_v2, snapequiv, pdir, uid=uid)
-    halocen = halo[['position_x','position_y','position_z']].values[0] * sp.units.kpccm
+    halocen = (halo[['position_x','position_y','position_z']].values[0], 'kpccm')
 
-    subid = int(halo['Sub_tree_id'].value[0])
-    snap = int(halo['Snapshot'].value[0])
+    subid = int(halo['Sub_tree_id'].values[0])
+    snap = int(halo['Snapshot'].values[0])
 
     st_pos = sp['darkmatter','particle_position'].in_units("kpc")
     st_vel = sp['darkmatter','particle_velocity'].in_units("km/s")
@@ -280,8 +300,6 @@ for uid in arrakihs_v2['uid'].values:
     print(f"DM mass: {dm_mass[dm_mask].sum():.3e}. Rockstar mass: {halo['mass'].value[0]:.3e}. rH: {dm_rh:.2f}. Mass inside st_rH:  {dm_mdyn_cont/dm_mass[dm_mask].sum():.3e}")
     print(f"Mdyn: {(dm_mdyn_cont + st_mdyn_cont):.3e}")
 
-
-    #########################################################################################################################################################################################################
 
 
     lines_of_sight = random_vector_spherical(N=N)
@@ -352,7 +370,7 @@ if config_yaml['comparison_plot']:
     from cmdstanpy import CmdStanModel
 
 
-    candidates = Table.read(, format="csv")
+    candidates = Table.read(outdir + "/" + f"ARRAKIHS_Infall_CosmoV18_{code}.csv", format="csv")
     mccon = Table.read('./DwarfProperties/data/LocalGroup/McConnachie_properties_complete.dat', format = "ascii.fixed_width", delimiter="\t")
     mccon2 = Table.read('./DwarfProperties/data/LocalGroup/McConnachie_2012.csv')
     globc = Table.read("./DwarfProperties/data/GC_Harris1997.dat", format="ascii.csv",delimiter=";", comment="#")

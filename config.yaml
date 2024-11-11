@@ -2,6 +2,7 @@ code:             'ART'
 output_dir:       './output'
 dir_snapshots:    '/media/temp1/AGORA/ART/Cosmo_v18/'
 snapequiv_path:   '~/trees/snap_equiv.dat'
+candidates:       'output_ART/ARRAKIHS_Infall_CosmoV18_ART.csv'
 RCT_paths:
     main:         '~/trees/MainTree.csv'
     sat1:         '~/trees/SatelliteTrees.csv'
