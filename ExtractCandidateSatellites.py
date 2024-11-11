@@ -210,21 +210,15 @@ if skip_candidates == False:
             print(f"\n uid: {filtered_node['uid'].values}, subtree: {filtered_node['Sub_tree_id'].values}.")
             print(f"Stars found: {hasstars}.")
             print(f"Galaxies found: {hassgal}. Np: {np.count_nonzero(mask_stars)}.")  
-    
-    
+
+        ds.close()
     
     
     CrossingSats_R1.to_csv(outdir + "/" + f"candidate_satellites_{code}.csv", index=False)
-    
     CrossingSats_R1 = CrossingSats_R1[CrossingSats_R1['has_galaxy']]
     
-    
     arrakihs_v2 = CrossingSats_R1[ (CrossingSats_R1['stellar_mass'] <= stellar_high) & (stellar_low <= CrossingSats_R1['stellar_mass']) ].sort_values("Redshift", ascending=False)
-    
-    
-    
     arrakihs_v2 = arrakihs_v2[~arrakihs_v2.duplicated(['Sub_tree_id'], keep='first').values].sort_values("Sub_tree_id")
-    
     arrakihs_v2.to_csv(outdir + "/" + f"ARRAKIHS_Infall_CosmoV18_{code}.csv", index=False)
 
 else:
@@ -250,15 +244,15 @@ gaussianModel = Model(Gaussian,independent_vars=['v'], nan_policy="omit")
 
 for uid in arrakihs_v2['uid'].values:
     halo, sp = load_halo_rockstar(arrakihs_v2, snapequiv, pdir, uid=uid)
-    halocen = (halo[['position_x','position_y','position_z']].values[0], 'kpccm')
+    halocen, halovir = sp.center.in_units("kpccm"), sp.radius.in_units("kpccm")
 
     subid = int(halo['Sub_tree_id'].values[0])
     snap = int(halo['Snapshot'].values[0])
 
-    st_pos = sp['darkmatter','particle_position'].in_units("kpc")
-    st_vel = sp['darkmatter','particle_velocity'].in_units("km/s")
-    st_mass = sp['darkmatter','particle_mass'].in_units("Msun")
-    st_ids = sp['darkmatter', 'particle_index'].value
+    st_pos = sp['stars','particle_position'].in_units("kpc")
+    st_vel = sp['stars','particle_velocity'].in_units("km/s")
+    st_mass = sp['stars','particle_mass'].in_units("Msun")
+    st_ids = sp['stars', 'particle_index'].value
 
     dm_pos = sp['darkmatter','particle_position'].in_units("kpc")
     dm_vel = sp['darkmatter','particle_velocity'].in_units("km/s")
@@ -266,38 +260,38 @@ for uid in arrakihs_v2['uid'].values:
     dm_ids = sp['darkmatter', 'particle_index'].value
 
     bound, most_bound, iid, bound_iid = bound_particlesAPROX(dm_pos, dm_vel, dm_mass, ids=dm_ids, cm=halocen.in_units("kpc"), vcm=unyt_array(halo[['velocity_x', 'velocity_y', 'velocity_z']].values[0], 'km/s'), refine=False)
-
-    print(f"Total mass: {mass[bound].sum()}.")
-    print(f"CM is: {np.average(pos[most_bound], axis=0, weights=mass[most_bound]).in_units('kpccm')}")
-    print(f"shoud: {halocen}")
+    
+    print(f"Sub id: {subid}")
+    print(f"-" * len(f"Sub id: {subid}" + "\n"))
+    print(f"Total mass: {dm_mass[bound].sum()}.")
+    print(f"CM is: {np.average(dm_pos[most_bound], axis=0, weights=dm_mass[most_bound]).in_units('kpccm')}")
+    print(f"should be: {halocen}")
     
     np.savetxt(outdir + "/" + f"particle_data/dm_{int(subid)}.{int(snap)}.pids", np.array([iid, np.isin(iid, bound_iid) * 1]).T, fmt="%i", delimiter=",")            
 
     st_bids = np.loadtxt(outdir + "/" + f"particle_data/stars_{subid}.{snap}.pids")
     dm_bpts = np.loadtxt(outdir + "/" + f"particle_data/dm_{subid}.{snap}.pids", delimiter=",")
-    dm_bids =  dm_pts[:,0]
+    dm_bids =  dm_bpts[:,0]
 
     dm_mask =  np.isin(dm_ids, dm_bids)
     st_mask =  np.isin(st_ids, st_bids)
 
-    
     dm_rh, dm_center0 = half_mass_radius(dm_pos[dm_mask], dm_mass[dm_mask])
     st_rh, st_center0 = half_mass_radius(st_pos[st_mask], st_mass[st_mask])
     arrakihs_v2['rh_dm_physical'].loc[halo.index] = dm_rh.in_units('kpc').value
     arrakihs_v2['rh_stars_physical'].loc[halo.index] = st_rh.in_units('kpc').value
 
     
-    dm_mdynMask = np.linalg.norm(dm_pos[dm_mask] - st_center0, axis=1) <= st_rh
-    st_mdynMask = np.linalg.norm(st_pos[st_mask] - st_center0, axis=1) <= st_rh
+    dm_mdynMask = np.linalg.norm(dm_pos - st_center0, axis=1) <= st_rh
+    st_mdynMask = np.linalg.norm(st_pos - st_center0, axis=1) <= st_rh
 
-    dm_mdyn_cont = dm_mass[dm_mask][dm_mdynMask].sum()
-    st_mdyn_cont = st_mass[st_mask][st_mdynMask].sum()
+    dm_mdyn_cont = dm_mass[dm_mdynMask].sum()
+    st_mdyn_cont = st_mass[st_mdynMask].sum()
     arrakihs_v2['Mdyn'].loc[halo.index] = dm_mdyn_cont + st_mdyn_cont
 
-    print(f"Sub id: {subid}")
-    print(f"-" * len(f"Sub id: {subid}" + "\n"))
-    print(f"Stellar mass: {st_mass[st_mask].sum():.3e}. rH: {st_rh:.2f}.Half mass:  {st_mass[st_mdynMask].sum():.3e}. Error: {(st_mdyn_cont/st_mass[st_mask].sum() - 0.5):.3e}")
-    print(f"DM mass: {dm_mass[dm_mask].sum():.3e}. Rockstar mass: {halo['mass'].value[0]:.3e}. rH: {dm_rh:.2f}. Mass inside st_rH:  {dm_mdyn_cont/dm_mass[dm_mask].sum():.3e}")
+
+    print(f"Stellar mass: {st_mass[st_mask].sum():.3e}. rH: {st_rh:.2f}. Half mass:  {st_mass[st_mdynMask].sum():.3e}. Error: {(st_mdyn_cont/st_mass[st_mask].sum() - 0.5):.3e}")
+    print(f"DM mass: {dm_mass[dm_mask].sum():.3e}. Rockstar mass: {halo['mass'].values[0]:.3e}. rH: {dm_rh:.2f}. Mass inside st_rH:  {dm_mdyn_cont/dm_mass[dm_mask].sum():.3e}")
     print(f"Mdyn: {(dm_mdyn_cont + st_mdyn_cont):.3e}")
 
 
@@ -305,11 +299,12 @@ for uid in arrakihs_v2['uid'].values:
     lines_of_sight = random_vector_spherical(N=N)
     
     center_stars = refine_center(st_pos[st_mask], st_mass[st_mask], method="iterative", delta=1E-2, m=2, nmin=20)
-    if center_stars['converged'] is False or mass.sum().value < 2E6:
+    if center_stars['converged'] is False or st_mass[st_mask].sum().value < 2E6:
         center_stars = refine_center(st_pos[st_mask], st_mass[st_mask], method="hm", delta=1E-2, m=2, mfrac=0.5)
+        print(center_stars)
     
     center = unyt_array(center_stars['center'], 'kpc')    
-    sp_stars = ds.sphere(center, (0.64, 'kpc'))
+    sp_stars = sp.ds.sphere(center, (0.64, 'kpc'))
     cm_vel = np.average(sp_stars['stars','particle_velocity'], axis=0, weights=sp_stars['stars', 'particle_mass']).in_units("km/s")
 
     sigma_los = []
@@ -319,7 +314,7 @@ for uid in arrakihs_v2['uid'].values:
     plt.subplots_adjust(wspace=0.13, hspace=0.13)
     
     for i, los in enumerate(lines_of_sight):
-        cyl = ds.disk(center, los, radius=(0.8, "kpc"), height=(np.inf, "kpc"), data_source=sp)
+        cyl = sp.ds.disk(center, los, radius=(0.8, "kpc"), height=(np.inf, "kpc"), data_source=sp)
         pvels = LOS_velocity(cyl['stars', 'particle_velocity'].in_units("km/s") - cm_vel, los)
 
         fv_binned, binedges, _ = binned_statistic(pvels, np.ones_like(pvels), statistic="count", bins=np.histogram_bin_edges(pvels, bins="fd"))
@@ -350,7 +345,7 @@ for uid in arrakihs_v2['uid'].values:
         if i >= N-ny:
             ax.set_xlabel(r"$\sigma_{*, LOS}$ [km/s]")
 
-    plt.savefig(outdir + "/los_vel" + f"/{subtree}.{snap}.png")
+    plt.savefig(outdir + "/los_vel" + f"/{subid}.{snap}.png")
     plt.close()
 
     sigma_los = np.array(sigma_los)
@@ -360,6 +355,8 @@ for uid in arrakihs_v2['uid'].values:
     arrakihs_v2['e_sigma*'].loc[halo.index] = np.maximum(np.std(sigma_los), np.sqrt(1 / np.sum(1 / e_sigma_los**2)))
 
     print(f"Mean sigma LOS = {np.mean(sigma_los):.1f}, std sigma LOS = {np.std(sigma_los):.2f}, ext_sigma sigma LOS = {np.sqrt(1 / np.sum(1 / e_sigma_los**2)):.2f}")
+
+    sp.clear_data()
 
 arrakihs_v2.to_csv(outdir + "/" + f"ARRAKIHS_Infall_CosmoV18_{code}.csv", index=False)
 

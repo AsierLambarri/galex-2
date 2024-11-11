@@ -207,7 +207,7 @@ def __cm_mfrac_method__(pos,
     trace_delta = np.array([1])
     converged = False
     for i in range(100):
-        rhalf = half_mass_radius(pos, mass,  center=center, mfrac=mfrac)
+        rhalf, _ = half_mass_radius(pos, mass,  center=center, mfrac=mfrac)
         mask = np.linalg.norm(pos - center, axis=1) <= rhalf
         npart = len(pos[mask])
         
@@ -416,6 +416,9 @@ def refine_centerGRAV(pos,
     vcm = np.average(vel.in_units("km/s"), axis=0, weights=mass) if vcm is None else vcm
 
     softenings = soft.in_units("kpc") if soft is not None else None
+    
+    pot, tree = Potential(pos.in_units("kpc"), mass.in_units("Msun"), softenings,
+                          parallel=True, quadrupole=True, G=4.300917270038e-06, theta=theta, return_tree=True)
 
     for i in range(100):
         abs_vel = np.sqrt( (vel[:,0]-vcm[0])**2 +
@@ -424,15 +427,6 @@ def refine_centerGRAV(pos,
                        )
     
         kin = 0.5 * mass.in_units("Msun") * abs_vel**2
-        
-        if i==0:
-            pot, tree = Potential(pos.in_units("kpc"), mass.in_units("Msun"), softenings,
-                                  parallel=True, quadrupole=True, G=4.300917270038e-06, theta=theta, return_tree=True)
-
-        else:
-            pot = Potential(pos.in_units("kpc"), mass.in_units("Msun"), softenings,
-                            parallel=True, quadrupole=True, G=4.300917270038e-06, theta=theta, tree=tree)
-
             
         pot = mass.in_units("Msun") * unyt_array(pot, 'km**2/s**2')
         E = kin + pot
@@ -451,6 +445,8 @@ def refine_centerGRAV(pos,
         delta_vcm =  np.sqrt(np.sum((new_vcm - vcm)**2, axis=0)) / np.linalg.norm(vcm) < delta        
         
         if not refine or (delta_cm and delta_vcm):
+
+            
             return (bound_mask, most_bound_mask, ids[bound_mask], ids[most_bound_mask]) if ids is not None else (bound_mask, most_bound_mask)
 
         cm, vcm = copy(new_cm), copy(new_vcm)
@@ -508,9 +504,9 @@ def half_mass_radius(pos,
         raise Exception(f"Could not converge on {mfrac:.2f} mass radius!")
     else:
         try:
-            return halfmass_zero.root * coords.units
+            return halfmass_zero.root * coords.units, center
         except:
-            return halfmass_zero.root
+            return halfmass_zero.root, center
             
 
 
