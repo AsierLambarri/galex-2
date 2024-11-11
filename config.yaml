@@ -1,12 +1,12 @@
 code:             'ART'
 output_dir:       './output'
 dir_snapshots:    '/media/temp1/AGORA/ART/Cosmo_v18/'
-snapequiv_path:   './trees/snap_equiv.dat'
+snapequiv_path:   '~/trees/snap_equiv.dat'
 RCT_paths:
-    main:         './trees/MainTree.csv'
-    sat1:         './trees/SatelliteTrees.csv'
+    main:         '~/trees/MainTree.csv'
+    sat1:         '~/trees/SatelliteTrees.csv'
 constraints:
-    mlow:         1E6
+    mlow:         1E8
     mhigh:        inf
     zlow:         -0.1
     zhigh:        4

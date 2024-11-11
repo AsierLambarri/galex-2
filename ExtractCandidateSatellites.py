@@ -2,6 +2,7 @@ import os
 import yt
 import sys
 import yaml
+import shutil
 import argparse
 import numpy as np
 import pandas as pd
@@ -16,9 +17,9 @@ import pprint
 pp = pprint.PrettyPrinter(depth=4, width=10000)
 
 
-from lib.loaders import load_ftable
+from lib.loaders import load_ftable, load_halo_rockstar
 from lib.mergertrees import compute_stars_in_halo, bound_particlesBH, bound_particlesAPROX
-from lib.galan import density_profile, velocity_profile, refine_center, NFWc, random_vector_spherical, LOS_velocity
+from lib.galan import half_mass_radius, density_profile, velocity_profile, refine_center, NFWc, random_vector_spherical, LOS_velocity
 
 def clear_directory(directory_path):
     if not os.path.exists(directory_path):
@@ -80,6 +81,9 @@ if os.path.isdir(outdir):
 else:
     os.mkdir(outdir)
 
+os.mkdir(outdir + "/particle_data")
+
+
 pdir = config_yaml['dir_snapshots']
 
 snapequiv = load_ftable(config_yaml['snapequiv_path'])
@@ -110,7 +114,7 @@ Rvir_extra = list([ R for R in config_yaml['Rvir'] if R != 1])
 #                               (mlow <= CompleteTree['mass']) & (CompleteTree['mass'] <= mhigh)].sort_values(by=['Sub_tree_id'], ascending=[True])
 
 
-constrainedTree_R1 = CompleteTree[(np.abs(CompleteTree['R/Rvir'] - 1) < 0.10) & 
+constrainedTree_R1 = CompleteTree[(np.abs(CompleteTree['R/Rvir'] - 1) < 0.10) & (mlow <= CompleteTree['mass']) & (CompleteTree['mass'] <= mhigh) &
                                   (zlow <= CompleteTree['Redshift']) & (CompleteTree['Redshift'] <= zhigh)].sort_values(by=['Snapshot', 'Sub_tree_id'], ascending=[True, True])
 
 unique_subtrees = np.unique(constrainedTree_R1['Sub_tree_id'])
@@ -192,16 +196,10 @@ for snapnum in np.unique(CrossingSats_R1['Snapshot'].values):
 
 CrossingSats_R1.to_csv(outdir + "/" + f"candidate_satellites_{code}.csv", index=False)
 
-CrossingSats_R1 = CrossingSats_R1[CrossingSats_R1['has_galaxy']==True]
+CrossingSats_R1 = CrossingSats_R1[CrossingSats_R1['has_galaxy']]
 
 
-
-arrakihs_v2 = CrossingSats_R1[(CrossingSats_R1['stellar_mass'] <= stellar_high) & (stellar_low <= CrossingSats_R1['stellar_mass']) & 
-                              (CrossingSats_R1['mass'] <= mhigh) & (mlow <= CrossingSats_R1['mass'])  
-                             ]
-
-
-arrakihs_v2 = CrossingSats_R1[(full_candidates['stellar_mass'] < 1E12) & (full_candidates['stellar_mass'] > 4E5) & (full_candidates['Redshift'] < 4) & (full_candidates['mass'] > 5E8)].sort_values("Redshift", ascending=False)
+arrakihs_v2 = CrossingSats_R1[ (CrossingSats_R1['stellar_mass'] <= stellar_high) & (stellar_low <= CrossingSats_R1['stellar_mass']) ].sort_values("Redshift", ascending=False)
 
 
 
@@ -210,22 +208,64 @@ arrakihs_v2 = arrakihs_v2[~arrakihs_v2.duplicated(['Sub_tree_id'], keep='first')
 arrakihs_v2.to_csv(outdir + "/" + f"ARRAKIHS_Infall_CosmoV18_{code}.csv", index=False)
 
 
+arrakihs_v2['rh_stars_physical'] = pd.Series()
+arrakihs_v2['rh_dm_physical'] = pd.Series()
+arrakihs_v2['Mdyn'] = pd.Series()
+
+for uid in arrakihs_v2['uid'].values:
+    halo, sp = load_halo_rockstar(arrakihs_v2, snapequiv, pdir, uid=uid)
+    halocen = halo[['position_x','position_y','position_z']].values[0] * sp.units.kpccm
+
+    subid = int(halo['Sub_tree_id'].value[0])
+    snap = int(halo['Snapshot'].value[0])
+
+    st_pos = sp['darkmatter','particle_position'].in_units("kpc")
+    st_vel = sp['darkmatter','particle_velocity'].in_units("km/s")
+    st_mass = sp['darkmatter','particle_mass'].in_units("Msun")
+    st_ids = sp['darkmatter', 'particle_index'].value
+
+    dm_pos = sp['darkmatter','particle_position'].in_units("kpc")
+    dm_vel = sp['darkmatter','particle_velocity'].in_units("km/s")
+    dm_mass = sp['darkmatter','particle_mass'].in_units("Msun")
+    dm_ids = sp['darkmatter', 'particle_index'].value
+
+    bound, most_bound, iid, bound_iid = bound_particlesAPROX(dm_pos, dm_vel, dm_mass, ids=dm_ids, cm=halocen.in_units("kpc"), vcm=unyt_array(halo[['velocity_x', 'velocity_y', 'velocity_z']].values[0], 'km/s'), refine=False)
+
+    print(f"Total mass: {mass[bound].sum()}.")
+    print(f"CM is: {np.average(pos[most_bound], axis=0, weights=mass[most_bound]).in_units('kpccm')}")
+    print(f"shoud: {halocen}")
+    
+    np.savetxt(outdir + "/" + f"particle_data/dm_{int(subid)}.{int(snap)}.pids", np.array([iid, np.isin(iid, bound_iid) * 1]).T, fmt="%i", delimiter=",")            
+
+    st_bids = np.loadtxt(outdir + "/" + f"particle_data/stars_{subid}.{snap}.pids")
+    dm_bpts = np.loadtxt(outdir + "/" + f"particle_data/dm_{subid}.{snap}.pids", delimiter=",")
+    dm_bids =  dm_pts[:,0]
+
+    dm_mask =  np.isin(dm_ids, dm_bids)
+    st_mask =  np.isin(st_ids, st_bids)
+
+    
+    dm_rh, dm_center0 = half_mass_radius(dm_pos[dm_mask], dm_mass[dm_mask])
+    st_rh, st_center0 = half_mass_radius(st_pos[st_mask], st_mass[st_mask])
+    arrakihs_v2['rh_dm_physical'].loc[halo.index] = dm_rh.in_units('kpc').value
+    arrakihs_v2['rh_stars_physical'].loc[halo.index] = st_rh.in_units('kpc').value
+
+    
+    dm_mdynMask = np.linalg.norm(dm_pos[dm_mask] - st_center0, axis=1) <= st_rh
+    st_mdynMask = np.linalg.norm(st_pos[st_mask] - st_center0, axis=1) <= st_rh
+
+    dm_mdyn_cont = dm_mass[dm_mask][dm_mdynMask].sum()
+    st_mdyn_cont = st_mass[st_mask][st_mdynMask].sum()
+    arrakihs_v2['Mdyn'].loc[halo.index] = dm_mdyn_cont + st_mdyn_cont
+
+    print(f"Sub id: {subid}")
+    print(f"-" * len(f"Sub id: {subid}" + "\n"))
+    print(f"Stellar mass: {st_mass[st_mask].sum():.3e}. rH: {st_rh:.2f}.Half mass:  {st_mass[st_mdynMask].sum():.3e}. Error: {(st_mdyn_cont/st_mass[st_mask].sum() - 0.5):.3e}")
+    print(f"DM mass: {dm_mass[dm_mask].sum():.3e}. Rockstar mass: {halo['mass'].value[0]:.3e}. rH: {dm_rh:.2f}. Mass inside st_rH:  {dm_mdyn_cont/dm_mass[dm_mask].sum():.3e}")
+    print(f"Mdyn: {(dm_mdyn_cont + st_mdyn_cont):.3e}")
+
+
+
+
 sys.exit()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

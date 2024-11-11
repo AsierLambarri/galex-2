@@ -87,6 +87,7 @@ def enclosed_mass(pos, mass, cm = None):
 def compute_stars_in_halo(halo_table, ds,
                           data_source = None,
                           max_radius = 30, 
+                          imax = 200,
                           verbose=False):
     """Computes the stars that form a galaxy inside a given halo using the recipe of Jenna Samuel et al. (2020). 
     For this one needs a catalogue of halos (e.g. Rockstar). The steps are the following:
@@ -113,6 +114,10 @@ def compute_stars_in_halo(halo_table, ds,
         Region from which the data is taken. Default is min(0.8*Rvir, 30) kpccm around halo center.
     max_radius : float, optional
         Maximum radius to consider for particle unbinding. Default: 30 kpccm
+    imax : int
+        Maximum number of iterations
+    verbose : bool
+        Wether to verbose or not.
         
     Returns
     -------
@@ -176,7 +181,7 @@ def compute_stars_in_halo(halo_table, ds,
         return np.array([]), np.array([]), sp, np.nan
 
     delta_mm = []
-    for i in range(2000):
+    for i in range(imax):
         old_mmass = masses[mask_loop].sum()
         cm = np.average(pos[mask_loop], axis=0, weights=masses[mask_loop])
         vcm = np.average(vel[mask_loop], axis=0, weights=masses[mask_loop])
