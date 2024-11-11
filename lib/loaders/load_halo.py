@@ -101,19 +101,18 @@ def load_halo_rockstar(
         if haloid is not None:
             halo = catalogue[(catalogue[idfields['haloid']] == haloid) & (catalogue[idfields['snapnum']] == snapnum)]
 
-    print(snapnum)
     file = snapequiv[snapequiv[snapequiv_fields['snapnum']] == snapnum][snapequiv_fields['snapname']].value[0]
     
-    ds = yt.load(path_to_sim+f"/{file}")
+    ds = yt.load(path_to_sim + f"/{file}")
 
-    halocen = halo[posfields].values[0] 
+    halocen = halo[posfields].values[0]
     halovir = halo[catalogue_fields['radii_fields']['rvir']].values[0] 
 
     if 'max_radius' in kwargs.keys(): sp = ds.sphere( (halocen, catalogue_units['length']), kwargs['max_radius'] )
-    else: sp = ds.sphere( halocen,(halovir, catalogue_units['length']) )
+    else: sp = ds.sphere( (halocen, catalogue_units['length']), (halovir, catalogue_units['length']) )
 
 
-    return halo, sp
+    return halo, sp, ds
 
  
 
