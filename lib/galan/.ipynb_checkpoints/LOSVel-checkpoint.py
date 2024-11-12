@@ -16,6 +16,7 @@ def random_vector_spherical(N):
     points : array
         Array of shape (N,3) containing uniformly distributed points on the surface of a  sphere of radius 1.
     """
+    np.random.seed()
     phi = np.random.uniform(0, 2 * np.pi, size=N)
     
     cos_theta = np.random.uniform(-1, 1, size=N)

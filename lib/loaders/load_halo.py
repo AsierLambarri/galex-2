@@ -80,7 +80,6 @@ def load_halo_rockstar(
         'snapnum': "snapid",
         'snapname': "snapshot"
     }
-    print(snapequiv_fields)
 
     #TBD poder cambiarlos.
 

@@ -223,7 +223,7 @@ if skip_candidates == False:
 
 else:
     print(f"ARRAKIHS table has been found!")
-    arrakihs_v2 = pd.read_csv(outdir + "/" + f"ARRAKIHS_Infall_CosmoV18_{code}.csv")
+    arrakihs_v2 = pd.read_csv(config_yaml['candidates'])
 
 arrakihs_v2['rh_stars_physical'] = pd.Series()
 arrakihs_v2['rh_dm_physical'] = pd.Series()
@@ -301,9 +301,9 @@ for uid in arrakihs_v2['uid'].values:
     center_stars = refine_center(st_pos[st_mask], st_mass[st_mask], method="iterative", delta=1E-2, m=2, nmin=20)
     if center_stars['converged'] is False or st_mass[st_mask].sum().value < 2E6:
         center_stars = refine_center(st_pos[st_mask], st_mass[st_mask], method="hm", delta=1E-2, m=2, mfrac=0.5)
-        print(center_stars)
     
     center = unyt_array(center_stars['center'], 'kpc')    
+    print(f"Center of stars: {center}")
     sp_stars = ds.sphere(center, (0.64, 'kpc'))
     cm_vel = np.average(sp_stars['stars','particle_velocity'], axis=0, weights=sp_stars['stars', 'particle_mass']).in_units("km/s")
 
@@ -314,7 +314,7 @@ for uid in arrakihs_v2['uid'].values:
     plt.subplots_adjust(wspace=0.13, hspace=0.13)
     
     for i, los in enumerate(lines_of_sight):
-        cyl = ds.disk(center, los, radius=(0.8, "kpc"), height=(np.inf, "kpc"), data_source=sp)
+        cyl = ds.disk(center, los, radius=(1, "kpc"), height=(np.inf, "kpc"), data_source=sp)
         pvels = LOS_velocity(cyl['stars', 'particle_velocity'].in_units("km/s") - cm_vel, los)
 
         fv_binned, binedges, _ = binned_statistic(pvels, np.ones_like(pvels), statistic="count", bins=np.histogram_bin_edges(pvels, bins="fd"))
@@ -324,6 +324,7 @@ for uid in arrakihs_v2['uid'].values:
                                            mu={'value': 0, 'min': -50, 'max': 50, 'vary': True},
                                            sigma={'value': 50, 'min': 0, 'max': 2E2, 'vary': True}
                                           )
+        print(len(pvels), pvels, len(fv_binned), fv_binned, bincenters)
         result = gaussianModel.fit(fv_binned, v=bincenters, params = params)
         
         sigma_los.append(result.params['sigma'].value)
@@ -334,7 +335,7 @@ for uid in arrakihs_v2['uid'].values:
         evals = result.eval(v=v)
         
         ax.set_title(f"sigma={result.params['sigma'].value:.1f} ± {result.params['sigma'].stderr:.2f} km/s in L.O.S.={np.round(los,2)}")
-        ax.text(0, 1.03 * fv_binned.max(), r"$N_{max}=$"+f"{fv_binned.max()}", ha="center", va="bottom", fontsize="small", color="black")
+        ax.text(0, 1.005 * fv_binned.max(), r"$N_{max}=$"+f"{fv_binned.max()}", ha="center", va="bottom", fontsize="small", color="black")
         ax.hist(pvels, bins=binedges)
         ax.axvline(0, color="blue")
         ax.plot(v, evals, color="red")
@@ -368,9 +369,9 @@ if config_yaml['comparison_plot']:
 
 
     candidates = Table.read(outdir + "/" + f"ARRAKIHS_Infall_CosmoV18_{code}.csv", format="csv")
-    mccon = Table.read('./DwarfProperties/data/LocalGroup/McConnachie_properties_complete.dat', format = "ascii.fixed_width", delimiter="\t")
-    mccon2 = Table.read('./DwarfProperties/data/LocalGroup/McConnachie_2012.csv')
-    globc = Table.read("./DwarfProperties/data/GC_Harris1997.dat", format="ascii.csv",delimiter=";", comment="#")
+    mccon = Table.read('./DwarfProperties/LocalGroup/McConnachie_properties_complete.dat', format = "ascii.fixed_width", delimiter="\t")
+    mccon2 = Table.read('./DwarfProperties/LocalGroup/McConnachie_2012.csv')
+    globc = Table.read("./DwarfProperties/GC_Harris1997.dat", format="ascii.csv",delimiter=";", comment="#")
     
     my_model = CmdStanModel(stan_file="linear_noErrors_robust.stan", cpp_options={'STAN_THREADS':'true'})
 
@@ -384,7 +385,7 @@ if config_yaml['comparison_plot']:
     
     fit = my_model.sample(data=dwarf_data, chains=4, iter_sampling=5000, show_console=False)
     df = fit.draws_pd()
-
+    md = np.linspace(1E4, 2E10, 1000)
     trans_dict = {'dIrr/dSph': "p",
                   'dIrr': "*",
                   'dE/dSph': "h",
@@ -539,10 +540,10 @@ if config_yaml['comparison_plot']:
     
     for i in range(1,37):
         st = f"dpp[{i}]"
-        ax1.errorbar(candidates['rh_stars_physical'].value[i-1]*1E3, df[st].mean(), yerr=df[st].std()*0, marker="^", color="black")
+        ax1.errorbar(0.75 * candidates['rh_stars_physical'].value[i-1] * 1E3, df[st].mean(), yerr=df[st].std()*0, marker="^", color="black")
     
     
-    legenc_candidates = ax3.scatter(candidates['Mdyn'], candidates['rh_stars_physical'] * 1E3, marker="^", label="Agora ART-I Satellites")
+    legenc_candidates = ax3.scatter(candidates['Mdyn'], 0.75 * candidates['rh_stars_physical'] * 1E3, marker="^", label="Agora ART-I Satellites")
     
     
     bf = ax2.plot(md, df['beta0'].mean() + df['beta1'].mean()*np.log10(md), lw=2, zorder=10, label="Best Fit")
@@ -550,7 +551,7 @@ if config_yaml['comparison_plot']:
     for beta0, beta1 in df[['beta0', 'beta1']].values[::1]:
         ax2.plot(md, beta0 + beta1 * np.log10(md), lw=1, alpha=0.1, color="lightblue", zorder=-1)
     
-    ax6.scatter(candidates['sigma*'] , candidates['rh_stars_physical'] * 1E3, marker="^")
+    ax6.scatter(candidates['sigma*'] , 0.75 * candidates['rh_stars_physical'] * 1E3, marker="^")
     
     ax5.scatter(candidates['sigma*'] , df['beta0'].mean() + df['beta1'].mean() * np.log10(candidates['Mdyn']), marker="^")
     
