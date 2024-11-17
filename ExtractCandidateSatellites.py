@@ -227,7 +227,12 @@ else:
 
 arrakihs_v2['rh_stars_physical'] = pd.Series()
 arrakihs_v2['rh_dm_physical'] = pd.Series()
+
+arrakihs_v2['rhp_stars_physical'] = pd.Series()
+arrakihs_v2['rhp_dm_physical'] = pd.Series()
+
 arrakihs_v2['Mdyn'] = pd.Series()
+
 arrakihs_v2['sigma*'] = pd.Series()
 arrakihs_v2["e_sigma*"] = pd.Series()
 
@@ -276,12 +281,26 @@ for uid in arrakihs_v2['uid'].values:
     dm_mask =  np.isin(dm_ids, dm_bids)
     st_mask =  np.isin(st_ids, st_bids)
 
-    dm_rh, dm_center0 = half_mass_radius(dm_pos[dm_mask], dm_mass[dm_mask])
-    st_rh, st_center0 = half_mass_radius(st_pos[st_mask], st_mass[st_mask])
+
+    dm_rh, _ = half_mass_radius(dm_pos[dm_mask], dm_mass[dm_mask])
+    st_rh, _ = half_mass_radius(st_pos[st_mask], st_mass[st_mask])
     arrakihs_v2['rh_dm_physical'].loc[halo.index] = dm_rh.in_units('kpc').value
     arrakihs_v2['rh_stars_physical'].loc[halo.index] = st_rh.in_units('kpc').value
-
     
+    dm_center0 = refine_center(dm_pos[dm_mask], dm_mass[dm_mask], method="hm", delta=1E-2, m=2, mfrac=0.5)
+    st_center0 = refine_center(st_pos[st_mask], st_mass[st_mask], method="hm", delta=1E-2, m=2, mfrac=0.5)
+    dm_rhp, dm_center0 = np.nanmean(half_mass_radius(dm_pos[dm_mask, [0,1]], dm_mass[dm_mask], center=dm_center0[[0,1]])[0],
+                                    half_mass_radius(dm_pos[dm_mask, [0,2]], dm_mass[dm_mask], center=dm_center0[ [0,2]])[0],
+                                    half_mass_radius(dm_pos[dm_mask,[1,2]], dm_mass[dm_mask], center=dm_center0[[1,2]])[0]
+                                   )
+    st_rhp, st_center0 = np.nanmean(half_mass_radius(st_pos[st_mask, [0,1]], st_mass[st_mask], center=st_center0[[0,1]])[0],
+                                    half_mass_radius(st_pos[st_mask, [0,2]], st_mass[st_mask], center=st_center0[ [0,2]])[0],
+                                    half_mass_radius(st_pos[st_mask, [1,2]], st_mass[st_mask], center=st_center0[[1,2]])[0]
+                                   )
+
+    arrakihs_v2['rhp_dm_physical'].loc[halo.index] = dm_rhp.in_units('kpc').value
+    arrakihs_v2['rhp_stars_physical'].loc[halo.index] = st_rhp.in_units('kpc').value
+
     dm_mdynMask = np.linalg.norm(dm_pos - st_center0, axis=1) <= st_rh
     st_mdynMask = np.linalg.norm(st_pos - st_center0, axis=1) <= st_rh
 
