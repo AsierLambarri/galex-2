@@ -11,5 +11,3 @@ output_*
 *.out
 
 *.ipynb
-*.hpp
-linear_noErrors_robust
