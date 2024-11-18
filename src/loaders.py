@@ -138,11 +138,11 @@ def load_halo_rockstar(
     
  
 def load_ftable(fn):
-    """Loads astropy tables formated with ascii.fixed_width and sep="\t". These tables are human readable but
+    """Loads astropy tables formated with ascii.fixed_width and sep='\t'. These tables are human readable but
     a bit anoying to read with astropy because of the necessary keyword arguments. This functions solves that.
     Useful for tables that need to be accessed in scripts but be readable (e.g. csv are NOT human readable).
 
-    Equivalent to : Table.read(fn, format="ascii.fixed_width", delimiter="\t")
+    Equivalent to : Table.read(fn, format="ascii.fixed_width", delimiter='\t')
 
     Parameters
     ----------
@@ -167,7 +167,7 @@ def parse_filename(filename,
     filename : str 
         Array of filenames.
     pattern : str, optional
-        Patterns that the snapshots follow. Default: r"(?P<basename>.+?)_(?P<number>\d+)(?:\.\d+)?\.(?P<format>\w+)"
+        Patterns that the snapshots follow. Default: r'(?P<basename>.+?)_(?P<number>\d+)(?:\.\d+)?\.(?P<format>\w+)'
         Corresponds to ~ basename_number.format.
 
     Returns
@@ -189,7 +189,7 @@ def parse_filename(filename,
 def sort_snaps(file_list, 
                pattern = r"(?P<basename>.+?)_(?P<number>\d+)(?:\.\d+)?\.(?P<format>\w+)"
               ):
-    """Sorts files according to snapnumber using "parse_filename" function.
+    """Sorts files according to snapnumber using 'parse_filename' function.
 
     Parameters
     ----------

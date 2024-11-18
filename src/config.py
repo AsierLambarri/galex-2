@@ -14,7 +14,9 @@ class Config:
     def _initialize_config(self):
         """Initialize the default configuration settings."""
         self.loader = None
-        self.units =  {
+        self.base_units = None
+        
+        self.working_units =  {
             'mass': "Msun",
             'time': "Gyr",
             'length': "kpc",

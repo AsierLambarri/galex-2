@@ -42,6 +42,13 @@ class zHalo:
     SOME OF THESE ARGUMENTS WILL BE INHERITED FROM A BIGGER CLASS AT SOME POINT.
     """
     #__slots__ = ['info', 'load_dataset']
+    
+    ##########################################################
+    ###                                                    ###
+    ##                    INNIT FUNCTION                    ##
+    ###                                                    ###
+    ##########################################################
+    
     def __init__(self,
                  fn,
                  center,
@@ -77,11 +84,12 @@ class zHalo:
 
 
 
-    ####################################
-    ###                              ###
-    ##            UTILITIES           ##
-    ###                              ###
-    ####################################
+    ##########################################################
+    ###                                                    ###
+    ##                       UTILITIES                      ##
+    ###                                                    ###
+    ##########################################################
+    
     
     def __update_kwargs__(self, default_kw, new_kw):
         """Update default kwargs with user provided kwargs.
@@ -170,6 +178,12 @@ class zHalo:
                             " pkg.config.loader = loader_function before you start your scripts. Beware of the requirements that this loader must fulfill!")
         else:
             return config.loader(self.fn)
+        
+        
+    def parse_dataset(self, a, b, c):
+        """
+        """
+        return None
         
 
 
