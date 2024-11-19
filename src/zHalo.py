@@ -53,7 +53,7 @@ class zHalo:
                  fn,
                  center,
                  radius,
-                 data=None,
+                 dataset=None,
                  **kwargs
                 ):
         """Initialize function.
@@ -201,7 +201,8 @@ class zHalo:
         """
         assert config.parser, "The module-level loader is not set! You can set it up as: import pkg; pkg.config.parser = parser_function before you start your scripts or use the default one.\nBeware of the requirements that this parser must fulfill!"
             
-        base_units, metadata, hashable_data = config.parser(self.load_dataset(), self.sp_center, self.sp_radius)    
+        base_units, metadata, hashable_data = config.parser(self.load_dataset() if dataset is None else dataset, 
+                                                            self.sp_center, self.sp_radius)    
         
         self.base_units = base_units
         
