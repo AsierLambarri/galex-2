@@ -58,7 +58,7 @@ class zHalo:
                 ):
         """Initialize function.
         """
-        units = config.units
+        units = config.working_units
 
         default_kwargs = {'units': units,
                          }
@@ -67,21 +67,15 @@ class zHalo:
         ###File initialization information
         self.fn = fn
         self.sp_center = unyt_array(center[0], center[1])
-        self.sp_radius = unyt_quantity(radius[0], radius[1])
-        self.z = 0
-        self.a = 1
-        self.t = unyt_quantity(14, "Gyr")
-        self.data = self.load_dataset()
-        ###Properties of stars
-        #self.stars = load_stars
-        #self.dm = load_dm
-        #self.gas = load_gas
+        self.sp_radius = unyt_quantity(radius[0], radius[1])        
+        self.units = config.working_units
 
         ###Coordinate system
         self.los = [1, 0, 0]
         self.basis = np.identity(3)
 
 
+        self.parse_dataset()
 
 
     ##########################################################
@@ -123,9 +117,9 @@ class zHalo:
         output.append(f"{'':-<21}")
         output.append(f"{'snapshot path':<20}: {'/'.join(self.fn.split('/')[:-1])}")
         output.append(f"{'snapshot file':<20}: {self.fn.split('/')[-1]}")
-        output.append(f"{'redshift':<20}: {self.z}")
+        output.append(f"{'redshift':<20}: {self.redshift}")
         output.append(f"{'scale_factor':<20}: {self.a}")
-        output.append(f"{'age':<20}: {self.t}")
+        output.append(f"{'age':<20}: {self.time}")
         output.append(f"{'cut-out center':<20}: [{self.sp_center[0].value:.2f}, {self.sp_center[1].value:.2f}, {self.sp_center[2].value:.2f}]  {self.sp_center.units}")
         output.append(f"{'cut-out radius':<20}: {self.sp_radius:.2f}")
         output.append(f"{'dm':<20}: yes")
@@ -171,20 +165,55 @@ class zHalo:
         luminosities for stars, etc.).
 
         Afterwards, only the particles that are part of the halo are selected.
+        
+        Returns
+        -------
+        dataset : returned object is of the type returned by (user) specified config.loader
         """
 
-        if config.loader is None:
-            raise Exception("The module-level loader is not set! You can set it up as: import pkg;"+
-                            " pkg.config.loader = loader_function before you start your scripts. Beware of the requirements that this loader must fulfill!")
-        else:
-            return config.loader(self.fn)
+        assert config.loader, "The module-level loader is not set! You can set it up as: import pkg; pkg.config.loader = loader_function before you start your scripts or use the default one.\nBeware of the requirements that this loader must fulfill!"
+    
+        return config.loader(self.fn)
         
         
-    def parse_dataset(self, a, b, c):
+    def parse_dataset(self):
         """
-        """
-        return None
+        Calls the module-level parser to parse the loaded dataset. This function is directly linked to the loader, sinde it works with the object
+        type provided on it. If you attempt to change one, you must change both and make sure that the data is returned in the correct format 
+        and specified order:
+            
+                                                                 units : dict[str : str]
+                        config.parser(fn, center, radius) -----> metadata : dict[str : str | float | unyt_quantity]
+                                                                 data : hashable as data[particle_type, field]
+                                                                 
+        As the particle type names change from one scheme to another, these MUST be set by the user beforehand as: config.particles : dict[str : str], where the equivalences between
+        gas, dm and star particles are listed.
+                                                                 
+
+        Returns
+        -------
+        base_units : dict[str : str]
+        metadata : dict[str : str | float | unyt_quantity]
+        parsed_data : returned object is of the type returned by (user) specified config.parser
         
+        Each return is saved as an attribute of the config, zHalo or zHalo.ptype instance: parsed_data is saved inside ptype, for each particle type. base_units are saved inside config and
+        the metadata is saved inside zHalo.
+        """
+        assert config.parser, "The module-level loader is not set! You can set it up as: import pkg; pkg.config.parser = parser_function before you start your scripts or use the default one.\nBeware of the requirements that this parser must fulfill!"
+            
+        base_units, metadata, hashable_data = config.parser(self.load_dataset(), self.sp_center, self.sp_radius)    
+        
+        self.base_units = base_units
+        
+        for key, value in metadata.items():
+            setattr(self, key, value)
+            
+        self.a = 1 / (self.redshift + 1)
+        
+        self.data = hashable_data
+        
+        
+            
 
 
 
