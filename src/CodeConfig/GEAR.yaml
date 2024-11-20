@@ -1,0 +1,22 @@
+base_units:
+    time: 3.0856775810e+16 * s/h
+    mass: 1.9884158600e+43 * g/h
+    length: 1 * kpccm/h
+    velocity: 100000 * sqrt(a)*cm/s
+    comoving: True
+
+stars: 
+    pt: PartType1
+    data:
+        -all
+    
+darkmatter:
+    pt: PartType2
+    data:
+        -all
+gas:
+    pt: PartType0
+    data:
+        -all
+            
+gas_type: SPH

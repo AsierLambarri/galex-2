@@ -1,4 +1,9 @@
 import yt
+import yaml
+from pathlib import Path
+from unyt import unyt_quantity
+
+
 
 class Config:
     """Config class that provides configuration options for pkg. Here one can set the loader, units, conversion tables
@@ -34,6 +39,7 @@ class Config:
         working_units : dict[str : str]
             Units to work with.
         """
+        self._package_dir = str(Path(__file__).resolve().parent)
         self.loader = Config.default_loader
         self.parser = Config.default_parser
         self.base_units = None
@@ -50,8 +56,72 @@ class Config:
                        'darkmatter' : 'PartType2',
                        'gas' : 'PartType0'
         } 
+        
+        self._code = None
+        
         self.ds = None
         
+        
+        
+        
+    @property
+    def code(self):
+        """Getter for the code attribute.
+        """
+        return self._code
+
+    @code.setter
+    def code(self, value):
+        """Sets base_units, ptypes and fields according to yaml configuration files for each code type.
+        """
+        if self._code != value.upper():  # Only execute logic if the value changes
+            self._code = value.upper()
+            self._load_code_config()
+        else:
+            pass
+    
+    def _load_code_config(self):
+        """Loads base_units, ptypes and their fields and gas type from the .yaml configuration file corresponding
+        to the precise code. YAML files are stored in package-dir/CodeConfig
+        
+        Returns
+        -------
+        None
+        """
+        with open(self._package_dir + "/CodeConfig/" + self._code + ".yaml", 'r') as f:
+            config_data = yaml.safe_load(f)
+            
+            self.base_units = config_data['base_units']
+            self.ptypes = {
+                'stars': config_data['stars']['pt'],
+                'darkmatter': config_data['darkmatter']['pt'],
+                'gas': config_data['gas']['pt'],
+                'gas_type': config_data['gas_type']
+                }
+            self.fields = {
+                'stars': config_data['stars']['fields'],
+                'darkmatter': config_data['darkmatter']['fields'],
+                'gas': config_data['gas']['fields']
+                }
+            
+        return None
+        
+    def _check_consistent_units(self, units):
+        """Checks if self.base_units == units for consistency when loading and parsing data with yt and using CodeConfig files.
+        Parameters
+        ----------
+        units : dict[str : str]
+            Units to check agains units saved in self.base_units
+
+        Returns
+        -------
+        None
+        """
+        for key, unit in self.base_units.items():
+            assert unit == unyt_quantity(1, units[key]), f"{key.upper()} units do not coincide to 1E-10 precision. Units read from config file is {unit} but those read from yt are {units[key]}!"
+            
+        return None
+    
     @staticmethod
     def default_loader(fn):
         """Default loader. Returns yt.dataset
@@ -72,6 +142,9 @@ class Config:
                  'velocity':  Config.convert_unyt_quant_str(ds.velocity_unit),
                  'comoving': str(ds.length_unit.units).split("/")[0].endswith("cm")
                 }
+        
+        if self.base_units is not None:
+            self._check_consistent_units(units)
         
         metadata = {'redshift' : ds.current_redshift,
                     'time' : ds.current_time,
@@ -104,9 +177,9 @@ class Config:
         un_bits = str(un.units).strip().split("*")
         try:
             f = float(un_bits[0])
-            u = f"{un.value * f} * {'*'.join(un_bits[1:])}"
+            u = f"{(un.value * f):.10e} * {'*'.join(un_bits[1:])}"
         except:
-            u = f"{un.value} * {'*'.join(un_bits[:])}"
+            u = f"{un.value:.10e} * {'*'.join(un_bits[:])}"
             
         return u
         
