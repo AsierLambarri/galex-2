@@ -1,4 +1,56 @@
+base_units:
+    time: 
+    mass: 
+    length: 
+    velocity: 
+    comoving:
 
+stars: 
+    pt: stars
+    fields: 
+        coords: particle_positions
+        vels: particle_velocities
+        masses: particle_masses
+        IDs: particle_index
+        projIDs: 
+        hsml: 
+        formation_time: 
+        
+    
+darkmatter:
+    pt: darkmatter
+    fields: 
+        coords: particle_positions
+        vels: particle_velocities
+        masses: particle_masses
+        IDs: particle_index
+    
+gas:
+    pt: art
+    fields: 
+        coords: 
+        vels: 
+        masses: 
+        IDs: 
+        hsml: 
+        metals:  
+        dens: 
+        U: 
+        XDI: 
+        XDII: 
+        XE: 
+        XH2I: 
+        XH2II: 
+        XHDI: 
+        XHI: 
+        XHII: 
+        XHM: 
+        XHeI: 
+        XHeII: 
+        XHeIII: 
+        XMetal: 
+        
+gas_type: MESH
     
 
     
