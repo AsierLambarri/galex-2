@@ -4,11 +4,11 @@ import shutil
 import numpy as np
 from unyt import unyt_array, unyt_quantity
 
-from src.config import config
+from .config import config
+from .base import BaseSimulationObject
 
 
-
-class zHalo:
+class zHalo(BaseSimulationObject):
     """zHalo class that implements a variety of functions to analyze the internal structure of a halo at a certain redshift, and the galaxy that
     is contained within it, such as computing their respective moments (x_cm and v_cm), projected and deprojected half-mass radii, total and LOS
     velocity dispersions, surface and volumetric density profiles, computation of dynamical and M_x masses and much more!
@@ -58,24 +58,22 @@ class zHalo:
                 ):
         """Initialize function.
         """
-        units = config.working_units
+        super().__init__()
 
-        default_kwargs = {'units': units,
+        default_kwargs = {'units': self.units,
                          }
         self.__update_kwargs__(default_kwargs, kwargs)
 
-        ###File initialization information
+        ### File initialization information ###
         self.fn = fn
         self.sp_center = unyt_array(center[0], center[1])
         self.sp_radius = unyt_quantity(radius[0], radius[1])        
-        self.units = config.working_units
-
-        ###Coordinate system
-        self.los = [1, 0, 0]
-        self.basis = np.identity(3)
+        
+        #self.units = config.working_units
 
 
-        self.parse_dataset()
+
+        self.parse_dataset(dataset)
 
 
     ##########################################################
@@ -128,19 +126,19 @@ class zHalo:
 
         output.append(f"\nunits")
         output.append(f"{'':-<21}")
-        output.append(f"{'length_unit':<20}: { self.__kwargs__['units']['length']}")
-        output.append(f"{'velocity_unit':<20}: { self.__kwargs__['units']['velocity']}")
-        output.append(f"{'mass_unit':<20}: { self.__kwargs__['units']['mass']}")
-        output.append(f"{'time_unit':<20}: { self.__kwargs__['units']['time']}")
-        output.append(f"{'comoving':<20}: { self.__kwargs__['units']['comoving']}")
+        output.append(f"{'length_unit':<20}: {self.units['length']}")
+        output.append(f"{'velocity_unit':<20}: {self.units['velocity']}")
+        output.append(f"{'mass_unit':<20}: {self.units['mass']}")
+        output.append(f"{'time_unit':<20}: {self.units['time']}")
+        output.append(f"{'comoving':<20}: {self.units['comoving']}")
 
         output.append(f"\ncoordinate basis")
         output.append(f"{'':-<21}")
         output.append(f"{'type':<20}: orthonormal")
         output.append(f"{'line-of-sight':<20}: {self.los}")
-        output.append(f"{'u1':<20}: {self.basis[:,0]}")
-        output.append(f"{'u2':<20}: {self.basis[:,1]}")
-        output.append(f"{'u3':<20}: {self.basis[:,2]}")
+        output.append(f"{'u1':<20}: [{self.basis[0,0]:.2f}, {self.basis[1,0]:.2f}, {self.basis[2,0]:.2f}]")
+        output.append(f"{'u2':<20}: [{self.basis[0,1]:.2f}, {self.basis[1,1]:.2f}, {self.basis[2,1]:.2f}]")
+        output.append(f"{'u3':<20}: [{self.basis[0,2]:.2f}, {self.basis[1,2]:.2f}, {self.basis[2,2]:.2f}]")
 
 
         if get_str:
@@ -176,7 +174,7 @@ class zHalo:
         return config.loader(self.fn)
         
         
-    def parse_dataset(self):
+    def parse_dataset(self, dataset):
         """
         Calls the module-level parser to parse the loaded dataset. This function is directly linked to the loader, sinde it works with the object
         type provided on it. If you attempt to change one, you must change both and make sure that the data is returned in the correct format 
@@ -202,7 +200,8 @@ class zHalo:
         assert config.parser, "The module-level loader is not set! You can set it up as: import pkg; pkg.config.parser = parser_function before you start your scripts or use the default one.\nBeware of the requirements that this parser must fulfill!"
             
         base_units, metadata, hashable_data = config.parser(self.load_dataset() if dataset is None else dataset, 
-                                                            self.sp_center, self.sp_radius)    
+                                                            self.sp_center, self.sp_radius
+                                                           )    
         
         self.base_units = base_units
         
@@ -213,13 +212,46 @@ class zHalo:
         
         self.data = hashable_data
         
+        return None
         
+        
+        
+
+    def set_units(self, units):
+       """Sets units for zHalo and all particle types it contains.
+       """
+       self._set_units(units)
+       #self.dm.set_units(units)
+       #self.gas.set_units(units)
+       #self.stars.set_units(units)
+       
+       return None
+        
+    def set_line_of_sight(self, los):
+        """Sets the line of sight to the provided value. The default value for the line of sight is the x-axis: [1,0,0].
+        By setting a new line of sight the coordinate basis in which vectorial quantities are expressed changes, aligning the
+        old x-axis with the new provided line of sight. This way, a projected view of a set of particles when viewed 
+        through los can be obtained by retrieving the new y,z-axes.
+        
+        The new coordinate system is obtained applying Gram-Schmidt to a preliminary non-orthogonal basis formed by los + identitiy.
+        
+        Parameters
+        ----------
+        los : array
+            Unitless, non-normalized line of sight vector
             
-
-
-
-
-
+        Returns
+        -------
+        None
+        
+        Changes basis and los instances in the class instance and all its childs. All vectorial quantities get expressed in the new
+        coordinate basis.
+        """
+        self._set_los(los)
+        #self.dm.set_basis(basis)
+        #self.gas.set_basis(basis)
+        #self.stars.set_basis(basis)
+    
 
 
 

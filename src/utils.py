@@ -55,11 +55,12 @@ def gram_schmidt(los):
     basis_matrix = np.identity(dims)
     basis_matrix = (basis_matrix + np.array(los)/np.linalg.norm(los)).T
     basis_matrix[:, 0] = np.array(los)/np.linalg.norm(los)
-    print(basis_matrix)
+    
     for i in range(1, dims):
         gs_coef = np.array([ np.dot(basis_matrix[:, i], basis_matrix[:, j] )  / np.dot( basis_matrix[:, j], basis_matrix[:, j] ) for j in range(i)])
         basis_matrix[:, i] = basis_matrix[:, i] - np.array([gs_coef[j] * basis_matrix[:,j] for j in range(i)]).sum(axis=0)
         basis_matrix[:, i] = basis_matrix[:, i] / np.linalg.norm(basis_matrix[:, i])
+        
     return basis_matrix
 
 

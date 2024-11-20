@@ -46,9 +46,9 @@ class Config:
             'comoving': False
         }
         
-        self.particles = {'stars' : 'PartType1',
-                          'darkmatter' : 'PartType2',
-                          'gas' : 'PartType0'
+        self.ptypes = {'stars' : 'PartType1',
+                       'darkmatter' : 'PartType2',
+                       'gas' : 'PartType0'
         } 
         self.ds = None
         
