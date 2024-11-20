@@ -43,7 +43,7 @@ class Config:
         self.loader = Config.default_loader
         self.parser = Config.default_parser
         self.base_units = None
-        
+        self.fields = None
         self.working_units =  {
             'mass': "1 * Msun",
             'time': "1 * Gyr",
@@ -51,19 +51,13 @@ class Config:
             'velocity': "1 * km/s",
             'comoving': False
         }
-        
-        self.ptypes = {'stars' : 'PartType1',
-                       'darkmatter' : 'PartType2',
-                       'gas' : 'PartType0'
-        } 
+        self.ptypes = None
         
         self._code = None
         
         self.ds = None
         
-        
-        
-        
+    
     @property
     def code(self):
         """Getter for the code attribute.
@@ -106,8 +100,9 @@ class Config:
             
         return None
         
-    def _check_consistent_units(self, units):
-        """Checks if self.base_units == units for consistency when loading and parsing data with yt and using CodeConfig files.
+    @staticmethod
+    def check_consistent_units(base_units, units):
+        """Checks if base_units == units for consistency when loading and parsing data with yt and using CodeConfig files.
         Parameters
         ----------
         units : dict[str : str]
@@ -117,11 +112,13 @@ class Config:
         -------
         None
         """
-        for key, unit in self.base_units.items():
+        if base_units is None:
+            return None
+        
+        for key, unit in base_units.items():
             assert unit == unyt_quantity(1, units[key]), f"{key.upper()} units do not coincide to 1E-10 precision. Units read from config file is {unit} but those read from yt are {units[key]}!"
             
-        return None
-    
+            
     @staticmethod
     def default_loader(fn):
         """Default loader. Returns yt.dataset
@@ -143,8 +140,6 @@ class Config:
                  'comoving': str(ds.length_unit.units).split("/")[0].endswith("cm")
                 }
         
-        if self.base_units is not None:
-            self._check_consistent_units(units)
         
         metadata = {'redshift' : ds.current_redshift,
                     'time' : ds.current_time,

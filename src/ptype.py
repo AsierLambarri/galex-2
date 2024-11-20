@@ -6,6 +6,7 @@ from tqdm import tqdm
 from pytreegrav import Potential, PotentialTarget
 from unyt import unyt_array, unyt_quantity
 from unyt.physical_constants import G
+from copy import copy
 
 from .config import config
 from .base import BaseSimulationObject
@@ -23,6 +24,7 @@ class ptype(BaseSimulationObject):
     - IDs : stored as self.ids
     
     IMPLEMENTATION OF MANDATORY FIELDS FOR EACH PARTICLE TYPE. MIGHT SEPARATE INTO THREE PTYPES.
+    IMPLEMENTATION OF DYNAMICAL FIELD LOADING
     """
 
     ##########################################################
@@ -37,13 +39,134 @@ class ptype(BaseSimulationObject):
                  ):
         """Initializes the ptype class.
         """
+        super().__init__()
+        self.ptype, self._base_ptype = pt, copy(self.ptypes[pt])
+        self._fields = copy(self.fields[pt])
+        self._fields_loaded = {}
+        self._data = data
+        
+        self.cm = None
+        self.vcm = None
+        self.rh = None
+        self.rh_3D = None
+
+        if self.ptype == "stars":
+            self.sigma_los = None
+            self.ML = None     
+        
+        if self.ptype == "darkmatter":
+            self.rvir = None
+            self.rs = None
+            self.c = None
+        
+        del self.loader
+        del self.parser
+        del self.ptypes
+        del self.fields
+        
+        
         
         
 
 
 
+    def __getattr__(self, field_name):
+        """Dynamical loader for accessing fields.
+        
+
+        Parameters
+        ----------
+        field_name : str
+            Name of the field to be accessed
+
+        Returns
+        -------
+        field : unyt_array
+        """
+        
+        if field_name in self._fields_loaded:
+            return self._fields_loaded[field_name]
+        
+        field = (self._base_ptype, self._fields[field_name])
+        print(field)
+        if field in self._data.ds.field_list:
+            fdata = self._data[field]
+            self._fields_loaded[field_name] = fdata
+            return fdata
+        
+        raise AttributeError(f"Field {field_name} not found for particle type '{self.ptype}'.")
+    
+
+    def get_fields(self):
+        """Returns all loadable fields
+        """
+        return self._fields
+    
+    def info(self, get_str = False):
+        """Returns a pretty information summary.
+        
+        Parameters
+        ----------
+        get_str : bool
+            Return str instead of print. Default: False
+
+        Returns
+        -------
+        info : str, optionally
+
+        """
+        output = []
+        
+        output.append(f"\n{self.ptype}")
+        output.append(f"{'':-<21}")
+        try:
+            output.append(f"{'len_pos':<20}: {len(self.coords)}")
+            output.append(f"{'pos[0]':<20}: [{self.coords[0,0]:.2f}, {self.coords[0,1]:.2f}, {self.coords[0,2]:.2f}] {self.units['length']}")
+            output.append(f"{'pos[-1]':<20}: [{self.coords[-1,0]:.2f}, {self.coords[-1,1]:.2f}, {self.coords[-1,2]:.2f}] {self.units['length']}")
+            
+            output.append(f"{'len_vel':<20}: {len(self.vels)}")
+            output.append(f"{'pos[0]':<20}: [{self.vels[0,0]:.2f}, {self.vels[0,1]:.2f}, {self.vels[0,2]:.2f}] {self.units['length']}")
+            output.append(f"{'pos[-1]':<20}: [{self.vels[-1,0]:.2f}, {self.vels[-1,1]:.2f}, {self.vels[-1,2]:.2f}] {self.units['length']}")
+    
+            
+            output.append(f"{'len_mass':<20}: {len(self.masses)}")
+            output.append(f"{'mass[0]':<20}: {self.masses[0]}")
+            output.append(f"{'mass[-1]':<20}: {self.masses[-1]}")
+            
+            output.append(f"{'len_ids':<20}: {len(self.IDs)}")
+            output.append(f"{'ID[0]':<20}: {self.IDs[0]}")
+            output.append(f"{'ID[-1]':<20}: {self.IDs[-1]}")
+            
+        except:
+            output.append(f"{'len_pos':<20}: {len(self.coords)}")
+            output.append(f"{'len_vel':<20}: {len(self.coords)}")
+            output.append(f"{'len_mass':<20}: {len(self.coords)}")
+            output.append(f"{'len_ids':<20}: {len(self.coords)}")
+
+        
+        output.append(f"{'CoM':<20}: {self.cm}")
+        output.append(f"{'V_CoM':<20}: {self.vcm}")
+        
+        output.append(f"{'rh':<20}: {self.rh}")
+        output.append(f"{'rh_3D':<20}: {self.rh_3D}")
+            
+        if self.ptype == "stars":
+
+            output.append(f"{'sigma*':<20}: {self.sigma_los}")
+            output.append(f"{'ML':<20}: {self.ML}")
+        
+        if self.ptype == "darkmatter":
+            output.append(f"{'rvir':<20}: {self.rvir}")
+            output.append(f"{'rs':<20}: {self.rs}")
+            output.append(f"{'c':<20}: {self.c}")
 
 
+        
+        if get_str:
+            return "\n".join(output)
+        else:
+            print("\n".join(output))
+            return None
 
 
     def set_line_of_sight(self, los):
@@ -66,4 +189,122 @@ class ptype(BaseSimulationObject):
         Changes basis and los instances in the class instance. All vectorial quantities get expressed in the new
         coordinate basis.
         """
-        self._set_basis(basis)
+        self._set_los(los)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class gasSPH(BaseSimulationObject):
+    ##########################################################
+    ###                                                    ###
+    ##                    INNIT FUNCTION                    ##
+    ###                                                    ###
+    ##########################################################
+    
+    def __init__(self,
+                 data,
+                 pt
+                 ):
+        """Initializes the ptype class.
+        """
+
+
+
+
+
+
+
+
+
+class gasMESH(BaseSimulationObject):
+    ##########################################################
+    ###                                                    ###
+    ##                    INNIT FUNCTION                    ##
+    ###                                                    ###
+    ##########################################################
+    
+    def __init__(self,
+                 data,
+                 pt
+                 ):
+        """Initializes the ptype class.
+        """
+
+
+
+
+
+

@@ -15,8 +15,14 @@ class BaseSimulationObject:
     def __init__(self):
         self._parent = None  
         
+        self.base_units = config.base_units
         self.units = config.working_units
         self.ptypes = config.ptypes
+        self.fields = config.fields
+        
+        self.loader = config.default_loader
+        self.parser = config.default_parser
+        
         self.los = [1, 0, 0]
         self.basis = np.identity(3)
         

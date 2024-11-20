@@ -6,7 +6,7 @@ from unyt import unyt_array, unyt_quantity
 
 from .config import config
 from .base import BaseSimulationObject
-
+from .ptype import ptype, gasSPH, gasMESH
 
 class zHalo(BaseSimulationObject):
     """zHalo class that implements a variety of functions to analyze the internal structure of a halo at a certain redshift, and the galaxy that
@@ -68,11 +68,9 @@ class zHalo(BaseSimulationObject):
         self.fn = fn
         self.sp_center = unyt_array(center[0], center[1])
         self.sp_radius = unyt_quantity(radius[0], radius[1])        
+    
+        self.Mdyn = None
         
-        #self.units = config.working_units
-
-
-
         self.parse_dataset(dataset)
 
 
@@ -120,9 +118,10 @@ class zHalo(BaseSimulationObject):
         output.append(f"{'age':<20}: {self.time}")
         output.append(f"{'cut-out center':<20}: [{self.sp_center[0].value:.2f}, {self.sp_center[1].value:.2f}, {self.sp_center[2].value:.2f}]  {self.sp_center.units}")
         output.append(f"{'cut-out radius':<20}: {self.sp_radius:.2f}")
-        output.append(f"{'dm':<20}: yes")
-        output.append(f"{'stars':<20}: yes")
+        output.append(f"{'dm':<20}: {self.darkmatter.masses.sum()}")
+        output.append(f"{'stars':<20}: {self.stars.masses.sum()}")
         output.append(f"{'gas':<20}: yes")
+        output.append(f"{'Mdyn':<20}: {self.Mdyn}")
 
         output.append(f"\nunits")
         output.append(f"{'':-<21}")
@@ -140,11 +139,15 @@ class zHalo(BaseSimulationObject):
         output.append(f"{'u2':<20}: [{self.basis[0,1]:.2f}, {self.basis[1,1]:.2f}, {self.basis[2,1]:.2f}]")
         output.append(f"{'u3':<20}: [{self.basis[0,2]:.2f}, {self.basis[1,2]:.2f}, {self.basis[2,2]:.2f}]")
 
+        str_main = "\n".join(output)
+        str_stars = self.stars.info(get_str=True)
+        str_darkmatter = self.darkmatter.info(get_str=True)
 
+        str_info = "\n".join([str_main, str_stars, str_darkmatter])
         if get_str:
-            return None
+            return str_info
         else:
-            print("\n".join(output))
+            print(str_info)
             return None
 
     def load_dataset(self):
@@ -169,9 +172,9 @@ class zHalo(BaseSimulationObject):
         dataset : returned object is of the type returned by (user) specified config.loader
         """
 
-        assert config.loader, "The module-level loader is not set! You can set it up as: import pkg; pkg.config.loader = loader_function before you start your scripts or use the default one.\nBeware of the requirements that this loader must fulfill!"
+        assert self.loader, "The module-level loader is not set! You can set it up as: import pkg; pkg.config.loader = loader_function before you start your scripts or use the default one.\nBeware of the requirements that this loader must fulfill!"
     
-        return config.loader(self.fn)
+        return self.loader(self.fn)
         
         
     def parse_dataset(self, dataset):
@@ -197,13 +200,13 @@ class zHalo(BaseSimulationObject):
         Each return is saved as an attribute of the config, zHalo or zHalo.ptype instance: parsed_data is saved inside ptype, for each particle type. base_units are saved inside config and
         the metadata is saved inside zHalo.
         """
-        assert config.parser, "The module-level loader is not set! You can set it up as: import pkg; pkg.config.parser = parser_function before you start your scripts or use the default one.\nBeware of the requirements that this parser must fulfill!"
+        assert self.parser, "The module-level loader is not set! You can set it up as: import pkg; pkg.config.parser = parser_function before you start your scripts or use the default one.\nBeware of the requirements that this parser must fulfill!"
             
-        base_units, metadata, hashable_data = config.parser(self.load_dataset() if dataset is None else dataset, 
+        base_units, metadata, hashable_data = self.parser(self.load_dataset() if dataset is None else dataset, 
                                                             self.sp_center, self.sp_radius
                                                            )    
-        
-        self.base_units = base_units
+        if self.base_units is None:
+            self.base_units = base_units
         
         for key, value in metadata.items():
             setattr(self, key, value)
@@ -212,10 +215,25 @@ class zHalo(BaseSimulationObject):
         
         self.data = hashable_data
         
+        self.stars = ptype(hashable_data, "stars")
+        self.darkmatter = ptype(hashable_data, "darkmatter")
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         return None
         
         
-        
+
 
     def set_units(self, units):
        """Sets units for zHalo and all particle types it contains.

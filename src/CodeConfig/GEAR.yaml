@@ -7,16 +7,47 @@ base_units:
 
 stars: 
     pt: PartType1
-    data:
-        -all
+    fields: 
+        coords: Coordinates
+        vels: Velocities
+        masses: Masses
+        IDs: ParticleIDs
+        projIDs: StarIDProj
+        hsml: StarHsml
+        formation_time: StarFormationTime
+        
     
 darkmatter:
     pt: PartType2
-    data:
-        -all
+    fields: 
+        coords: Coordinates
+        vels: Velocities
+        masses: Masses
+        IDs: ParticleIDs
+    
 gas:
     pt: PartType0
-    data:
-        -all
-            
+    fields: 
+        coords: Coordinates
+        vels: Velocities
+        masses: Masses
+        IDs: ParticleIDs
+        hsml: SmoothingLength
+        metals: Metals 
+        dens: Density
+        U: InternalEnergy
+        XDI: XDI
+        XDII: XDII
+        XE: XE
+        XH2I: XH2I
+        XH2II: XH2II
+        XHDI: XHDI
+        XHI: XHI
+        XHII: XHII
+        XHM: XHM
+        XHeI: XHeI
+        XHeII: XHeII
+        XHeIII: XHeIII
+        XMetal: XMetal
+        
 gas_type: SPH
