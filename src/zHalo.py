@@ -8,6 +8,7 @@ from .config import config
 from .base import BaseSimulationObject
 from .ptype import ptype, gasSPH, gasMESH
 
+
 class zHalo(BaseSimulationObject):
     """zHalo class that implements a variety of functions to analyze the internal structure of a halo at a certain redshift, and the galaxy that
     is contained within it, such as computing their respective moments (x_cm and v_cm), projected and deprojected half-mass radii, total and LOS
@@ -239,8 +240,8 @@ class zHalo(BaseSimulationObject):
        """Sets units for zHalo and all particle types it contains.
        """
        self._set_units(units)
-       #self.dm.set_units(units)
-       #self.gas.set_units(units)
+       self.stars._set_units(units)
+       self.darkmatter._set_units(units)
        #self.stars.set_units(units)
        
        return None
@@ -266,9 +267,10 @@ class zHalo(BaseSimulationObject):
         coordinate basis.
         """
         self._set_los(los)
-        #self.dm.set_basis(basis)
-        #self.gas.set_basis(basis)
+        self.stars._set_los(los)
+        self.darkmatter._set_los(los)
         #self.stars.set_basis(basis)
+        return None
     
 
 
