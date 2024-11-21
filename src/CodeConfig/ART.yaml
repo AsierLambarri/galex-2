@@ -1,9 +1,9 @@
-base_units:
-    time: 
-    mass: 
-    length: 
-    velocity: 
-    comoving:
+base_units: 
+    time: 2.1580812909e+20 * s
+    mass: 4.6208548829e+49 * g
+    length: 8.5479813130e+01 * Mpc
+    velocity: 1.2222113417e+06 * cm/s
+    comoving: False
 
 stars: 
     pt: stars
