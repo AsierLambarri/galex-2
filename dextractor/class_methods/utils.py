@@ -64,7 +64,7 @@ def gram_schmidt(los):
     return basis_matrix
 
 
-def los_velocity(vel, los):
+def easy_los_velocity(vel, los):
     """Computes the Line of Sight Velocity of particles along a given LOS. In principle this could be done by changing basis using
     the Gram-Schmidt function  and looking at the first component of the resulting velocities (those aligned with the l.o.s. as 
     defined in the GS implementation above). Readability wise this is easier.

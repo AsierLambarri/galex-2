@@ -63,14 +63,14 @@ class zHalo(BaseSimulationObject):
 
         default_kwargs = {'units': self.units,
                          }
-        self.__update_kwargs__(default_kwargs, kwargs)
+        self._update_kwargs(default_kwargs, kwargs)
 
         ### File initialization information ###
         self.fn = fn
         self.sp_center = unyt_array(center[0], center[1])
         self.sp_radius = unyt_quantity(radius[0], radius[1])        
     
-        self.Mdyn = None
+        self._Mdyn = None
         
         self.parse_dataset(dataset)
 
@@ -81,19 +81,60 @@ class zHalo(BaseSimulationObject):
     ###                                                    ###
     ##########################################################
     
+    @property
+    def time(self):
+        """Cosmic time
+        """
+        if self._time is not None:
+            return self._time.in_units(f"{self.units['time']}")
+        else:
+            return None
     
-    def __update_kwargs__(self, default_kw, new_kw):
+    @property
+    def Mdyn(self):
+        """Dynamical mass
+        """
+        if self._Mdyn is not None:
+            return self._Mdyn.in_units(f"{self.units['mass']}")
+        else:
+            return None
+        
+    def redshift(self):
+        """Redshift
+        """
+        return self._red
+    
+    def _update_kwargs(self, default_kw, new_kw):
         """Update default kwargs with user provided kwargs.
         """
         for key, value in new_kw.items():
             if isinstance(value, dict) and key in default_kw and isinstance(default_kw[key], dict):
-                self.__update_kwargs__(default_kw[key], value)
+                self._update_kwargs(default_kw[key], value)
             else:
                 default_kw[key] = value
 
         self.__kwargs__ = default_kw
         return None
     
+    def _set_metadata_properties(self, fields):
+        for key, value in fields.items():
+             self._metadata[key] = value  
+        
+             def setter(self, new_value, key=key):  
+                 self._metadata[key] = new_value
+                 
+             def getter(self, key=key):  
+                 return self._metadata[key]
+        
+
+        
+             setattr(
+                 self.__class__,
+                 key,
+                 property(getter, setter)
+             )
+            
+            
     def info(self, get_str = False):
         """Prints information about the loaded halo: information about the position of the halo in the simulation
         and each component; dark matter, stars and gas: CoM, v_CoM, r1/2, sigma*, and properties of the whole halo such as
@@ -114,13 +155,13 @@ class zHalo(BaseSimulationObject):
         output.append(f"{'':-<21}")
         output.append(f"{'snapshot path':<20}: {'/'.join(self.fn.split('/')[:-1])}")
         output.append(f"{'snapshot file':<20}: {self.fn.split('/')[-1]}")
-        output.append(f"{'redshift':<20}: {self.redshift}")
-        output.append(f"{'scale_factor':<20}: {self.a}")
-        output.append(f"{'age':<20}: {self.time}")
+        output.append(f"{'redshift':<20}: {self.redshift:.4f}")
+        output.append(f"{'scale_factor':<20}: {self.scale_factor:.4f}")
+        output.append(f"{'age':<20}: {self.time:.4f}")
         output.append(f"{'cut-out center':<20}: [{self.sp_center[0].value:.2f}, {self.sp_center[1].value:.2f}, {self.sp_center[2].value:.2f}]  {self.sp_center.units}")
         output.append(f"{'cut-out radius':<20}: {self.sp_radius:.2f}")
-        output.append(f"{'dm':<20}: {self.darkmatter.masses.sum()}")
-        output.append(f"{'stars':<20}: {self.stars.masses.sum()}")
+        output.append(f"{'dm':<20}: {self.darkmatter.masses.sum():.3e}")
+        output.append(f"{'stars':<20}: {self.stars.masses.sum():.3e}")
         output.append(f"{'gas':<20}: yes")
         output.append(f"{'Mdyn':<20}: {self.Mdyn}")
 
@@ -206,15 +247,12 @@ class zHalo(BaseSimulationObject):
         base_units, metadata, hashable_data = self.parser(self.load_dataset() if dataset is None else dataset, 
                                                             self.sp_center, self.sp_radius
                                                            )    
+        self._data = hashable_data
+        self._metadata = metadata
+        self._set_metadata_properties(metadata)
+
         if self.base_units is None:
             self.base_units = base_units
-        
-        for key, value in metadata.items():
-            setattr(self, key, value)
-            
-        self.a = 1 / (self.redshift + 1)
-        
-        self.data = hashable_data
         
         self.stars = ptype(hashable_data, "stars")
         self.darkmatter = ptype(hashable_data, "darkmatter")
@@ -225,12 +263,12 @@ class zHalo(BaseSimulationObject):
         
 
 
-    def set_units(self):
+    def set_units(self, new_units):
        """Sets units for zHalo and all particle types it contains.
        """
-       self._set_units(self.units)
-       self.stars._set_units(self.units)
-       self.darkmatter._set_units(self.units)
+       self._set_units(new_units)
+       self.stars._set_units(new_units)
+       self.darkmatter._set_units(new_units)
        
        return None
         

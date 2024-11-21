@@ -32,7 +32,7 @@ gas:
         IDs: i
  
         
-gas_type: SPH
+gas_type: MESH
     
 
     

@@ -4,7 +4,6 @@ from pathlib import Path
 from unyt import unyt_quantity
 
 
-
 class Config:
     """Config class that provides configuration options for pkg. Here one can set the loader, units, conversion tables
     etc. to be used.
@@ -27,7 +26,7 @@ class Config:
         are directly in place thanks to unyt.
 
         All attributes may be overrun by the user.
-        
+
         List of attributes
         ------------------
         loader : func
@@ -44,20 +43,19 @@ class Config:
         self.parser = Config.default_parser
         self.base_units = None
         self.fields = None
-        self.working_units =  {
-            'mass': "1 * Msun",
-            'time': "1 * Gyr",
-            'length': "1 * kpc",
-            'velocity': "1 * km/s",
+        self.working_units = {
+            'mass': "Msun",
+            'time': "Gyr",
+            'length': "kpc",
+            'velocity': "km/s",
             'comoving': False
         }
         self.ptypes = None
-        
+
         self._code = None
-        
+
         self.ds = None
-        
-    
+
     @property
     def code(self):
         """Getter for the code attribute.
@@ -73,33 +71,33 @@ class Config:
             self._load_code_config()
         else:
             pass
-    
+
     def _load_code_config(self):
         """Loads base_units, ptypes and their fields and gas type from the .yaml configuration file corresponding
         to the precise code. YAML files are stored in package-dir/CodeConfig
-        
+
         Returns
         -------
         None
         """
         with open(self._package_dir + "/CodeConfig/" + self._code + ".yaml", 'r') as f:
             config_data = yaml.safe_load(f)
-            
+
             self.base_units = config_data['base_units']
             self.ptypes = {
                 'stars': config_data['stars']['pt'],
                 'darkmatter': config_data['darkmatter']['pt'],
                 'gas': config_data['gas']['pt'],
                 'gas_type': config_data['gas_type']
-                }
+            }
             self.fields = {
                 'stars': config_data['stars']['fields'],
                 'darkmatter': config_data['darkmatter']['fields'],
                 'gas': config_data['gas']['fields']
-                }
-            
+            }
+
         return None
-        
+
     @staticmethod
     def check_consistent_units(base_units, units):
         """Checks if base_units == units for consistency when loading and parsing data with yt and using CodeConfig files.
@@ -114,11 +112,11 @@ class Config:
         """
         if base_units is None:
             return None
-        
+
         for key, unit in base_units.items():
-            assert unit == unyt_quantity(1, units[key]), f"{key.upper()} units do not coincide to 1E-10 precision. Units read from config file is {unit} but those read from yt are {units[key]}!"
-            
-            
+            assert unit == unyt_quantity(1, units[key]), f"{key.upper(
+            )} units do not coincide to 1E-10 precision. Units read from config file is {unit} but those read from yt are {units[key]}!"
+
     @staticmethod
     def default_loader(fn):
         """Default loader. Returns yt.dataset
@@ -126,45 +124,44 @@ class Config:
         ds = yt.load(fn)
         Config._instance.ds = ds
         return ds
-    
+
     @staticmethod
     def default_parser(ds, center, radius):
         """Default parser: extracts data from selected region with working units, and gets relevant metadata
         """
         sp = ds.sphere(center, radius)
 
-        units = {'time': Config.convert_unyt_quant_str(ds.time_unit), 
-                 'mass':  Config.convert_unyt_quant_str(ds.mass_unit), 
-                 'length': Config.convert_unyt_quant_str(ds.length_unit), 
+        units = {'time': Config.convert_unyt_quant_str(ds.time_unit),
+                 'mass':  Config.convert_unyt_quant_str(ds.mass_unit),
+                 'length': Config.convert_unyt_quant_str(ds.length_unit),
                  'velocity':  Config.convert_unyt_quant_str(ds.velocity_unit),
                  'comoving': str(ds.length_unit.units).split("/")[0].endswith("cm")
-                }
-        
-        
-        metadata = {'redshift' : ds.current_redshift,
-                    'time' : ds.current_time,
-                    'hubble_constant' : ds.cosmology.hubble_constant,
-                    'omega_matter' : ds.cosmology.omega_matter,
-                    'omega_lambda' : ds.cosmology.omega_lambda,
-                    'omega_radiation' : ds.cosmology.omega_radiation,
-                    'omega_curvature' : ds.cosmology.omega_curvature,
-                    'omega' : ds.cosmology.omega_matter + ds.cosmology.omega_lambda + 
-                              ds.cosmology.omega_radiation + ds.cosmology.omega_curvature
-                   }
-        
-        
+                 }
+
+        metadata = {'redshift': ds.current_redshift,
+                    'scale_factor': 1 / (ds.current_redshift + 1),
+                    'time': ds.current_time,
+                    'hubble_constant': ds.cosmology.hubble_constant,
+                    'omega_matter': ds.cosmology.omega_matter,
+                    'omega_lambda': ds.cosmology.omega_lambda,
+                    'omega_radiation': ds.cosmology.omega_radiation,
+                    'omega_curvature': ds.cosmology.omega_curvature,
+                    'omega': ds.cosmology.omega_matter + ds.cosmology.omega_lambda +
+                    ds.cosmology.omega_radiation + ds.cosmology.omega_curvature
+                    }
+
         return units, metadata, sp
 
     @staticmethod
     def convert_unyt_quant_str(un):
         """Converts a unyt_quantity into a string of format value * unit, taking into account that
         unit may be composite.
-    
+
         Parameters
         ----------
         un : unyt_quantity
             Quantity to be converted
-    
+
         Returns
         -------
         u : str
@@ -175,20 +172,8 @@ class Config:
             u = f"{(un.value * f):.10e} * {'*'.join(un_bits[1:])}"
         except:
             u = f"{un.value:.10e} * {'*'.join(un_bits[:])}"
-            
+
         return u
-        
-        
-        
-        
-        
-        
-        
-        
+
+
 config = Config()
-
-
-
-
-
-

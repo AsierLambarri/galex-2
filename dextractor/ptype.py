@@ -60,8 +60,8 @@ class ptype(BaseSimulationObject):
             self.c = None
             print("ok")
         
-        
-        if [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields[pt]]:
+        missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields[pt]]
+        if missing_fields:
             raise ValueError(f"Missing mandatory fields {missing_fields} for particle type {pt}")
         
         
@@ -90,14 +90,23 @@ class ptype(BaseSimulationObject):
         -------
         field : unyt_array
         """
+        funits = {
+            'coords': self.units['length'],
+            'hsml': self.units['length'],
+            'masses': self.units['mass'],
+            'masses_ini': self.units['mass'],
+            'vels': self.units['velocity'],
+            'formation_times': self.units['time']
+        }
+        
         assert field_name in self._fields.keys(), AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._fields.keys())}")
 
         if field_name in self._fields_loaded:
-            return self._fields_loaded[field_name]
+            return self._fields_loaded[field_name].in_units(funits[field_name]) if field_name in funits else self._fields_loaded[field_name]
+
         
         field = (self._base_ptype, self._fields[field_name])
-        print(field)
-        self._fields_loaded[field_name] = self._data[field]
+        self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
         return self._fields_loaded[field_name]
         
     
@@ -126,12 +135,12 @@ class ptype(BaseSimulationObject):
         output.append(f"{'':-<21}")
         try:
             output.append(f"{'len_pos':<20}: {len(self.coords)}")
-            output.append(f"{'pos[0]':<20}: [{self.coords[0,0]:.2f}, {self.coords[0,1]:.2f}, {self.coords[0,2]:.2f}] {self.units['length']}")
-            output.append(f"{'pos[-1]':<20}: [{self.coords[-1,0]:.2f}, {self.coords[-1,1]:.2f}, {self.coords[-1,2]:.2f}] {self.units['length']}")
+            output.append(f"{'pos[0]':<20}: [{self.coords[0,0].value:.2f}, {self.coords[0,1].value:.2f}, {self.coords[0,2].value:.2f}] {self.units['length']}")
+            output.append(f"{'pos[-1]':<20}: [{self.coords[-1,0].value:.2f}, {self.coords[-1,1].value:.2f}, {self.coords[-1,2].value:.2f}] {self.units['length']}")
             
             output.append(f"{'len_vel':<20}: {len(self.vels)}")
-            output.append(f"{'pos[0]':<20}: [{self.vels[0,0]:.2f}, {self.vels[0,1]:.2f}, {self.vels[0,2]:.2f}] {self.units['length']}")
-            output.append(f"{'pos[-1]':<20}: [{self.vels[-1,0]:.2f}, {self.vels[-1,1]:.2f}, {self.vels[-1,2]:.2f}] {self.units['length']}")
+            output.append(f"{'vel[0]':<20}: [{self.vels[0,0].value:.2f}, {self.vels[0,1].value:.2f}, {self.vels[0,2].value:.2f}] {self.units['velocity']}")
+            output.append(f"{'vel[-1]':<20}: [{self.vels[-1,0].value:.2f}, {self.vels[-1,1].value:.2f}, {self.vels[-1,2].value:.2f}] {self.units['velocity']}")
     
             
             output.append(f"{'len_mass':<20}: {len(self.masses)}")
@@ -139,8 +148,8 @@ class ptype(BaseSimulationObject):
             output.append(f"{'mass[-1]':<20}: {self.masses[-1]}")
             
             output.append(f"{'len_ids':<20}: {len(self.IDs)}")
-            output.append(f"{'ID[0]':<20}: {self.IDs[0]}")
-            output.append(f"{'ID[-1]':<20}: {self.IDs[-1]}")
+            output.append(f"{'ID[0]':<20}: {self.IDs[0].value}")
+            output.append(f"{'ID[-1]':<20}: {self.IDs[-1].value}")
             
         except:
             output.append(f"{'len_pos':<20}: {len(self.coords)}")

@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Nov 21 16:47:22 2024
+
+@author: asier
+"""
+
 import yt
 import numpy as np
 from unyt import unyt_array, unyt_quantity
@@ -5,6 +13,7 @@ from scipy.optimize import root_scalar
 from scipy.stats import binned_statistic
 from copy import copy
 
+from .center_of_mass import center_of_mass
 import pprint
 pp = pprint.PrettyPrinter(depth=4)
 
@@ -67,7 +76,7 @@ def enclosed_mass(pos, mass, cm = None):
     if cm:
         pass
     else:
-        cm = np.average(pos, axis=0, weights=mass)
+        cm = center_of_mass(pos, mass)
 
     relpos = pos - cm
     r = np.sqrt(relpos[:,0]**2 + relpos[:,1]**2 + relpos[:,2]**2)
@@ -266,8 +275,3 @@ def compute_stars_in_halo(halo_table, ds,
     print(f"Rel-Delta mass is {delta_rel}.\n")
     
     return indices, definite_mask, sp, delta_rel
-
-
-
-
-
