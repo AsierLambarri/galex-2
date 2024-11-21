@@ -8,7 +8,7 @@ Created on Wed Nov 20 10:03:19 2024
 import numpy as np
 
 from .config import config
-from .utils import gram_schmidt
+from class_methods import gram_schmidt, center_of_mass, refine_center, half_mass_radius
 
 
 class BaseSimulationObject:
@@ -26,7 +26,18 @@ class BaseSimulationObject:
         self.los = [1, 0, 0]
         self.basis = np.identity(3)
         
-        
+    def set_parent(self, parent):
+        """Sets the parent of this object and ensures attributes propagate from parent to child.
+        """
+        self._parent = parent
+        if self._parent:
+            if self.units is None:
+                self.units = self._parent.units
+            if self.basis is None:
+                self.basis = self._parent.basis
+    
+        return None 
+    
     def _set_units(self, units):
         """Sets the units for this object and propagates to children if any.
         """
@@ -45,18 +56,9 @@ class BaseSimulationObject:
             self._parent._set_los(los)  
             
         return None
+    
 
-    def set_parent(self, parent):
-        """Sets the parent of this object and ensures attributes propagate from parent to child.
-        """
-        self._parent = parent
-        if self._parent:
-            if self.units is None:
-                self.units = self._parent.units
-            if self.basis is None:
-                self.basis = self._parent.basis
-
-        return None
+    
 
 
 

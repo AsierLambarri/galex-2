@@ -58,8 +58,8 @@ def half_mass_radius(pos,
         raise Exception(f"Could not converge on {mfrac:.2f} mass radius!")
     else:
         try:
-            return halfmass_zero.root * coords.units, center
+            return halfmass_zero.root * coords.units #, center * coords.units
         except:
-            return halfmass_zero.root, center
+            return halfmass_zero.root # , center
             
 

@@ -8,9 +8,7 @@ def center_of_mass(pos,
     """Computes coarse CoM using all the particles as 
     
                 CoM = sum(mass * pos) / sum(mass)
-    
-    It can be used to compute the wheighted average of a quantity pos over mass.
-    
+        
     Parameters
     ----------
     pos : array-like[float], shape(N,dims)
@@ -28,7 +26,7 @@ def center_of_mass(pos,
     maskcen = radii < 0.5*radii.max()
     CoM = np.average(pos[maskcen], axis=0, weights=mass[maskcen])
     
-    return  CoM
+    return CoM
 
 
 
@@ -152,7 +150,7 @@ def _cm_mfrac_method(pos,
     trace_delta = np.array([1])
     converged = False
     for i in range(100):
-        rhalf, _ = half_mass_radius(pos, mass,  center=center, mfrac=mfrac)
+        rhalf = half_mass_radius(pos, mass,  center=center, mfrac=mfrac)
         mask = np.linalg.norm(pos - center, axis=1) <= rhalf
         npart = len(pos[mask])
         
@@ -277,7 +275,7 @@ def _cm_iterative_mfrac_method(pos,
     trace_delta = np.array([1])  
     converged = False
     for i, mfrac in enumerate(mfracs):
-        inter_cent = __cm_mfrac_method__(pos, mass, center, 1E-1 * delta, m, mfrac)
+        inter_cent = _cm_mfrac_method(pos, mass, center, 1E-1 * delta, m, mfrac)
         center_new = inter_cent['center']
         rshell = inter_cent['r_last']
         npart = inter_cent['n_particles']
