@@ -8,21 +8,21 @@ base_units:
 stars: 
     pt: stars
     fields: 
-        coords: particle_positions
-        vels: particle_velocities
-        masses: particle_masses
+        coords: particle_position
+        vels: particle_velocity
+        masses: particle_mass
         IDs: particle_index
-        projIDs: 
-        hsml: 
-        formation_time: 
+        masses_ini: particle_mass_initial
+        #hsml: 
+        #formation_time: 
         
     
 darkmatter:
     pt: darkmatter
     fields: 
-        coords: particle_positions
-        vels: particle_velocities
-        masses: particle_masses
+        coords: particle_position
+        vels: particle_velocity
+        masses: particle_mass
         IDs: particle_index
     
 gas:
@@ -34,8 +34,8 @@ gas:
         IDs: 
         hsml: 
         metals:  
-        dens: 
-        U: 
+        dens: Density
+        U: GasEnergy
         XDI: 
         XDII: 
         XE: 

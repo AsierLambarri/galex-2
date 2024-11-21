@@ -12,6 +12,7 @@ stars:
         vels: Velocities
         masses: Masses
         IDs: ParticleIDs
+        masses_ini: InitialMass
         projIDs: StarIDProj
         hsml: StarHsml
         formation_times: StarFormationTime
