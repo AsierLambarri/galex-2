@@ -1,0 +1,38 @@
+base_units: 
+    time: 2.1580812909e+20 * s
+    mass: 4.6208548829e+49 * g
+    length: 8.5479813130e+01 * Mpc
+    velocity: 1.2222113417e+06 * cm/s
+    comoving: False
+
+stars: 
+    pt: stars
+    fields: 
+        coords: particle_position
+        vels: particle_velocity
+        masses: particle_mass
+        IDs: particle_index
+        masses_ini: particle_mass_initial
+        
+    
+darkmatter:
+    pt: darkmatter
+    fields: 
+        coords: particle_position
+        vels: particle_velocity
+        masses: particle_mass
+        IDs: particle_index
+    
+gas:
+    pt: art
+    fields: 
+        coords: c
+        vels: v
+        masses: m 
+        IDs: i
+ 
+        
+gas_type: MESH
+    
+
+    
