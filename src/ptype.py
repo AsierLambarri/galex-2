@@ -59,6 +59,18 @@ class ptype(BaseSimulationObject):
             self.rs = None
             self.c = None
         
+        
+        if [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields[pt]]:
+            raise ValueError(f"Missing mandatory fields {missing_fields} for particle type {pt}")
+        
+        
+        
+        
+        
+        
+        
+        
+        
         del self.loader
         del self.parser
         del self.ptypes
@@ -66,10 +78,6 @@ class ptype(BaseSimulationObject):
         
         
         
-        
-
-
-
     def __getattr__(self, field_name):
         """Dynamical loader for accessing fields.
         
@@ -84,23 +92,22 @@ class ptype(BaseSimulationObject):
         field : unyt_array
         """
         
+        assert field_name in self._fields.keys(), AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._fields.keys())}")
+
         if field_name in self._fields_loaded:
             return self._fields_loaded[field_name]
         
         field = (self._base_ptype, self._fields[field_name])
-        print(field)
         if field in self._data.ds.field_list:
-            fdata = self._data[field]
-            self._fields_loaded[field_name] = fdata
-            return fdata
+            self._fields_loaded[field_name] = self._data[field]
+            return self._fields_loaded[field_name]
         
-        raise AttributeError(f"Field {field_name} not found for particle type '{self.ptype}'.")
     
 
     def get_fields(self):
         """Returns all loadable fields
         """
-        return self._fields
+        return self._fields.keys()
     
     def info(self, get_str = False):
         """Returns a pretty information summary.
@@ -190,6 +197,9 @@ class ptype(BaseSimulationObject):
         coordinate basis.
         """
         self._set_los(los)
+        self.stars._set_los(los)
+        self.darkmatter._set_los(los)
+
 
 
 

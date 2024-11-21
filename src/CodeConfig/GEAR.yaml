@@ -14,7 +14,7 @@ stars:
         IDs: ParticleIDs
         projIDs: StarIDProj
         hsml: StarHsml
-        formation_time: StarFormationTime
+        formation_times: StarFormationTime
         
     
 darkmatter:
