@@ -13,8 +13,6 @@ stars:
         masses: particle_mass
         IDs: particle_index
         masses_ini: particle_mass_initial
-        #hsml: 
-        #formation_time: 
         
     
 darkmatter:
@@ -28,29 +26,13 @@ darkmatter:
 gas:
     pt: art
     fields: 
-        coords: 
-        vels: 
-        masses: 
-        IDs: 
-        hsml: 
-        metals:  
-        dens: Density
-        U: GasEnergy
-        XDI: 
-        XDII: 
-        XE: 
-        XH2I: 
-        XH2II: 
-        XHDI: 
-        XHI: 
-        XHII: 
-        XHM: 
-        XHeI: 
-        XHeII: 
-        XHeIII: 
-        XMetal: 
+        coords: c
+        vels: v
+        masses: m 
+        IDs: i
+ 
         
-gas_type: MESH
+gas_type: SPH
     
 
     

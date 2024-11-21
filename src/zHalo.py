@@ -219,30 +219,18 @@ class zHalo(BaseSimulationObject):
         self.stars = ptype(hashable_data, "stars")
         self.darkmatter = ptype(hashable_data, "darkmatter")
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+
         return None
         
         
 
 
-    def set_units(self, units):
+    def set_units(self):
        """Sets units for zHalo and all particle types it contains.
        """
-       self._set_units(units)
-       self.stars._set_units(units)
-       self.darkmatter._set_units(units)
-       #self.stars.set_units(units)
+       self._set_units(self.units)
+       self.stars._set_units(self.units)
+       self.darkmatter._set_units(self.units)
        
        return None
         
