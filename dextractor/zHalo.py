@@ -6,7 +6,7 @@ from unyt import unyt_array, unyt_quantity
 
 from .config import config
 from .base import BaseSimulationObject
-from .ptype import ptype, gasSPH, gasMESH
+from .ptype import ptypeSTARS, ptypeDM, gasSPH, gasMESH
 
 
 class zHalo(BaseSimulationObject):
@@ -61,23 +61,21 @@ class zHalo(BaseSimulationObject):
         """
         super().__init__()
 
-        default_kwargs = {'units': self.units,
-                         }
-        self._update_kwargs(default_kwargs, kwargs)
-
         ### File initialization information ###
         self.fn = fn
         self.sp_center = unyt_array(center[0], center[1])
         self.sp_radius = unyt_quantity(radius[0], radius[1])        
     
         self._Mdyn = None
+        self._kwargs = kwargs
+
         
         self.parse_dataset(dataset)
 
 
     ##########################################################
     ###                                                    ###
-    ##                       UTILITIES                      ##
+    ##                      PROPERTIES                      ##
     ###                                                    ###
     ##########################################################
     
@@ -89,7 +87,6 @@ class zHalo(BaseSimulationObject):
             return self._time.in_units(f"{self.units['time']}")
         else:
             return None
-    
     @property
     def Mdyn(self):
         """Dynamical mass
@@ -98,11 +95,49 @@ class zHalo(BaseSimulationObject):
             return self._Mdyn.in_units(f"{self.units['mass']}")
         else:
             return None
-        
+    @property  
     def redshift(self):
         """Redshift
         """
-        return self._red
+        return self._redshift
+    @property  
+    def scale_factor(self):
+        """scale_factor
+        """
+        return self._scale_factor
+    @property  
+    def hubble_constant(self):
+        """hubble_constant
+        """
+        return self._hubble_constant
+    @property  
+    def omega_matter(self):
+        """omega_matter
+        """
+        return self._omega_matter
+    @property  
+    def omega_lambda(self):
+        """omega_lambda
+        """
+        return self._omega_lambda
+    @property  
+    def omega_radiation(self):
+        """omega_radiation
+        """
+        return self._omega_radiation
+    @property  
+    def omega(self):
+        """omega
+        """
+        return self._omega
+    
+    
+
+    ##########################################################
+    ###                                                    ###
+    ##                       UTILITIES                      ##
+    ###                                                    ###
+    ##########################################################    
     
     def _update_kwargs(self, default_kw, new_kw):
         """Update default kwargs with user provided kwargs.
@@ -113,7 +148,7 @@ class zHalo(BaseSimulationObject):
             else:
                 default_kw[key] = value
 
-        self.__kwargs__ = default_kw
+        self._kwargs = default_kw
         return None
     
     def _set_metadata_properties(self, fields):
@@ -133,6 +168,9 @@ class zHalo(BaseSimulationObject):
                  key,
                  property(getter, setter)
              )
+        return None
+    
+    
             
             
     def info(self, get_str = False):
@@ -249,14 +287,28 @@ class zHalo(BaseSimulationObject):
                                                            )    
         self._data = hashable_data
         self._metadata = metadata
-        self._set_metadata_properties(metadata)
+        #self._set_metadata_properties(metadata)
+        for meta, value in metadata.items():
+            if meta in ['redshift',
+                        'scale_factor',
+                        'time',
+                        'hubble_constant',
+                        'omega_matter',
+                        'omega_lambda',
+                        'omega_radiation',
+                        'omega_curvature',
+                        'omega']:
+                
+                setattr(self, '_'+meta, value)
+            else:
+                setattr(self, meta, value)
 
+            
         if self.base_units is None:
             self.base_units = base_units
         
-        self.stars = ptype(hashable_data, "stars")
-        self.darkmatter = ptype(hashable_data, "darkmatter")
-
+        self.stars = ptypeSTARS(hashable_data, "stars", **self._kwargs['stars_params'])
+        self.darkmatter = ptypeDM(hashable_data, "darkmatter", **self._kwargs['dm_params'])
 
         return None
         
@@ -269,7 +321,6 @@ class zHalo(BaseSimulationObject):
        self._set_units(new_units)
        self.stars._set_units(new_units)
        self.darkmatter._set_units(new_units)
-       
        return None
         
     def set_line_of_sight(self, los):
@@ -295,7 +346,6 @@ class zHalo(BaseSimulationObject):
         self._set_los(los)
         self.stars._set_los(los)
         self.darkmatter._set_los(los)
-        #self.stars.set_basis(basis)
         return None
     
 

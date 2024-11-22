@@ -21,12 +21,7 @@ def center_of_mass(pos,
     -------
     CoM : array-like
     """
-    center = np.median(pos, axis=0)
-    radii = np.linalg.norm(pos - center, axis=1)
-    maskcen = radii < 0.5*radii.max()
-    CoM = np.average(pos[maskcen], axis=0, weights=mass[maskcen])
-    
-    return CoM
+    return np.average(pos, axis=0, weights=mass)
 
 
 

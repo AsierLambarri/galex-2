@@ -44,6 +44,7 @@ class Config:
         self.base_units = None
         self.fields = None
         self.working_units = {
+            'dimensionless': 'dimensionless',
             'mass': "Msun",
             'time': "Gyr",
             'length': "kpc",
