@@ -6,7 +6,6 @@ Created on Thu Nov 21 16:47:22 2024
 @author: asier
 """
 
-import yt
 import numpy as np
 from unyt import unyt_array, unyt_quantity
 from scipy.optimize import root_scalar
@@ -93,11 +92,21 @@ def enclosed_mass(pos, mass, cm = None):
 
 
 
-def compute_stars_in_halo(halo_table, ds,
-                          data_source = None,
-                          max_radius = 30, 
+def compute_stars_in_halo(pos,
+                          masses,
+                          vels,
+                          pindices,
+                          halo_params,
+# =============================================================================
+#                           halo_cen
+#                           halo_rvir,
+#                           halo_vmax,
+#                           halo_vrms,
+# =============================================================================
+                          max_radius = (30, 'kpc'), 
                           imax = 200,
-                          verbose=False):
+                          verbose=False
+                          ):
     """Computes the stars that form a galaxy inside a given halo using the recipe of Jenna Samuel et al. (2020). 
     For this one needs a catalogue of halos (e.g. Rockstar). The steps are the following:
 
@@ -115,55 +124,71 @@ def compute_stars_in_halo(halo_table, ds,
 
     Parameters
     ----------
-    halo_table : pandas or astropy table
-        Table where halo center position, virial radius and velocities are shown.
-    ds : yt dataset
-        YT Dataset from which to load particle data.
-    data_source : YT.Region, optional
-        Region from which the data is taken. Default is min(0.8*Rvir, 30) kpccm around halo center.
+    pos, masses, vels : array-like[float] with units
+        Absolute position, mass and velocity of particles.
+    pindices : array[int]
+        Indices of particles.
+    halo_params : dict[str : unyt_quantity or unyt_array]
+        Parameters of the halo in which we are searching: center, center_vel, Rvir, vmax and vrms.
     max_radius : float, optional
-        Maximum radius to consider for particle unbinding. Default: 30 kpccm
-    imax : int
-        Maximum number of iterations
+        Maximum radius to consider for particle unbinding. Default: 30 kpc
+    imax : int, optional
+        Maximum number of iterations. Default 200.
     verbose : bool
-        Wether to verbose or not.
+        Wether to verbose or not. Default: False.
         
     Returns
     -------
     indices : array
         Array of star particle indices belonging to the halo.
+    mask : boolean-array
+        Boolean array for masking quantities
+    delta_rel : float
+        Obtained convergence for selected total mass after imax iterations. >1E-2.
     """
-    kpccm = ds.units.kpccm
-    kms = ds.units.km/ds.units.s
-    try:
-        halo_center = halo_table[['position_x','position_y','position_z']].values[0] * kpccm
-        halo_center_vel = halo_table[['velocity_x','velocity_y','velocity_z']].values[0] * kms
-        halo_Rvir = halo_table['virial_radius'].values[0] * kpccm
-        halo_vmax = halo_table['vmax'].values[0] * kms
-        halo_vrms = halo_table['vrms'].values[0] * kms
-
-    except:
-        halo_center = halo_table[['position_x','position_y','position_z']] * kpccm
-        halo_center_vel = halo_table[['velocity_x','velocity_y','velocity_z']] * kms
-        halo_Rvir = halo_table['virial_radius'] * kpccm
-        halo_vmax = halo_table['vmax'] * kms
-        halo_vrms = halo_table['vrms'] * kms
-  
-    if data_source:
-        sp = data_source
-    else:
-        sp = ds.sphere( halo_center, np.minimum(0.8 * halo_Rvir, max_radius * kpccm) )
-
-    pos = sp['stars','particle_position'].in_units('kpccm')
-    vel = sp['stars','particle_velocity'].in_units('km/s')
-    masses = sp['stars','particle_mass'].in_units('Msun')
-    pi = np.array([i for i in sp['stars', 'particle_index'].value], dtype="int")
-
+#     kpccm = ds.units.kpccm
+#     kms = ds.units.km/ds.units.s
+#     try:
+#         halo_center = halo_table[['position_x','position_y','position_z']].values[0] * kpccm
+#         halo_center_vel = halo_table[['velocity_x','velocity_y','velocity_z']].values[0] * kms
+#         halo_Rvir = halo_table['virial_radius'].values[0] * kpccm
+#         halo_vmax = halo_table['vmax'].values[0] * kms
+#         halo_vrms = halo_table['vrms'].values[0] * kms
+# 
+#     except:
+#         halo_center = halo_table[['position_x','position_y','position_z']] * kpccm
+#         halo_center_vel = halo_table[['velocity_x','velocity_y','velocity_z']] * kms
+#         halo_Rvir = halo_table['virial_radius'] * kpccm
+#         halo_vmax = halo_table['vmax'] * kms
+#         halo_vrms = halo_table['vrms'] * kms
+#   
+#     if data_source:
+#         sp = data_source
+#     else:
+#         sp = ds.sphere( halo_center, np.minimum(0.8 * halo_Rvir, max_radius * kpccm) )
+# 
+#     pos = sp['stars','particle_position'].in_units('kpccm')
+#     vel = sp['stars','particle_velocity'].in_units('km/s')
+#     masses = sp['stars','particle_mass'].in_units('Msun')
+#     pi = np.array([i for i in sp['stars', 'particle_index'].value], dtype="int")
+# =============================================================================
+#     if len(masses) == 0:
+#         return np.array([]), np.array([]), sp, np.nan
+# =============================================================================
     if len(masses) == 0:
-        return np.array([]), np.array([]), sp, np.nan
+             return np.array([]), np.array([]), np.nan
+         
+    halo_center = halo_params['center']
+    halo_center_vel = halo_params['center_vel']
+    halo_Rvir = halo_params['rvir']
+    halo_vmax = halo_params['vmax']
+    halo_vrms = halo_params['vrms']
+    max_radius = unyt_quantity(*max_radius)
+
     
-    halorel_positions = pos - halo_center
-    halorel_velocities = vel - halo_center_vel
+    halorel_positions = (pos - halo_center).in_units("kpc")
+    halorel_velocities = (vels - halo_center_vel).in_units("km/s")
+    
     halorel_absvel = np.sqrt(halorel_velocities[:,0]**2 + halorel_velocities[:,1]**2 + halorel_velocities[:,2]**2)
     halorel_R = np.sqrt(halorel_positions[:,0]**2 + halorel_positions[:,1]**2 + halorel_positions[:,2]**2)
 
@@ -172,31 +197,31 @@ def compute_stars_in_halo(halo_table, ds,
 
     
     if verbose:
-        print(f"\nHalo uid: {halo_table['uid'].values[0]}, subtree_id: {halo_table['Sub_tree_id'].values[0]}, redshift: {halo_table['Redshift'].values[0]}")
-        print(f"\nHalo center:")
+        #print(f"\nHalo uid: {halo_table['uid'].values[0]}, subtree_id: {halo_table['Sub_tree_id'].values[0]}, redshift: {halo_table['Redshift'].values[0]}")
+        print("\nHalo center:")
         pp.pprint(halo_center)
-        print(f"\nHalo velocity:")
+        print("\nHalo velocity:")
         pp.pprint(halo_center_vel)
         print(f"\nHalo virial radius: {halo_Rvir:.4f}")
         print(f"Halo maximum Vcirc: {halo_vmax:.4f}")
         print(f"Halo Vrms: {halo_vrms:.4f}")
-        print(f"Stellar mass inside {np.minimum(0.8 * halo_Rvir, max_radius * kpccm):3f}: {masses.sum()}. Total of {len(masses)} particles.")
+        print(f"Stellar mass inside {np.minimum(0.8 * halo_Rvir, max_radius):3f}: {masses.sum()}. Total of {len(masses)} particles.")
         print(f"Accepted by Vmax criterion: {masses[mask_loop].sum()}. Total of {len(masses[mask_loop])} particles.")
 
     if np.count_nonzero(mask_loop)==0:
         if verbose:
-            print(f"Interations terminated on 0. No coherent star structures where found.")
+            print("Interations terminated on 0. No coherent star structures where found.")
                 
-        return np.array([]), np.array([]), sp, np.nan
+        return np.array([]), np.array([]), np.nan
 
     delta_mm = []
     for i in range(imax):
         old_mmass = masses[mask_loop].sum()
         cm = np.average(pos[mask_loop], axis=0, weights=masses[mask_loop])
-        vcm = np.average(vel[mask_loop], axis=0, weights=masses[mask_loop])
+        vcm = np.average(vels[mask_loop], axis=0, weights=masses[mask_loop])
 
         cmrel_positions = pos - cm
-        cmrel_velocities = vel - vcm
+        cmrel_velocities = vels - vcm
         cmrel_R = np.sqrt(cmrel_positions[:,0]**2 + cmrel_positions[:,1]**2 + cmrel_positions[:,2]**2)
         cmrel_absvel = np.sqrt(cmrel_velocities[:,0]**2 + cmrel_velocities[:,1]**2 + cmrel_velocities[:,2]**2)
 
@@ -208,13 +233,13 @@ def compute_stars_in_halo(halo_table, ds,
         hzero = root_scalar(lambda r: masses[mask_loop & (halorel_R < r)].sum()/masses[mask_loop].sum() - 0.9, method="brentq", bracket=[0, halo_Rvir])
 
 
-        R90h = hzero.root * kpccm
+        R90h = hzero.root * halorel_R.units
         mask_R90h = (halorel_R < 1.5*R90h)
         
         cmzero = root_scalar(lambda r: masses[mask_loop & (cmrel_R < r)].sum()/masses[mask_loop].sum() - 0.9, method="brentq", bracket=[0, halo_Rvir])
 
 
-        R90cm = cmzero.root * kpccm
+        R90cm = cmzero.root * halorel_R.units
         mask_R90cm = (cmrel_R < 1.5*R90cm)
     
         mask_loop = mask_vmax & mask_R90cm & mask_R90h & mask_sigmavel
@@ -224,7 +249,7 @@ def compute_stars_in_halo(halo_table, ds,
             if verbose:
                 print(f"Interations terminated on {i+1}. No coherent star structures where found.")
                 
-            return np.array([]), np.array([]), sp, np.nan
+            return np.array([]), np.array([]), np.nan
 
 
         n_init = len(masses[mask_loop])
@@ -236,16 +261,16 @@ def compute_stars_in_halo(halo_table, ds,
             print(f"\n\n### {i}-th iteration ###")
             print(f"\nCM: {cm}, Vcm: {vcm}")
             print(f"sigma_vel: {std}")
-            print(f"\n  Halo R90      CM R90  ")
+            print("\n  Halo R90      CM R90  ")
             print(f"  {R90h:.3e}  {R90cm:.3e}")
             print(f"\nOld mass: {old_mmass:.3f}, New mass: {new_mmass:.3f} ")
             print(f"Rel-Delta mass: {np.abs(new_mmass - old_mmass)/old_mmass:.2e}")
-            print(f"\nroot_scalar diagnostics")
-            print(f"Halo relative")
-            print(f"-------------")
+            print("\nroot_scalar diagnostics")
+            print("Halo relative")
+            print("-------------")
             print(hzero)
-            print(f"CM relative")
-            print(f"-----------")
+            print("CM relative")
+            print("-----------")
             print(cmzero)
             
         if hzero.flag != "converged":
@@ -254,24 +279,24 @@ def compute_stars_in_halo(halo_table, ds,
             raise Exception(f"Could not converge on cm-centered R90 on iteration {i}.")
         if delta_rel < np.maximum(0.01, 1/n_init):
             definite_mask = copy(mask_loop)
-            indices = pi[definite_mask]
-            return indices, definite_mask, sp, delta_rel
+            indices = pindices[definite_mask]
+            return indices, definite_mask, delta_rel
         if np.count_nonzero(mask_loop) < 6:    
             definite_mask = copy(mask_loop)
-            indices = pi[definite_mask]
-            return indices, definite_mask, sp, delta_rel
+            indices = pindices[definite_mask]
+            return indices, definite_mask, delta_rel
         if i >= 2:
             if delta_mm[i] == delta_mm[i-2]:
                 definite_mask = copy(mask_loop)
-                indices = pi[definite_mask]
-                return indices, definite_mask, sp, delta_rel
+                indices = pindices[definite_mask]
+                return indices, definite_mask, delta_rel
 
     
     definite_mask = copy(mask_loop)
-    indices = pi[definite_mask]
+    indices = pindices[definite_mask]
     
-    print(f"\nHalo uid: {halo_table['uid'].values[0]}, subtree_id: {halo_table['Sub_tree_id'].values[0]}, redshift: {halo_table['Redshift'].values[0]}")
+    #print(f"\nHalo uid: {halo_table['uid'].values[0]}, subtree_id: {halo_table['Sub_tree_id'].values[0]}, redshift: {halo_table['Redshift'].values[0]}")
     print(f"No convergence. Iterations terminated. Initial mass {masses[mask_vmax].sum()}. Current mass {masses[definite_mask].sum()}.")
     print(f"Rel-Delta mass is {delta_rel}.\n")
     
-    return indices, definite_mask, sp, delta_rel
+    return indices, definite_mask, delta_rel

@@ -12,6 +12,8 @@ from class_methods import gram_schmidt, center_of_mass, refine_center, half_mass
 
 
 class BaseSimulationObject:
+    """BaseSimulationObject that contains information shared between all objects in a simulation.
+    """
     def __init__(self):
         self._parent = None  
         
@@ -56,6 +58,52 @@ class BaseSimulationObject:
             self._parent._set_los(los)  
             
         return None
+    
+    
+    
+class BaseParticleType:
+    """BaseParticleType class that implements common methods and attributes for particle ensembles. These methods and attributes
+    are accesible for all particle types and hence this class acts as a bridge between stars, darkmatter and gas, allowing 
+    them to access properties of one another. This makes sense, as particles types in cosmological simulations are coupled to
+    each other.
+    
+    It also simplifies the code, as a plethora of common methods are displaced to here.
+    """
+    shared_attrs = {
+    "darkmatter": {"rockstar_center": None, "rockstar_vel": None, "rvir": None, "rs": None, "c": None},
+    "stars": {"ML": None},
+    }
+    
+    @classmethod
+    def set_shared_attrs(cls, pt, **kwargs):
+        """Set class-level shared attributes for a specific particle type.
+        """
+        if pt not in cls.shared_attrs:
+            raise ValueError(f"Unknown particle type: {pt}")
+            for key, value in kwargs.items():
+                if key in cls.shared_attrs[pt]:
+                    cls.shared_attrs[pt][key] = value
+                else:
+                    raise ValueError(f"Invalid shared attribute '{key}' for type '{pt}'")
+    
+    @classmethod
+    def get_shared_attr(cls, pt, key):
+        """Get a specific shared attribute for a particle type.
+        """
+        if pt not in cls.shared_attrs:
+            raise ValueError(f"Unknown particle type: {pt}")
+            return cls.shared_attrs[pt].get(key)
+    
+    @classmethod
+    def update_shared_attr(cls, pt, key, value):
+        """Update a specific shared attribute for a particle type.
+        """
+        if pt in cls.shared_attrs and key in cls.shared_attrs[pt]:
+            cls.shared_attrs[pt][key] = value
+        else:
+            raise ValueError(f"Cannot update: '{key}' not valid for '{pt}'")
+
+
     
 
     

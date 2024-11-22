@@ -307,7 +307,8 @@ class zHalo(BaseSimulationObject):
         if self.base_units is None:
             self.base_units = base_units
         
-        self.stars = ptypeSTARS(hashable_data, "stars", **self._kwargs['stars_params'])
+        
+        self.stars = ptypeSTARS(hashable_data, "stars", **{k: v for kw_key in self._kwargs for k, v in self._kwargs[kw_key].items()})
         self.darkmatter = ptypeDM(hashable_data, "darkmatter", **self._kwargs['dm_params'])
 
         return None

@@ -9,7 +9,7 @@ from unyt import unyt_array, unyt_quantity
 from copy import copy
 
 from .config import config
-from .base import BaseSimulationObject
+from .base import BaseSimulationObject, BaseParticleType
 
 from class_methods import center_of_mass, refine_center, half_mass_radius
 
@@ -18,7 +18,7 @@ from class_methods import center_of_mass, refine_center, half_mass_radius
 
 
 
-class ptypeSTARS(BaseSimulationObject):
+class ptypeSTARS(BaseSimulationObject, BaseParticleType):
     """ptype class that contains the particle data, for each particle type present/relevant to your analysis, in the simulation. 
     Fields are stored as attributes and have units thanks to unyt. The class might have as much fields as wished by the user,
     but a few are mandatory:
@@ -61,19 +61,15 @@ class ptypeSTARS(BaseSimulationObject):
         self.sigma_los = None
         
 
+        self.set_shared_attrs(pt, **kwargs)
 
-        
-        for key, value in self._kwargs.items():
-            if key in ['ML']:
-                setattr(self, 
-                        '_'+key, 
-                        unyt_quantity(*value) if type(value) == tuple else value
-                        )            
-            else:
-                setattr(self, 
-                        key, 
-                        unyt_quantity(*value) if type(value) == tuple else value
-                        )
+        # Set instance-specific attributes.
+        if pt == "darkmatter":
+            self.rvir = self.shared_attrs["darkmatter"]["rvir"]
+            self.rs = self.shared_attrs["darkmatter"]["rs"]
+            self.c = self.shared_attrs["darkmatter"]["c"]
+        elif pt == "stars":
+            self.ML = self.shared_attrs["stars"]["ML"]
 
     
         
@@ -93,20 +89,141 @@ class ptypeSTARS(BaseSimulationObject):
         
     ##########################################################
     ###                                                    ###
-    ##                       UTILITIES                      ##
+    ##                      PROPERTIES                      ##
     ###                                                    ###
     ##########################################################   
     
 
-             
+    # Dynamically visible properties for darkmatter       
+    @property
+    def rvir(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "rvir")
+            return value if value is None else value.in_units(self.units['length'])
+        raise AttributeError("Attribute 'rvir' is hidden for stars.")
+
+    @rvir.setter
+    def rvir(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "rvir", value)
+        else:
+            raise AttributeError("Cannot set 'rvir' for stars.")
+
+    @property
+    def rs(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "rs")
+            return value if value is None else value.in_units(self.units['length'])
+        raise AttributeError("Attribute 'rs' is hidden for stars.")
+
+    @rs.setter
+    def rs(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "rs", value)
+        else:
+            raise AttributeError("Cannot set 'rs' for stars.")
+
+    @property
+    def c(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "c")
+            return value if value is None else value.in_units(self.units['dimensionless'])
+        raise AttributeError("Attribute 'c' is hidden for stars.")
+
+    @c.setter
+    def c(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "c", value)
+        else:
+            raise AttributeError("Cannot set 'c' for stars.")
+
+
+    @property
+    def rockstar_center(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "rockstar_center")
+            return value if value is None else value.in_units(self.units['length'])
+        raise AttributeError("Attribute 'rockstar_center' is hidden for stars.")
+
+    @rockstar_center.setter
+    def rockstar_center(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "rockstar_center", value)
+        else:
+            raise AttributeError("Cannot set 'rockstar_center' for stars.")
+
+    @property
+    def rockstar_vel(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "rockstar_vel")
+            return value if value is None else value.in_units(self.units['velocity'])
+        raise AttributeError("Attribute 'rockstar_vel' is hidden for stars.")
+
+    @rockstar_vel.setter
+    def rockstar_vel(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "rockstar_vel", value)
+        else:
+            raise AttributeError("Cannot set 'rockstar_vel' for stars.")
+            
+    # Dynamically visible properties for stars
     @property
     def ML(self):
-        """ML
-        """
-        if self._ML is not None:
-            return self._ML.in_units("Msun/Lsun")
+        if self.ptype == "stars":
+            value = self.get_shared_attr(self.ptype, "ML")
+            return value if value is None else value.in_units("Msun/Lsun")
+        raise AttributeError("Attribute 'ML' is hidden for dark matter.")
+
+    @ML.setter
+    def ML(self, value):
+        if self.ptype == "stars":
+            self.update_shared_attr(self.ptype, "ML", value)
         else:
-            return None
+            raise AttributeError("Cannot set 'ML' for dark matter.")
+
+    # "Hidden" properties for the partner instance
+    @property
+    def _rvir(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "rvir")
+            return value if value is None else value.in_units(self.units['length'])
+        raise AttributeError("Attribute '_rvir' is not accessible for dark matter.")
+
+    @property
+    def _rs(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "rs")
+            return value if value is None else value.in_units(self.units['length'])
+        raise AttributeError("Attribute '_rs' is not accessible for dark matter.")
+
+    @property
+    def _c(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "c")
+            return value if value is None else value.in_units(self.units['dimensionless'])
+        raise AttributeError("Attribute '_c' is not accessible for dark matter.")
+
+    @property
+    def _rockstar_center(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "rockstar_center")
+            return value if value is None else value.in_units(self.units['length'])
+        raise AttributeError("Attribute '_rockstar_center' is not accessible for dark matter.")
+
+    @property
+    def _rockstar_vel(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "rockstar_vel")
+            return value if value is None else value.in_units(self.units['velocity'])
+        raise AttributeError("Attribute '_rockstar_vel' is not accessible for dark matter.")
+
+    @property
+    def _ML(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr("stars", "ML")
+            return value if value is None else value.in_units("Msun/Lsun")
+        raise AttributeError("Attribute '_ML' is not accessible for stars.")
+
         
     ##########################################################
     ###                                                    ###
@@ -345,7 +462,90 @@ class ptypeSTARS(BaseSimulationObject):
         self.rh_3D = half_mass_radius(self.coords, self.masses, self.cm, mfrac)
         return self.rh_3D
     
+    def compute_stars_in_halo(self, verbose=False):
+        """Computes the stars that form a galaxy inside a given halo using the recipe of Jenna Samuel et al. (2020). 
+        For this one needs a catalogue of halos (e.g. Rockstar). The steps are the following:
     
+            1. All the stars inside the min(0.8*Rvir, 30) kpccm of the host halo are considered as 
+               candidates to form the given galaxy.
+            2. The stars with relative speed bigger than 2*V_{circ, max} (usually a quantity computed in the
+               catalogues) are removed.
+            3. An iterative process is started where:
+                  (i) All the particles outside of 1.5*R90 (radius where m(R)/M_T = 0.9) are removed. We take into 
+                      account both the stars cm and the halo center.
+                 (ii) We remove all the particles that have velocities 2*sigma above the mean.
+                (iii) A convergence criterion of deltaM*/M*<0.01 is stablished.
+    
+            4. We only keep the galaxy if it has more than six stellar particles.
+    
+        Parameters
+        ----------
+        pos, masses, vels : array-like[float] with units
+            Absolute position, mass and velocity of particles.
+        pindices : array[int]
+            Indices of particles.
+        halo_params : dict[str : unyt_quantity or unyt_array]
+            Parameters of the halo in which we are searching: center, center_vel, Rvir, vmax and vrms.
+        max_radius : float, optional
+            Maximum radius to consider for particle unbinding. Default: 30 kpc
+        imax : int, optional
+            Maximum number of iterations. Default 200.
+        verbose : bool
+            Wether to verbose or not. Default: False.
+            
+        Returns
+        -------
+        indices : array
+            Array of star particle indices belonging to the halo.
+        mask : boolean-array
+            Boolean array for masking quantities
+        delta_rel : float
+            Obtained convergence for selected total mass after imax iterations. >1E-2.
+        """ 
+         indices, mask, delta_rel = compute_stars_in_halo(self.coords,
+                                                          self.masses,
+                                                          self.vels,
+                                                          self.IDs,
+                                                          {'center': ,
+                                                           'center_vel': ,
+                                                           'rvir': ,
+                                                           'vmax':,
+                                                           'vrms':                                                              
+                                                           }
+                                                          )
+        return None        
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
