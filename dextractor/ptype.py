@@ -11,7 +11,7 @@ from copy import copy
 from .config import config
 from .base import BaseSimulationObject, BaseParticleType
 
-from .class_methods import center_of_mass, refine_center, half_mass_radius
+from .class_methods import center_of_mass, refine_center, half_mass_radius, compute_stars_in_halo
 
 
 
@@ -75,8 +75,7 @@ class ptype(BaseSimulationObject, BaseParticleType):
             raise ValueError(f"Missing mandatory fields {missing_fields} for particle type {pt}")
         
         self._default_center_of_mass()
-        
-        
+
         
         del self.loader
         del self.parser
@@ -162,6 +161,35 @@ class ptype(BaseSimulationObject, BaseParticleType):
             self.update_shared_attr(self.ptype, "rockstar_vel", value)
         else:
             raise AttributeError("Cannot set 'rockstar_vel' for stars.")
+
+
+    @property
+    def vmax(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "vmax")
+            return value if value is None else value.in_units(self.units['velocity'])
+        raise AttributeError("Attribute 'vmax' is hidden for stars.")
+
+    @rockstar_vel.setter
+    def vmax(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "vmax", value)
+        else:
+            raise AttributeError("Cannot set 'vmax' for stars.")
+
+    @property
+    def vrms(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "vrms")
+            return value if value is None else value.in_units(self.units['velocity'])
+        raise AttributeError("Attribute 'vrms' is hidden for stars.")
+
+    @rockstar_vel.setter
+    def vrms(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "vrms", value)
+        else:
+            raise AttributeError("Cannot set 'vrms' for stars.")
             
     # Dynamically visible properties for stars
     @property
@@ -221,7 +249,22 @@ class ptype(BaseSimulationObject, BaseParticleType):
             return value if value is None else value.in_units("Msun/Lsun")
         raise AttributeError("Attribute '_ML' is not accessible for stars.")
 
-        
+    @property
+    def _vmax(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "vmax")
+            return value if value is None else value.in_units(self.units['velocity'])
+        raise AttributeError("Attribute 'vmax' is hidden for stars.")
+
+    @property
+    def _vrms(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "vrms")
+            return value if value is None else value.in_units(self.units['velocity'])
+        raise AttributeError("Attribute 'vrms' is hidden for stars.")
+
+
+            
     ##########################################################
     ###                                                    ###
     ##                       UTILITIES                      ##
@@ -506,17 +549,18 @@ class ptype(BaseSimulationObject, BaseParticleType):
         delta_rel : float
             Obtained convergence for selected total mass after imax iterations. >1E-2.
         """ 
-        #indices, mask, delta_rel = compute_stars_in_halo(self.coords,
-        #                                                  self.masses,
-        #                                                  self.vels,
-        #                                                  self.IDs,
-         #                                                 {'center': ,
-          #                                                 'center_vel': ,
-           #                                                'rvir': ,
-            #                                               'vmax':,
-             #                                              'vrms':                                                              
-              #                                             }
-               #                                           )
+        indices, mask, delta_rel = compute_stars_in_halo(self.coords,
+                                                          self.masses,
+                                                          self.vels,
+                                                          self.IDs,
+                                                          {'center': self._rockstar_center ,
+                                                           'center_vel': self._rockstar_vel,
+                                                           'rvir': self._rvir,
+                                                           'vmax': self._vmax,
+                                                           'vrms': self._vrms                                                             
+                                                           },
+                                                           verbose=verbose
+                                                          )
         return None        
     
 
