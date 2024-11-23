@@ -11,14 +11,14 @@ from copy import copy
 from .config import config
 from .base import BaseSimulationObject, BaseParticleType
 
-from class_methods import center_of_mass, refine_center, half_mass_radius
+from .class_methods import center_of_mass, refine_center, half_mass_radius
 
 
 
 
 
 
-class ptypeSTARS(BaseSimulationObject, BaseParticleType):
+class ptype(BaseSimulationObject, BaseParticleType):
     """ptype class that contains the particle data, for each particle type present/relevant to your analysis, in the simulation. 
     Fields are stored as attributes and have units thanks to unyt. The class might have as much fields as wished by the user,
     but a few are mandatory:
@@ -49,29 +49,26 @@ class ptypeSTARS(BaseSimulationObject, BaseParticleType):
         """
         super().__init__()
         self.ptype, self._base_ptype = pt, copy(self.ptypes[pt])
-        self._fields = copy(self.fields[pt])
+        self._dynamic_fields = copy(self.fields[pt])
         self._fields_loaded = {}
         self._data = data
         self._kwargs = kwargs
-        print(self._kwargs)
         self.cm = None
         self.vcm = None
         self.rh = None
         self.rh_3D = None
         self.sigma_los = None
         
+        self.set_shared_attrs(self.ptype, self._kwargs)
 
-        self.set_shared_attrs(pt, **kwargs)
+        #Set instance-specific attributes.
+        #if pt == "darkmatter":
+        #    self.rvir = self.shared_attrs["darkmatter"]["rvir"]
+        #    self.rs = self.shared_attrs["darkmatter"]["rs"]
+        #    self.c = self.shared_attrs["darkmatter"]["c"]
+        #elif pt == "stars":
+        #    self.ML = self.shared_attrs["stars"]["ML"]
 
-        # Set instance-specific attributes.
-        if pt == "darkmatter":
-            self.rvir = self.shared_attrs["darkmatter"]["rvir"]
-            self.rs = self.shared_attrs["darkmatter"]["rs"]
-            self.c = self.shared_attrs["darkmatter"]["c"]
-        elif pt == "stars":
-            self.ML = self.shared_attrs["stars"]["ML"]
-
-    
         
         missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields[pt]]
         if missing_fields:
@@ -249,24 +246,31 @@ class ptypeSTARS(BaseSimulationObject, BaseParticleType):
             'masses': self.units['mass'],
             'masses_ini': self.units['mass'],
             'vels': self.units['velocity'],
-            'formation_times': self.units['time']
+            'formation_times': self.units['time'],
+            'metallicity': self.units['dimensionless']
         }
+                    
+
+        if field_name  in self._dynamic_fields.keys():
+            if field_name in self._fields_loaded:
+                return self._fields_loaded[field_name].in_units(funits[field_name]) if field_name in funits else self._fields_loaded[field_name]
+            else:
+                field = (self._base_ptype, self._dynamic_fields[field_name])
+                self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
+                return self._fields_loaded[field_name]
+
+        try:
+            return self.__getattribute__(field_name)
+        except AttributeError:
+            raise AttributeError(f"Field '{field_name}' not found for particle type {self.ptype}. "+ f"Available fields are: {list(self._dynamic_fields.keys())}")
+
+        AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._dynamic_fields.keys())}")
+        return None
         
-        if field_name not in self._fields.keys():
-            AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._fields.keys())}")
-
-        if field_name in self._fields_loaded:
-            return self._fields_loaded[field_name].in_units(funits[field_name]) if field_name in funits else self._fields_loaded[field_name]
-
-        
-        field = (self._base_ptype, self._fields[field_name])
-        self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
-        return self._fields_loaded[field_name]
-
     def get_fields(self):
         """Returns all loadable fields
         """
-        return self._fields.keys()
+        return self._dynamic_fields.keys()
     
     def info(self, get_str = False):
         """Returns a pretty information summary.
@@ -502,17 +506,17 @@ class ptypeSTARS(BaseSimulationObject, BaseParticleType):
         delta_rel : float
             Obtained convergence for selected total mass after imax iterations. >1E-2.
         """ 
-         indices, mask, delta_rel = compute_stars_in_halo(self.coords,
-                                                          self.masses,
-                                                          self.vels,
-                                                          self.IDs,
-                                                          {'center': ,
-                                                           'center_vel': ,
-                                                           'rvir': ,
-                                                           'vmax':,
-                                                           'vrms':                                                              
-                                                           }
-                                                          )
+        #indices, mask, delta_rel = compute_stars_in_halo(self.coords,
+        #                                                  self.masses,
+        #                                                  self.vels,
+        #                                                  self.IDs,
+         #                                                 {'center': ,
+          #                                                 'center_vel': ,
+           #                                                'rvir': ,
+            #                                               'vmax':,
+             #                                              'vrms':                                                              
+              #                                             }
+               #                                           )
         return None        
     
 
@@ -580,7 +584,7 @@ class ptypeDM(BaseSimulationObject):
         """
         super().__init__()
         self.ptype, self._base_ptype = pt, copy(self.ptypes[pt])
-        self._fields = copy(self.fields[pt])
+        self._dynamic_fields = copy(self.fields[pt])
         self._fields_loaded = {}
         self._data = data
         self._kwargs = kwargs
@@ -702,14 +706,14 @@ class ptypeDM(BaseSimulationObject):
             'vels': self.units['velocity']
         }
         
-        if field_name not in self._fields.keys():
-            AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._fields.keys())}")
+        if field_name not in self._dynamic_fields.keys():
+            AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._dynamic_fields.keys())}")
 
         if field_name in self._fields_loaded:
             return self._fields_loaded[field_name].in_units(funits[field_name]) if field_name in funits else self._fields_loaded[field_name]
 
         
-        field = (self._base_ptype, self._fields[field_name])
+        field = (self._base_ptype, self._dynamic_fields[field_name])
         self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
         return self._fields_loaded[field_name]
         
@@ -742,7 +746,7 @@ class ptypeDM(BaseSimulationObject):
     def get_fields(self):
         """Returns all loadable fields
         """
-        return self._fields.keys()
+        return self._dynamic_fields.keys()
     
     def info(self, get_str = False):
         """Returns a pretty information summary.

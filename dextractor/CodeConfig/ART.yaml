@@ -1,4 +1,5 @@
 base_units: 
+    dimensionless: dimensionless
     time: 2.1580812909e+20 * s
     mass: 4.6208548829e+49 * g
     length: 8.5479813130e+01 * Mpc

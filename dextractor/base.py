@@ -6,9 +6,9 @@ Created on Wed Nov 20 10:03:19 2024
 @author: asier
 """
 import numpy as np
-
+from unyt import unyt_array
 from .config import config
-from class_methods import gram_schmidt, center_of_mass, refine_center, half_mass_radius
+from .class_methods import gram_schmidt, center_of_mass, refine_center, half_mass_radius
 
 
 class BaseSimulationObject:
@@ -69,41 +69,63 @@ class BaseParticleType:
     
     It also simplifies the code, as a plethora of common methods are displaced to here.
     """
-    shared_attrs = {
-    "darkmatter": {"rockstar_center": None, "rockstar_vel": None, "rvir": None, "rs": None, "c": None},
-    "stars": {"ML": None},
+    _shared_attrs = {
+        "darkmatter": {"rockstar_center": None, "rockstar_vel": None, "rvir": None, "rs": None, "c": None, 'vmax': None, 'vrms': None},
+        "stars": {"ML": None},
     }
-    
+
+
     @classmethod
-    def set_shared_attrs(cls, pt, **kwargs):
+    def format_value(cls, value):
+        """Formats value using unyt if value != None, else returns none
+        """
+        if value is None:
+            return None
+            
+        if type(value) == tuple:
+            assert len(value) >= 1 and len(value) <= 2, f"Tuple must be of the formt (X,)==(X,'dimensionless') or (X,unit). Your provided {value}."
+            if value[0] is None: return None
+            else: return unyt_array(*value)
+                
+        else:
+            return cls.format_value((value,))
+
+    @classmethod
+    def set_shared_attrs(cls, pt, kwargs):
         """Set class-level shared attributes for a specific particle type.
         """
-        if pt not in cls.shared_attrs:
+        if pt not in cls._shared_attrs:
             raise ValueError(f"Unknown particle type: {pt}")
-            for key, value in kwargs.items():
-                if key in cls.shared_attrs[pt]:
-                    cls.shared_attrs[pt][key] = value
-                else:
-                    raise ValueError(f"Invalid shared attribute '{key}' for type '{pt}'")
+        
+        for key, value in kwargs.items():
+            if key in cls._shared_attrs[pt]:
+                cls._shared_attrs[pt][key] = cls.format_value(value)
+            else:
+                raise ValueError(f"Invalid shared attribute '{key}' for type '{pt}'")
+
+        return None
     
     @classmethod
     def get_shared_attr(cls, pt, key):
         """Get a specific shared attribute for a particle type.
         """
-        if pt not in cls.shared_attrs:
+        if pt not in cls._shared_attrs:
             raise ValueError(f"Unknown particle type: {pt}")
-            return cls.shared_attrs[pt].get(key)
-    
+        return cls._shared_attrs[pt].get(key)
+
     @classmethod
     def update_shared_attr(cls, pt, key, value):
         """Update a specific shared attribute for a particle type.
         """
-        if pt in cls.shared_attrs and key in cls.shared_attrs[pt]:
-            cls.shared_attrs[pt][key] = value
+        if (pt in cls._shared_attrs) and (key in cls._shared_attrs[pt]):
+            cls._shared_attrs[pt][key] = value
         else:
             raise ValueError(f"Cannot update: '{key}' not valid for '{pt}'")
 
-
+    @classmethod
+    def list_shared_attributes(cls, pt):
+        """List all shared attributes for a given particle type."""
+        return list(cls._shared_attrs.get(pt, {}).keys())
     
 
     

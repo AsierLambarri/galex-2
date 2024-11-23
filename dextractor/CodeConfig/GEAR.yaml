@@ -1,4 +1,5 @@
 base_units:
+    dimensionless: dimensionless
     time: 3.0856775810e+16 * s/h
     mass: 1.9884158600e+43 * g/h
     length: 1 * kpccm/h
