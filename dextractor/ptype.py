@@ -50,7 +50,7 @@ class ptype(BaseSimulationObject, BaseParticleType):
         super().__init__()
         self.ptype, self._base_ptype = pt, copy(self.ptypes[pt])
         self._dynamic_fields = copy(self.fields[pt])
-        self._fields_loaded = {}
+        self._fields_loaded = []
         self._data = data
         self._kwargs = kwargs
         self.cm = None
@@ -270,7 +270,8 @@ class ptype(BaseSimulationObject, BaseParticleType):
     ##                      UTILITIES                       ##
     ###                                                    ###
     ##########################################################
-        
+
+
     def __getattr__(self, field_name):
         """Dynamical loader for accessing fields.
         
@@ -292,23 +293,44 @@ class ptype(BaseSimulationObject, BaseParticleType):
             'formation_times': self.units['time'],
             'metallicity': self.units['dimensionless']
         }
-                    
-
-        if field_name  in self._dynamic_fields.keys():
+        if field_name in self._dynamic_fields.keys():
             if field_name in self._fields_loaded:
-                return self._fields_loaded[field_name].in_units(funits[field_name]) if field_name in funits else self._fields_loaded[field_name]
+                return getattr(self, field_name).in_units(funits[field_name])
             else:
                 field = (self._base_ptype, self._dynamic_fields[field_name])
-                self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
-                return self._fields_loaded[field_name]
+                loaded_field = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
+                self._fields_loaded.append(field_name)
 
-        try:
-            return self.__getattribute__(field_name)
-        except AttributeError:
-            raise AttributeError(f"Field '{field_name}' not found for particle type {self.ptype}. "+ f"Available fields are: {list(self._dynamic_fields.keys())}")
+                setattr(self, field_name, loaded_field)
 
-        AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._dynamic_fields.keys())}")
-        return None
+                return loaded_field
+        else:
+            try:
+                print(f"with __getattribute__")
+                return self.__getattribute__(field_name)
+            except AttributeError:
+                raise AttributeError(f"Field '{field_name}' not found for particle type {self.ptype}. "+ f"Available fields are: {list(self._dynamic_fields.keys())}")
+
+
+
+#        if field_name  in self._dynamic_fields.keys():
+#            if field_name in self._fields_loaded:
+#                return self._fields_loaded[field_name].in_units(funits[field_name]) if field_name in funits else self._fields_loaded[field_name]
+#            else:
+#                field = (self._base_ptype, self._dynamic_fields[field_name])
+#                self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
+#                return self._fields_loaded[field_name]
+#
+#        try:
+#            print(f"with __getattribute__")
+#            return self.__getattribute__(field_name)
+#        except AttributeError:
+#            raise AttributeError(f"Field '{field_name}' not found for particle type {self.ptype}. "+ f"Available fields are: {list(self._dynamic_fields.keys())}")
+#
+#        AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._dynamic_fields.keys())}")
+#        return None
+
+
         
     def get_fields(self):
         """Returns all loadable fields
