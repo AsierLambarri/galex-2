@@ -9,16 +9,16 @@ from unyt import unyt_array, unyt_quantity
 from copy import copy
 
 from .config import config
-from .base import BaseSimulationObject, BaseParticleType
+from .base import BaseSimulationObject, BaseComponent
 
-from .class_methods import center_of_mass, refine_center, half_mass_radius, compute_stars_in_halo
-
-
+from .class_methods import center_of_mass, refine_center, half_mass_radius, compute_stars_in_halo, bound_particlesBH, bound_particlesAPROX
 
 
 
 
-class StellarComponent(BaseSimulationObject, BaseParticleType):
+
+
+class StellarComponent(BaseSimulationObject, BaseComponent):
     """ptype class that contains the particle data, for each particle type present/relevant to your analysis, in the simulation. 
     Fields are stored as attributes and have units thanks to unyt. The class might have as much fields as wished by the user,
     but a few are mandatory:
@@ -52,8 +52,13 @@ class StellarComponent(BaseSimulationObject, BaseParticleType):
         self._fields_loaded = []
         self._data = data
         self._kwargs = kwargs
+        self.use_bound_if_computed = True
+        self.bound_method = None
+        
         self.cm = None
         self.vcm = None
+        self.bmask = None
+        
         self.rh = None
         self.rh_3D = None
         self.sigma_los = None
@@ -174,6 +179,7 @@ class StellarComponent(BaseSimulationObject, BaseParticleType):
             'metallicity': self.units['dimensionless']
         }
         if field_name in self._dynamic_fields.keys():
+            print(f"Field {field_name} not masked to bound")
             if field_name in self._fields_loaded:
                 return getattr(self, field_name).in_units(funits[field_name])
             else:
@@ -184,6 +190,21 @@ class StellarComponent(BaseSimulationObject, BaseParticleType):
                 setattr(self, field_name, loaded_field)
 
                 return loaded_field
+                
+        elif (field_name in ['b'+f for f in list(self._dynamic_fields.keys())]) and self.bmask is not None:
+            print(f"Field {field_name} masked to bound")
+            print(field_name[1:])
+            if field_name in self._fields_loaded:
+                return getattr(self, field_name)[self.bmask].in_units(funits[field_name[1:]])
+            else:
+                field = (self._base_ptype, self._dynamic_fields[field_name[1:]])
+                loaded_field = self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask]
+                self._fields_loaded.append(field_name)
+
+                setattr(self, field_name, loaded_field)
+
+                return loaded_field
+                
         else:
             try:
                 print(f"with __getattribute__")
@@ -300,7 +321,7 @@ class StellarComponent(BaseSimulationObject, BaseParticleType):
         delta_rel : float
             Obtained convergence for selected total mass after imax iterations. >1E-2.
         """ 
-        indices, mask, delta_rel = compute_stars_in_halo(self.coords,
+        _, mask, delta_rel = compute_stars_in_halo(self.coords,
                                                           self.masses,
                                                           self.vels,
                                                           self.IDs,
@@ -312,6 +333,9 @@ class StellarComponent(BaseSimulationObject, BaseParticleType):
                                                            },
                                                            verbose=verbose
                                                           )
+        self.bmask = mask
+        self.delta_rel = delta_rel.value
+        self.bound_method = "starry-halo"
         return None        
     
 
@@ -327,28 +351,7 @@ class StellarComponent(BaseSimulationObject, BaseParticleType):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class DarkComponent(BaseSimulationObject, BaseParticleType):
+class DarkComponent(BaseSimulationObject, BaseComponent):
     """ptype class that contains the particle data, for each particle type present/relevant to your analysis, in the simulation. 
     Fields are stored as attributes and have units thanks to unyt. The class might have as much fields as wished by the user,
     but a few are mandatory:
@@ -382,7 +385,8 @@ class DarkComponent(BaseSimulationObject, BaseParticleType):
         self._fields_loaded = []
         self._data = data
         self._kwargs = kwargs
-        print(self._kwargs)
+        self.use_bound_if_computed = True
+        self.bound_method = None
         self.cm = None
         self.vcm = None
         self.rh = None
@@ -547,6 +551,7 @@ class DarkComponent(BaseSimulationObject, BaseParticleType):
             'metallicity': self.units['dimensionless']
         }
         if field_name in self._dynamic_fields.keys():
+            print(f"Field {field_name} not masked to bound")
             if field_name in self._fields_loaded:
                 return getattr(self, field_name).in_units(funits[field_name])
             else:
@@ -557,6 +562,21 @@ class DarkComponent(BaseSimulationObject, BaseParticleType):
                 setattr(self, field_name, loaded_field)
 
                 return loaded_field
+                
+        elif (field_name in ['b'+f for f in list(self._dynamic_fields.keys())]) and self.bmask is not None:
+            print(f"Field {field_name} masked to bound")
+            print(field_name[1:])
+            if field_name in self._fields_loaded:
+                return getattr(self, field_name)[self.bmask].in_units(funits[field_name[1:]])
+            else:
+                field = (self._base_ptype, self._dynamic_fields[field_name[1:]])
+                loaded_field = self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask]
+                self._fields_loaded.append(field_name)
+
+                setattr(self, field_name, loaded_field)
+
+                return loaded_field
+                
         else:
             try:
                 print(f"with __getattribute__")
@@ -624,13 +644,82 @@ class DarkComponent(BaseSimulationObject, BaseParticleType):
             print("\n".join(output))
             return None
 
+    def compute_bound_particles(self, method, refine=True, delta=1E-5, verbose = False):
+        """Computes the bound particles of a halo/ensemble of particles using the Barnes-Hut algorithm implemented in PYTREEGRAV or 
+        approximating it as:
+
+                            pot = -G* Mtot * m_i / |x_i - x_cm|
+                            
+        The bound particles are defined as those with E= pot + kin < 0. The center of mass position is not required, as the potential 
+        calculation is done with relative distances between particles. To compute the kinetic energy of the particles the *v_cm*
+        is needed: you can provide one or the function make a crude estimates of it with all particles. 
+    
+        You can ask the function to refine the unbinding by iterating until the *cm* and *v_cm* vectors converge to within a user specified
+        delta (default is 1E-5, relative). This is recomended if you dont specify the *v_cm*, as the initial estimation using all particles
+        may be biased for anisotropic particle distributions. If you provide your own *v_cm*, taken from somewhere reliable e.g. Rockstar halo
+        catalogues, it will be good enough. Note that if you still want to refine, the *v_cm* you provided will be disregarded after the
+        first iteration.
+    
+        Typical run times are of 0.5-2s dependin if the result is refined or not. This is similar to the I/O overheads of yt.load, making it reasonable for
+        use with a few halos (where you dont care if the total runtime is twice as long because it will be fast enough).
+    
+        Unit handling is done with unyt. 
+        """
+        
+        if method == "APROX":
+            self.E, self.kin, self.pot = bound_particlesAPROX(self.coords,
+                                                             self.vels,
+                                                             self.masses,
+                                                             cm = self.cm,
+                                                             vcm = self.vcm,
+                                                             refine = refine,
+                                                             delta = delta,
+                                                             verbose = verbose
+                                                            )
+
+
+        
+        elif method == "BH":
+            try:
+                hsml = halo.hsml
+            except:
+                hsml = None
+    
+            self.E, self.kin, self.pot = bound_particlesBH(self.coords,
+                                                           self.vels,
+                                                           self.masses,
+                                                           soft = hsml,
+                                                           cm = self.cm,
+                                                           vcm = self.vcm,
+                                                           refine = refine,
+                                                           delta = delta,
+                                                           verbose = verbose                                  
+                                                          )
+        self.bmask = self.E < 0
+        self.bound_method = f"grav-{method}".lower()
+        return None
 
 
 
 
 
 
-class gasSPH(BaseSimulationObject):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class GasComponentSPH(BaseSimulationObject, BaseComponent):
     ##########################################################
     ###                                                    ###
     ##                    INNIT FUNCTION                    ##
@@ -651,7 +740,7 @@ class gasSPH(BaseSimulationObject):
 
 
 
-class gasMESH(BaseSimulationObject):
+class GasComponentMESH(BaseSimulationObject, BaseComponent):
     ##########################################################
     ###                                                    ###
     ##                    INNIT FUNCTION                    ##

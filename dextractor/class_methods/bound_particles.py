@@ -5,7 +5,7 @@ from copy import deepcopy, copy
 
 
 def bound_particlesBH(pos, vel, mass, 
-                      ids = None,
+                      #ids = None,
                       soft = None,
                       cm = None,
                       vcm = None,
@@ -56,13 +56,14 @@ def bound_particlesBH(pos, vel, mass,
         Whether to print when running. Work in progrees. default is False.
     """
 
-    cm = np.average(pos.in_units("kpc"), axis=0, weights=mass) if cm is None else cm
-    vcm = np.average(vel.in_units("km/s"), axis=0, weights=mass) if vcm is None else vcm
+    cm = np.average(pos, axis=0, weights=mass) if cm is None else cm
+    vcm = np.average(vel, axis=0, weights=mass) if vcm is None else vcm
 
-    softenings = soft.in_units("kpc") if soft is not None else None
+    softenings = soft.in_units(pos.units) if soft is not None else None
 
-    pot, tree = Potential(pos.in_units("kpc"), mass.in_units("Msun"), softenings,
-                      parallel=True, quadrupole=True, G=4.300917270038e-06, theta=theta, return_tree=True)
+    pot = Potential(pos, mass, softenings,
+                    parallel=True, quadrupole=True, G=unyt_quantity(4.300917270038e-06, "kpc/Msun * (km/s)**2").in_units(pos.units/mass.units * (vel.units)**2), 
+                    theta=theta)
 
     for i in range(100):
         abs_vel = np.sqrt( (vel[:,0]-vcm[0])**2 +
@@ -70,10 +71,9 @@ def bound_particlesBH(pos, vel, mass,
                            (vel[:,2]-vcm[2])**2
                        )
     
-        kin = 0.5 * mass.in_units("Msun") * abs_vel**2
+        kin = 0.5 * mass * abs_vel**2
         
-            
-        pot = mass.in_units("Msun") * unyt_array(pot, 'km**2/s**2')
+        pot = mass * unyt_array(pot, vel.units**2)
         E = kin + pot
         bound_mask = E < 0
         
@@ -83,21 +83,22 @@ def bound_particlesBH(pos, vel, mass,
         most_bound_mask = np.zeros(len(E), dtype=bool)
         most_bound_mask[most_bound_ids] = True
         
-        new_cm = np.average(pos[most_bound_mask].in_units("kpc"), axis=0, weights=mass[most_bound_mask])
-        new_vcm = np.average(vel[most_bound_mask].in_units("km/s"), axis=0, weights=mass[most_bound_mask])        
+        new_cm = np.average(pos[most_bound_mask], axis=0, weights=mass[most_bound_mask])
+        new_vcm = np.average(vel[most_bound_mask], axis=0, weights=mass[most_bound_mask])        
      
         delta_cm = np.sqrt(np.sum((new_cm - cm)**2, axis=0)) / np.linalg.norm(cm) < delta
         delta_vcm =  np.sqrt(np.sum((new_vcm - vcm)**2, axis=0)) / np.linalg.norm(vcm) < delta        
         
         if not refine or (delta_cm and delta_vcm):
-            return (bound_mask, most_bound_mask, ids[bound_mask], ids[most_bound_mask]) if ids is not None else (bound_mask, most_bound_mask)
+            return E, kin, pot
+            #return (bound_mask, most_bound_mask, ids[bound_mask], ids[most_bound_mask]) if ids is not None else (bound_mask, most_bound_mask)
 
         cm, vcm = copy(new_cm), copy(new_vcm)
 
 
 
 def bound_particlesAPROX(pos, vel, mass, 
-                      ids = None,
+                      #ids = None,
                       cm = None,
                       vcm = None,
                       refine = False,
@@ -149,9 +150,10 @@ def bound_particlesAPROX(pos, vel, mass,
         Whether to print when running. Work in progrees. default is False.
     """
 
-    cm = np.average(pos.in_units("kpc"), axis=0, weights=mass) if cm is None else cm
-    vcm = np.average(vel.in_units("km/s"), axis=0, weights=mass) if vcm is None else vcm
-        
+    cm = np.average(pos, axis=0, weights=mass) if cm is None else cm
+    vcm = np.average(vel, axis=0, weights=mass) if vcm is None else vcm
+    G = -unyt_quantity(4.300917270038e-06, "kpc/Msun * km**2/s**2").in_units(pos.units/mass.units * (vel.units)**2)
+    
     for i in range(100):
         radii = np.sqrt( (pos[:,0]-cm[0])**2 +
                          (pos[:,1]-cm[1])**2 + 
@@ -162,8 +164,8 @@ def bound_particlesAPROX(pos, vel, mass,
                          (vel[:,2]-vcm[2])**2
                        )
     
-        kin = 0.5 * mass.in_units("Msun") * abs_vel**2
-        pot = -unyt_quantity(4.300917270038e-06, "kpc/Msun * km**2/s**2") * mass.in_units("Msun") * mass.in_units("Msun").sum() / radii.in_units("kpc")
+        kin = 0.5 * mass * abs_vel**2
+        pot = G * mass * mass.sum() / radii
         E = kin + pot
         bound_mask = E < 0
         
@@ -173,13 +175,19 @@ def bound_particlesAPROX(pos, vel, mass,
         most_bound_mask = np.zeros(len(E), dtype=bool)
         most_bound_mask[most_bound_ids] = True
         
-        new_cm = np.average(pos[most_bound_mask].in_units("kpc"), axis=0, weights=mass[most_bound_mask])
-        new_vcm = np.average(vel[most_bound_mask].in_units("km/s"), axis=0, weights=mass[most_bound_mask])        
+        new_cm = np.average(pos[most_bound_mask], axis=0, weights=mass[most_bound_mask])
+        new_vcm = np.average(vel[most_bound_mask], axis=0, weights=mass[most_bound_mask])        
      
         delta_cm = np.sqrt(np.sum((new_cm - cm)**2, axis=0)) / np.linalg.norm(cm) < delta
         delta_vcm =  np.sqrt(np.sum((new_vcm - vcm)**2, axis=0)) / np.linalg.norm(vcm) < delta        
         
         if not refine or (delta_cm and delta_vcm):
-            return (bound_mask, most_bound_mask, ids[bound_mask], ids[most_bound_mask]) if ids is not None else (bound_mask, most_bound_mask)
+            return E, kin, pot
+            #return (bound_mask, most_bound_mask, ids[bound_mask], ids[most_bound_mask]) if ids is not None else (bound_mask, most_bound_mask)
 
         cm, vcm = copy(new_cm), copy(new_vcm)
+
+
+
+
+

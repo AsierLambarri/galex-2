@@ -6,8 +6,8 @@ from unyt import unyt_array, unyt_quantity
 
 from .config import config
 from .base import BaseSimulationObject
-from .ptype import StellarComponent, DarkComponent, gasSPH, gasMESH
-
+from .ptype import StellarComponent, DarkComponent, GasComponentSPH, GasComponentMESH
+from .class_methods import bound_particlesBH, bound_particlesAPROX
 
 class zHalo(BaseSimulationObject):
     """zHalo class that implements a variety of functions to analyze the internal structure of a halo at a certain redshift, and the galaxy that

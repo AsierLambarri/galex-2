@@ -61,7 +61,7 @@ class BaseSimulationObject:
     
     
     
-class BaseParticleType:
+class BaseComponent:
     """BaseParticleType class that implements common methods and attributes for particle ensembles. These methods and attributes
     are accesible for all particle types and hence this class acts as a bridge between stars, darkmatter and gas, allowing 
     them to access properties of one another. This makes sense, as particles types in cosmological simulations are coupled to
@@ -134,67 +134,6 @@ class BaseParticleType:
     ###                                                    ###
     ##########################################################
 
-    def info(self, get_str = False):
-        """Returns a pretty information summary.
-        
-        Parameters
-        ----------
-        get_str : bool
-            Return str instead of print. Default: False
-
-        Returns
-        -------
-        info : str, optionally
-
-        """
-        output = []
-        
-        output.append(f"\n{self.ptype}")
-        output.append(f"{'':-<21}")
-        try:
-            output.append(f"{'len_pos':<20}: {len(self.coords)}")
-            output.append(f"{'pos[0]':<20}: [{self.coords[0,0].value:.2f}, {self.coords[0,1].value:.2f}, {self.coords[0,2].value:.2f}] {self.units['length']}")
-            output.append(f"{'pos[-1]':<20}: [{self.coords[-1,0].value:.2f}, {self.coords[-1,1].value:.2f}, {self.coords[-1,2].value:.2f}] {self.units['length']}")
-            
-            output.append(f"{'len_vel':<20}: {len(self.vels)}")
-            output.append(f"{'vel[0]':<20}: [{self.vels[0,0].value:.2f}, {self.vels[0,1].value:.2f}, {self.vels[0,2].value:.2f}] {self.units['velocity']}")
-            output.append(f"{'vel[-1]':<20}: [{self.vels[-1,0].value:.2f}, {self.vels[-1,1].value:.2f}, {self.vels[-1,2].value:.2f}] {self.units['velocity']}")
-    
-            
-            output.append(f"{'len_mass':<20}: {len(self.masses)}")
-            output.append(f"{'mass[0]':<20}: {self.masses[0]}")
-            output.append(f"{'mass[-1]':<20}: {self.masses[-1]}")
-            
-            output.append(f"{'len_ids':<20}: {len(self.IDs)}")
-            output.append(f"{'ID[0]':<20}: {self.IDs[0].value}")
-            output.append(f"{'ID[-1]':<20}: {self.IDs[-1].value}")
-            
-        except:
-            output.append(f"{'len_pos':<20}: {len(self.coords)}")
-            output.append(f"{'len_vel':<20}: {len(self.coords)}")
-            output.append(f"{'len_mass':<20}: {len(self.coords)}")
-            output.append(f"{'len_ids':<20}: {len(self.coords)}")
-
-        
-        output.append(f"{'CoM':<20}: {self.cm}")
-        output.append(f"{'V_CoM':<20}: {self.vcm}")
-        
-        output.append(f"{'rh, rh_3D':<20}: {self.rh:2f}, {self.rh_3D:.2f}")
-            
-        if self.ptype == "stars":
-            output.append(f"{'sigma*':<20}: {self.sigma_los}")
-            output.append(f"{'ML':<20}: {self.ML}")
-        
-        if self.ptype == "darkmatter":
-            output.append(f"{'rvir, rs, c':<20}: {self.rvir:.2f}, {self.rs:.2f}, {self.c:.2f}")
-
-        if get_str:
-            return "\n".join(output)
-        else:
-            print("\n".join(output))
-            return None
-
-    
     def _default_center_of_mass(self):
         """Computes coarse CoM using all the particles as 
 
@@ -284,15 +223,25 @@ class BaseParticleType:
         cm : array
             Refined Center of mass and various quantities.
         """
-        self.centering_results = refine_center(self.coords, self.masses,
-                                               scaling,
-                                               method,
-                                               delta,
-                                               alpha,
-                                               m,
-                                               nmin,
-                                               mfrac
-                                               )
+        if self.use_bound_if_computed:
+            self.centering_results = refine_center(self.coords[self.bmask], self.masses[self.bmask],
+                                                   scaling,
+                                                   method,
+                                                   delta,
+                                                   alpha,
+                                                   m,
+                                                   nmin,
+                                                   mfrac)
+        else:
+            self.centering_results = refine_center(self.coords, self.masses,
+                                           scaling,
+                                           method,
+                                           delta,
+                                           alpha,
+                                           m,
+                                           nmin,
+                                           mfrac)
+            
         self.cm = self.centering_results['center']
         return self.cm
     
@@ -314,8 +263,14 @@ class BaseParticleType:
         MFRAC_mass_radius : float
             Desired mfrac mass fraction radius estimation. Provided in same units as pos, if any.
         """
-        self.rh_3D = half_mass_radius(self.coords, self.masses, self.cm, mfrac)
+        if self.use_bound_if_computed:
+            self.rh_3D = half_mass_radius(self.coords[self.bmask], self.masses[self.bmask], self.cm, mfrac)
+        else:
+            self.rh_3D = half_mass_radius(self.coords, self.masses, self.cm, mfrac)
+            
         return self.rh_3D
+
+
     
 
     
