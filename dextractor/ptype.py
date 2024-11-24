@@ -184,13 +184,13 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
                 self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
                 return self._fields_loaded[field_name]
                 
-        elif field_name[1:]  in self._dynamic_fields.keys():
-            if field_name in self._fields_loaded:
-                return self._fields_loaded[field_name].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._fields_loaded[field_name]
-            else:
-                field = (self._base_ptype, self._dynamic_fields[field_name[1:]])
-                self._fields_loaded[field_name] = self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask]
-                return self._fields_loaded[field_name]
+        elif field_name  in ['b'+ f for f in list(self._dynamic_fields.keys())]:
+            #if field_name in self._fields_loaded:
+            #    return self._fields_loaded[field_name].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._fields_loaded[field_name]
+            #else:
+            field = (self._base_ptype, self._dynamic_fields[field_name[1:]])
+            self._fields_loaded[field_name] = self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask]
+            return self._fields_loaded[field_name]
 
         try:
             print(f"with __getattribute__")
@@ -362,6 +362,9 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         self.bmask = mask
         self.delta_rel = delta_rel.value
         self.bound_method = "starry-halo"
+        for key in list(self._fields_loaded.keys()):  
+            if key.startswith("b"):
+                del self._fields_loaded[key]
         return None        
     
 
@@ -584,7 +587,7 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
                 self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
                 return self._fields_loaded[field_name]
                 
-        elif field_name[1:]  in self._dynamic_fields.keys():
+        elif field_name  in ['b'+ f for f in list(self._dynamic_fields.keys())]:
             if field_name in self._fields_loaded:
                 return self._fields_loaded[field_name].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._fields_loaded[field_name]
             else:
@@ -715,6 +718,10 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
                                                           )
         self.bmask = self.E < 0
         self.bound_method = f"grav-{method}".lower()
+        for key in list(self._fields_loaded.keys()):  
+            if key.startswith("b"):
+                del self._fields_loaded[key]
+                
         return None
 
 
