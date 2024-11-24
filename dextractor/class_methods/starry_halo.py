@@ -178,16 +178,16 @@ def compute_stars_in_halo(pos,
     if len(masses) == 0:
              return np.array([]), np.array([]), np.nan
          
-    halo_center = halo_params['center']
-    halo_center_vel = halo_params['center_vel']
-    halo_Rvir = halo_params['rvir']
-    halo_vmax = halo_params['vmax']
-    halo_vrms = halo_params['vrms']
-    max_radius = unyt_quantity(*max_radius)
+    halo_center = halo_params['center'].in_units(pos.units)
+    halo_center_vel = halo_params['center_vel'].in_units(vels.units)
+    halo_Rvir = halo_params['rvir'].in_units(pos.units)
+    halo_vmax = halo_params['vmax'].in_units(vels.units)
+    halo_vrms = halo_params['vrms'].in_units(vels.units)
+    max_radius = unyt_quantity(*max_radius).in_units(pos.units)
 
     
-    halorel_positions = (pos - halo_center).in_units("kpc")
-    halorel_velocities = (vels - halo_center_vel).in_units("km/s")
+    halorel_positions = (pos - halo_center)
+    halorel_velocities = (vels - halo_center_vel)
     
     halorel_absvel = np.sqrt(halorel_velocities[:,0]**2 + halorel_velocities[:,1]**2 + halorel_velocities[:,2]**2)
     halorel_R = np.sqrt(halorel_positions[:,0]**2 + halorel_positions[:,1]**2 + halorel_positions[:,2]**2)
