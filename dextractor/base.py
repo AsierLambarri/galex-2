@@ -182,7 +182,6 @@ class BaseParticleType:
         output.append(f"{'rh, rh_3D':<20}: {self.rh:2f}, {self.rh_3D:.2f}")
             
         if self.ptype == "stars":
-
             output.append(f"{'sigma*':<20}: {self.sigma_los}")
             output.append(f"{'ML':<20}: {self.ML}")
         

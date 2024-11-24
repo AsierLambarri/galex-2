@@ -60,6 +60,184 @@ something like:
 >>>                                                           #and computes same quantities as before
 >>> region_of_interest.candidates[0]  <--- now returns an instance of Halo, containing various quantities across different Rvirs                                                   
 >>>                                        If saved now, candidates would produce multiple dataframes, one for each zHalo instance.
-	
+
+
+
+
+
+# Dynamically visible properties for darkmatter       
+    @property
+    def rvir(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "rvir")
+            return value if value is None else value.in_units(self.units['length'])
+        raise AttributeError("Attribute 'rvir' is hidden for stars.")
+
+    @rvir.setter
+    def rvir(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "rvir", value)
+        else:
+            raise AttributeError("Cannot set 'rvir' for stars.")
+
+    @property
+    def rs(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "rs")
+            return value if value is None else value.in_units(self.units['length'])
+        raise AttributeError("Attribute 'rs' is hidden for stars.")
+
+    @rs.setter
+    def rs(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "rs", value)
+        else:
+            raise AttributeError("Cannot set 'rs' for stars.")
+
+    @property
+    def c(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "c")
+            return value if value is None else value.in_units(self.units['dimensionless'])
+        raise AttributeError("Attribute 'c' is hidden for stars.")
+
+    @c.setter
+    def c(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "c", value)
+        else:
+            raise AttributeError("Cannot set 'c' for stars.")
+
+
+    @property
+    def rockstar_center(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "rockstar_center")
+            return value if value is None else value.in_units(self.units['length'])
+        raise AttributeError("Attribute 'rockstar_center' is hidden for stars.")
+
+    @rockstar_center.setter
+    def rockstar_center(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "rockstar_center", value)
+        else:
+            raise AttributeError("Cannot set 'rockstar_center' for stars.")
+
+    @property
+    def rockstar_vel(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "rockstar_vel")
+            return value if value is None else value.in_units(self.units['velocity'])
+        raise AttributeError("Attribute 'rockstar_vel' is hidden for stars.")
+
+    @rockstar_vel.setter
+    def rockstar_vel(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "rockstar_vel", value)
+        else:
+            raise AttributeError("Cannot set 'rockstar_vel' for stars.")
+
+
+    @property
+    def vmax(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "vmax")
+            return value if value is None else value.in_units(self.units['velocity'])
+        raise AttributeError("Attribute 'vmax' is hidden for stars.")
+
+    @rockstar_vel.setter
+    def vmax(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "vmax", value)
+        else:
+            raise AttributeError("Cannot set 'vmax' for stars.")
+
+    @property
+    def vrms(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr(self.ptype, "vrms")
+            return value if value is None else value.in_units(self.units['velocity'])
+        raise AttributeError("Attribute 'vrms' is hidden for stars.")
+
+    @rockstar_vel.setter
+    def vrms(self, value):
+        if self.ptype == "darkmatter":
+            self.update_shared_attr(self.ptype, "vrms", value)
+        else:
+            raise AttributeError("Cannot set 'vrms' for stars.")
+            
+    # Dynamically visible properties for stars
+    @property
+    def ML(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr(self.ptype, "ML")
+            return value if value is None else value.in_units("Msun/Lsun")
+        raise AttributeError("Attribute 'ML' is hidden for dark matter.")
+
+    @ML.setter
+    def ML(self, value):
+        if self.ptype == "stars":
+            self.update_shared_attr(self.ptype, "ML", value)
+        else:
+            raise AttributeError("Cannot set 'ML' for dark matter.")
+
+    # "Hidden" properties for the partner instance
+    @property
+    def _rvir(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "rvir")
+            return value if value is None else value.in_units(self.units['length'])
+        raise AttributeError("Attribute '_rvir' is not accessible for dark matter.")
+
+    @property
+    def _rs(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "rs")
+            return value if value is None else value.in_units(self.units['length'])
+        raise AttributeError("Attribute '_rs' is not accessible for dark matter.")
+
+    @property
+    def _c(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "c")
+            return value if value is None else value.in_units(self.units['dimensionless'])
+        raise AttributeError("Attribute '_c' is not accessible for dark matter.")
+
+    @property
+    def _rockstar_center(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "rockstar_center")
+            return value if value is None else value.in_units(self.units['length'])
+        raise AttributeError("Attribute '_rockstar_center' is not accessible for dark matter.")
+
+    @property
+    def _rockstar_vel(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "rockstar_vel")
+            return value if value is None else value.in_units(self.units['velocity'])
+        raise AttributeError("Attribute '_rockstar_vel' is not accessible for dark matter.")
+
+    @property
+    def _ML(self):
+        if self.ptype == "darkmatter":
+            value = self.get_shared_attr("stars", "ML")
+            return value if value is None else value.in_units("Msun/Lsun")
+        raise AttributeError("Attribute '_ML' is not accessible for stars.")
+
+    @property
+    def _vmax(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "vmax")
+            return value if value is None else value.in_units(self.units['velocity'])
+        raise AttributeError("Attribute 'vmax' is hidden for stars.")
+
+    @property
+    def _vrms(self):
+        if self.ptype == "stars":
+            value = self.get_shared_attr("darkmatter", "vrms")
+            return value if value is None else value.in_units(self.units['velocity'])
+        raise AttributeError("Attribute 'vrms' is hidden for stars.")
+
+
 	
 

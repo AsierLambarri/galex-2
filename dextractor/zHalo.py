@@ -6,7 +6,7 @@ from unyt import unyt_array, unyt_quantity
 
 from .config import config
 from .base import BaseSimulationObject
-from .ptype import ptype, ptypeDM, gasSPH, gasMESH
+from .ptype import StellarComponent, DarkComponent, gasSPH, gasMESH
 
 
 class zHalo(BaseSimulationObject):
@@ -308,8 +308,8 @@ class zHalo(BaseSimulationObject):
             self.base_units = base_units
         
         #**{k: v for kw_key in self._kwargs for k, v in self._kwargs[kw_key].items()}
-        self.stars = ptype(hashable_data, "stars", **self._kwargs['stars_params'])
-        self.darkmatter = ptype(hashable_data, "darkmatter", **self._kwargs['dm_params'])
+        self.stars = StellarComponent(hashable_data, **self._kwargs['stars_params'])
+        self.darkmatter = DarkComponent(hashable_data, **self._kwargs['dm_params'])
 
         return None
         
