@@ -201,48 +201,13 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._dynamic_fields.keys())}")
         return None
         
-#        if field_name in self._dynamic_fields.keys():
-#            print(f"Field {field_name} not masked to bound")
-#            if field_name in self._fields_loaded:
-#                return getattr(self, field_name).in_units(funits[field_name])
-#            else:
-#                field = (self._base_ptype, self._dynamic_fields[field_name])
-#                loaded_field = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
-#                self._fields_loaded.append(field_name)
-#
-#                setattr(self, field_name, loaded_field)
-#
-#                return loaded_field
-#                
-#        elif (field_name in ['b'+f for f in list(self._dynamic_fields.keys())]) and self.bmask is not None:
-#            print(f"Field {field_name} masked to bound")
-#            print(field_name[1:])
-#            if field_name in self._fields_loaded:
-#                return getattr(self, field_name)[self.bmask].in_units(funits[field_name[1:]])
-#            else:
-#                field = (self._base_ptype, self._dynamic_fields[field_name[1:]])
-#                loaded_field = self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask]
-#                self._fields_loaded.append(field_name)
-#
-#                setattr(self, field_name, loaded_field)
-#
-#                return loaded_field
-#                
-#        else:
-#            try:
-#                print(f"with __getattribute__")
-#                return self.__getattribute__(field_name)
-#            except AttributeError:
-#                raise AttributeError(f"Field '{field_name}' not found for particle type {self.ptype}. "+ f"Available fields are: {list(self._dynamic_fields.keys())}")
-
-        
-    def get_fields(self):
+    def get_particle_fields(self):
         """Returns all loadable particle fields
         """
-        if self.bmas is None:
+        if self.bmask is None:
             return self._dynamic_fields.keys()
         else:
-            return np.append(self._dynamic_fields.keys(), ['b'+f for f in self._dynamic_fields.keys()])
+            return np.append(list(self._dynamic_fields.keys()), ['b'+f for f in list(self._dynamic_fields.keys())])    
             
     ##########################################################
     ###                                                    ###
@@ -605,13 +570,14 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
         return None
     
 
-    def get_fields(self):
+    def get_particle_fields(self):
         """Returns all loadable particle fields
         """
-        if self.bmas is None:
+        if self.bmask is None:
             return self._dynamic_fields.keys()
         else:
-            return np.append(self._dynamic_fields.keys(), ['b'+f for f in self._dynamic_fields.keys()])    
+            return np.append(list(self._dynamic_fields.keys()), ['b'+f for f in list(self._dynamic_fields.keys())])    
+            
     def info(self, get_str = False):
         """Returns a pretty information summary.
         
