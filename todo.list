@@ -1,6 +1,9 @@
 TODO.LIST
 ---------
 
+
+CHANGE FROM PURE INHERITANCE TO COMPSITION-OVER-INHERITANCE CODE STRUCTURE
+
 Implement everything into classes:
 	-zHalo for a halo at a given z. Has all quantities of interest
 	-profile for creating the profiles
