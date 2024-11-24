@@ -52,7 +52,7 @@ def gram_schmidt(los):
     basis_matrix : array[float], shape(3,3)
     """
     dims = len(los)
-    basis_matrix = np.identity(dims)
+    basis_matrix = np.identity(dims) + np.random.rand(3,3) * 1E-5
     basis_matrix = (basis_matrix + np.array(los)/np.linalg.norm(los)).T
     basis_matrix[:, 0] = np.array(los)/np.linalg.norm(los)
     
@@ -63,7 +63,16 @@ def gram_schmidt(los):
         
     return basis_matrix
 
+def vectorize_base_change(matrix, vector_quantity):
+    """Vectorized Matrix-Vector multiplication.
+    """
+    changed_vector = np.empty_like(vector_quantity)
 
+    for i, vec in enumerate(vector_quantity):
+        changed_vector[i, :] = np.dot(matrix, vec)
+
+    return changed_vector
+    
 def easy_los_velocity(vel, los):
     """Computes the Line of Sight Velocity of particles along a given LOS. In principle this could be done by changing basis using
     the Gram-Schmidt function  and looking at the first component of the resulting velocities (those aligned with the l.o.s. as 
