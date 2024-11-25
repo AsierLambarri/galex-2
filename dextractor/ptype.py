@@ -11,7 +11,7 @@ from copy import copy
 from .config import config
 from .base import BaseSimulationObject, BaseComponent
 
-from .class_methods import refine_center, half_mass_radius, compute_stars_in_halo, bound_particlesBH, bound_particlesAPROX, vectorized_base_change
+from .class_methods import refine_center, half_mass_radius, compute_stars_in_halo, bound_particlesBH, bound_particlesAPROX, vectorized_base_change, easy_los_velocity
 
 
 
@@ -125,14 +125,14 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
     def _rockstar_center(self):
         if self.ptype == "stars":
             value = self.get_shared_attr("darkmatter", "rockstar_center")
-            return value if value is None else value.in_units(self.units['length'])
+            return value if value is None else np.linalg.inv(self.basis) @ value.in_units(self.units['length'])
         raise AttributeError("Attribute '_rockstar_center' is not accessible for dark matter.")
 
     @property
     def _rockstar_vel(self):
         if self.ptype == "stars":
             value = self.get_shared_attr("darkmatter", "rockstar_vel")
-            return value if value is None else value.in_units(self.units['velocity'])
+            return value if value is None else np.linalg.inv(self.basis) @ value.in_units(self.units['velocity'])
         raise AttributeError("Attribute '_rockstar_vel' is not accessible for dark matter.")
 
     @property
@@ -401,10 +401,14 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
         self._fields_loaded = {}
         self._data = data
         self._kwargs = kwargs
+        
         self.use_bound_if_computed = True
         self.bound_method = None
+        self.bmask = None
+
         self.cm = None
         self.vcm = None
+        
         self.rh = None
         self.rh_3D = None
 
@@ -478,7 +482,7 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
     def rockstar_center(self):
         if self.ptype == "darkmatter":
             value = self.get_shared_attr(self.ptype, "rockstar_center")
-            return value if value is None else value.in_units(self.units['length'])
+            return value if value is None else np.linalg.inv(self.basis) @ value.in_units(self.units['length'])
         raise AttributeError("Attribute 'rockstar_center' is hidden for stars.")
 
     @rockstar_center.setter
@@ -492,7 +496,7 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
     def rockstar_vel(self):
         if self.ptype == "darkmatter":
             value = self.get_shared_attr(self.ptype, "rockstar_vel")
-            return value if value is None else value.in_units(self.units['velocity'])
+            return value if value is None else np.linalg.inv(self.basis) @ value.in_units(self.units['velocity'])
         raise AttributeError("Attribute 'rockstar_vel' is hidden for stars.")
 
     @rockstar_vel.setter

@@ -170,10 +170,8 @@ class BaseComponent:
         self._set_los(los)
         self._delete_vectorial_fields()
         if self.cm is not None:
-            print("cm computed")
             self.cm = self._old_to_new_base @ self.cm
         if self.vcm is not None:
-            print("cm computed")
             self.vcm = self._old_to_new_base @ self.vcm
 
         return None
@@ -257,7 +255,7 @@ class BaseComponent:
         self.cm = self.centering_results['center']
         return self.cm
     
-    def half_mass_radius(self, mfrac=0.5):
+    def half_mass_radius(self, mfrac=0.5, project=False):
         """By default, it computes 3D half mass radius of a given particle ensemble. If the center of the particles 
         is not provided, it is estimated by first finding the median of positions and then computing a refined CoM using
         only the particles inside r < 0.5*rmax.
@@ -267,20 +265,27 @@ class BaseComponent:
         
         OPTIONAL Parameters
         -------------------
-        mfrac : float, optional
+        mfrac : float
             Mass fraction of desired radius. Default: 0.5 (half, mass radius).
+        project: bool
+            Whether to compute projected quantity or not.
         
         Returns
         -------
         MFRAC_mass_radius : float
             Desired mfrac mass fraction radius estimation. Provided in same units as pos, if any.
         """
-        if self.use_bound_if_computed:
-            self.rh_3D = half_mass_radius(self.coords[self.bmask], self.masses[self.bmask], self.cm, mfrac)
+        if (self.use_bound_if_computed) and (self.bmask is not None):
+            rh = half_mass_radius(self.coords[self.bmask], self.masses[self.bmask], self.cm, mfrac, project=project)
         else:
-            self.rh_3D = half_mass_radius(self.coords, self.masses, self.cm, mfrac)
+            rh = half_mass_radius(self.coords, self.masses, self.cm, mfrac, project=project)
+
+        if project:
+            self.rh = rh
+        else:
+            self.rh_3D = rh
             
-        return self.rh_3D
+        return rh
 
 
     def los_velocity(self, los, rcyl=(1, 'kpc')):

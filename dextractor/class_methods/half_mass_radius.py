@@ -12,7 +12,8 @@ from scipy.optimize import root_scalar
 def half_mass_radius(pos, 
                      mass, 
                      center=None,
-                     mfrac=0.5
+                     mfrac=0.5,
+                     project=False
                     ):
     """By default, it computes half mass radius of a given particle ensemble. If the center of the particles 
     is not provided, it is estimated by first finding the median of positions and then computing a refined CoM using
@@ -37,6 +38,8 @@ def half_mass_radius(pos,
     MFRAC_mass_radius : float
         Desired mfrac mass fraction radius estimation. Provided in same units as pos, if any.
     """
+    if project and pos.shape[1] < 3:
+        raise Exception(f"To get a projected estimate of {mfrac:.2f}-mass-radius the data must be three dimensional!")
     if mfrac > 1:
         raise Exception(f"Mass fraction MFRAC must be between 0 and 1! Your input was {mfrac:.2f} > 1")
     if mfrac < 0:
@@ -48,8 +51,12 @@ def half_mass_radius(pos,
         center = np.median(pos, axis=0)
         radii = np.linalg.norm(pos - center, axis=1)
         center = np.average(pos[radii < 0.5 * radii.max()], axis=0, weights=mass[radii < 0.5 * radii.max()])
-  
+
+    
     coords = pos - center
+    if project:
+        coords = coords[:, 0:2]
+        
     radii = np.sqrt(np.sum(coords**2, axis=1))
     
     halfmass_zero = root_scalar(lambda r: mass[radii < r].sum()/mass.sum() - mfrac, method="brentq", bracket=[0, radii.max()])

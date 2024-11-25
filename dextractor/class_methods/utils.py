@@ -1,5 +1,5 @@
 import numpy as np
-
+from numba import njit
 
 def random_vector_spherical(N):
     """
@@ -52,6 +52,13 @@ def gram_schmidt(los):
     basis_matrix : array[float], shape(3,3)
     """
     dims = len(los)
+    if np.all(los == [1,0,0]):
+        return np.identity(3)
+    if np.all(los == [0,1,0]):
+        return np.roll(np.identity(3)[::-1],2, axis=1)
+    if np.all(los == [0,0,1]):
+        return np.roll(np.identity(3)[::-1],1, axis=1)
+        
     basis_matrix = np.identity(dims) + np.random.rand(3,3) * 1E-12
     basis_matrix = (basis_matrix + np.array(los)/np.linalg.norm(los)).T
     basis_matrix[:, 0] = np.array(los)/np.linalg.norm(los)
@@ -67,15 +74,21 @@ def vectorized_base_change(matrix, vector_quantity):
     """Vectorized Matrix-Vector multiplication.
     """
     vq = vector_quantity.value
-    changed_vector = np.empty_like(vq)
+    #@njit(fastmath=True, parallel=True)
+    def _njitted_vec(matrix, vecs):
+        #vecs = np.ascontiguousarray(vecs)
+        #matrix = np.ascontiguousarray(matrix)
+        changed_vectors =  np.empty_like(vecs)
+        for i in range(len(vecs)):
+            changed_vectors[i, :] = np.dot(matrix, vecs[i,:])
 
-    for i, vec in enumerate(vq):
-        changed_vector[i, :] = np.dot(matrix, vec)
+        return changed_vectors
 
+    new_basis_vectors = _njitted_vec(matrix, vq)
     try:
-        return changed_vector * vector_quantity.units
+        return new_basis_vectors * vector_quantity.units
     except:
-        return changed_vector
+        return new_basis_vector
     
 def easy_los_velocity(vel, los):
     """Computes the Line of Sight Velocity of particles along a given LOS. In principle this could be done by changing basis using
