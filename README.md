@@ -1,2 +1,2 @@
 # DwarfGalaxyExtractor
-WORK IN PROGRESS
+Work in progress - v0.1.0 released
