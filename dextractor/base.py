@@ -8,7 +8,7 @@ Created on Wed Nov 20 10:03:19 2024
 import numpy as np
 from unyt import unyt_array
 from .config import config
-from .class_methods import gram_schmidt, center_of_mass, refine_center, half_mass_radius
+from .class_methods import gram_schmidt, vectorized_base_change, center_of_mass_pos, center_of_mass_vel, refine_center, half_mass_radius
 
 
 class BaseSimulationObject:
@@ -27,6 +27,7 @@ class BaseSimulationObject:
         
         self.los = [1, 0, 0]
         self.basis = np.identity(3)
+        self._old_to_new_base = np.identity(3)
         
     def set_parent(self, parent):
         """Sets the parent of this object and ensures attributes propagate from parent to child.
@@ -53,10 +54,12 @@ class BaseSimulationObject:
         """Sets the coordinate basis for this object and propagates to children if any.
         """
         self.los = los
+        self._old_to_new_base = np.linalg.inv(gram_schmidt(los)) @ self.basis
         self.basis = gram_schmidt(los)
+
         if self._parent:
-            self._parent._set_los(los)  
-            
+            self._parent._set_los(los)   
+
         return None
     
     
@@ -139,8 +142,9 @@ class BaseComponent:
 
                 CoM = sum(mass * pos) / sum(mass)        
         """
-        self.cm = center_of_mass(self.coords, self.masses)
+        self.cm = center_of_mass_pos(self.coords, self.masses)
         return None
+
 
         
     def set_line_of_sight(self, los):
@@ -164,6 +168,14 @@ class BaseComponent:
         coordinate basis.
         """
         self._set_los(los)
+        self._delete_vectorial_fields()
+        if self.cm is not None:
+            print("cm computed")
+            self.cm = self._old_to_new_base @ self.cm
+        if self.vcm is not None:
+            print("cm computed")
+            self.vcm = self._old_to_new_base @ self.vcm
+
         return None
 
         
@@ -269,6 +281,12 @@ class BaseComponent:
             self.rh_3D = half_mass_radius(self.coords, self.masses, self.cm, mfrac)
             
         return self.rh_3D
+
+
+    def los_velocity(self, los, rcyl=(1, 'kpc')):
+        """Computes the line of sight velocity of particles inside a cylinder of radius rcyl aligned with the line of sight direction.
+        """
+        return None
 
 
     

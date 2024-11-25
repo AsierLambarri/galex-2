@@ -345,8 +345,11 @@ class zHalo(BaseSimulationObject):
         coordinate basis.
         """
         self._set_los(los)
-        self.stars._set_los(los)
-        self.darkmatter._set_los(los)
+        #if (self.stars.cm is None) or (self.stars.vcm is None) or (self.darkmatter.cm is None) or (self.darkmatter.vcm is None):
+        #    raise Exception(f"CoM and CoM velocity must be defined to change the L.O.S. STARS: cm={self.stars.cm}, vcm={self.stars.vcm}. DARKMATTER: cm={self.darkmatter.cm}, vcm={self.darkmatter.vcm}")
+            
+        self.stars.set_line_of_sight(los)
+        self.darkmatter.set_line_of_sight(los)
         return None
     
 

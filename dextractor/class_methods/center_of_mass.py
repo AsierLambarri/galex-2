@@ -1,10 +1,11 @@
 import numpy as np
+from unyt import unyt_quantity
 
 from .half_mass_radius import half_mass_radius
 
-def center_of_mass(pos,
-                   mass
-                   ):
+def center_of_mass_pos(pos,
+                       mass
+                       ):
     """Computes coarse CoM using all the particles as 
     
                 CoM = sum(mass * pos) / sum(mass)
@@ -19,11 +20,43 @@ def center_of_mass(pos,
 
     Returns
     -------
-    CoM : array-like
+    CoM_pos : array-like
     """
     return np.average(pos, axis=0, weights=mass)
 
+def center_of_mass_vel(pos,
+                       mass,
+                       vel,
+                       center=None,
+                       R=(0.7, 'kpc'),
+                      ):
+    """Computes the center of mass velocity as 
 
+                    CoM = sum(mass * vel) / sum(mass)
+                    
+    using only particles inside a specified R around the estimated CoM position.
+
+    Parameters
+    ----------
+    pos : array-like[float], shape(N,dims)
+        Positions of particles. First dimension of the array corresponds to each particle.
+        Second dimension correspond to each coordiante axis.
+    mass : array-like, shape(N,)
+        Masses of particles.
+    vel : array-like, shape(N,)
+        Velocities of particles.
+    center : array-like, shape(N,)
+        CoM position
+    R : tuple or unyt_*
+        Radius for selecting particles. Default 0.7 'kpc'.
+        
+    Returns
+    -------
+    CoM_vel : array-like
+    """
+    mask = np.linalg.norm(pos - center) < unyt_quantity(*R)
+    print(np.count_nonzero(mask), vel[mask].shape, mass[mask].shape)
+    return np.average(vel[mask], axis=0, weights=mass[mask])
 
 
 def refine_center(pos, 

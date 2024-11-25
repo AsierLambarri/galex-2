@@ -11,7 +11,7 @@ from copy import copy
 from .config import config
 from .base import BaseSimulationObject, BaseComponent
 
-from .class_methods import center_of_mass, refine_center, half_mass_radius, compute_stars_in_halo, bound_particlesBH, bound_particlesAPROX
+from .class_methods import refine_center, half_mass_radius, compute_stars_in_halo, bound_particlesBH, bound_particlesAPROX, vectorized_base_change
 
 
 
@@ -48,10 +48,12 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         """
         super().__init__()
         self.ptype, self._base_ptype = "stars", copy(self.ptypes["stars"])
+        
         self._dynamic_fields = copy(self.fields["stars"])
         self._fields_loaded = {}
         self._data = data
         self._kwargs = kwargs
+        
         self.use_bound_if_computed = True
         self.bound_method = None
         
@@ -176,21 +178,28 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
             'formation_times': self.units['time'],
             'metallicity': self.units['dimensionless']
         }
+        vec_fields = ['coords', 'vels', 'bcoords', 'bvels', 'cyl_coords', 'cyl_vels', 'sp_coords', 'sp_vels', 'box_coords', 'box_vels']
         if field_name  in self._dynamic_fields.keys():
             if field_name in self._fields_loaded:
                 return self._fields_loaded[field_name].in_units(funits[field_name]) if field_name in funits else self._fields_loaded[field_name]
             else:
                 field = (self._base_ptype, self._dynamic_fields[field_name])
-                self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
+                if field_name in vec_fields:
+                    self._fields_loaded[field_name] = vectorized_base_change(np.linalg.inv(self.basis), self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field])
+                else:
+                    self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
                 return self._fields_loaded[field_name]
                 
         elif field_name  in ['b'+ f for f in list(self._dynamic_fields.keys())]:
-            #if field_name in self._fields_loaded:
-            #    return self._fields_loaded[field_name].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._fields_loaded[field_name]
-            #else:
-            field = (self._base_ptype, self._dynamic_fields[field_name[1:]])
-            self._fields_loaded[field_name] = self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask]
-            return self._fields_loaded[field_name]
+            if field_name in self._fields_loaded:
+                return self._fields_loaded[field_name].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._fields_loaded[field_name]
+            else:
+                field = (self._base_ptype, self._dynamic_fields[field_name[1:]])
+                if field_name in vec_fields:
+                    self._fields_loaded[field_name] = vectorized_base_change(np.linalg.inv(self.basis), self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask])
+                else:
+                    self._fields_loaded[field_name] = self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask]
+                return self._fields_loaded[field_name]
 
         try:
             print(f"with __getattribute__")
@@ -208,7 +217,20 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
             return self._dynamic_fields.keys()
         else:
             return np.append(list(self._dynamic_fields.keys()), ['b'+f for f in list(self._dynamic_fields.keys())])    
-            
+
+    def _delete_vectorial_fields(self):
+        """Deletes vectorial fields: a.k.a. coordinates and velocities from cache when called. Used to force the dynamical field loader to re-load vectorial
+        fields after a new line of sight has been set, so that the fields are properly oriented.
+        """
+        f = ['coords', 'vels', 'bcoords', 'bvels']
+        for key in f:
+            try:      
+                del self._fields_loaded[key]
+            except:
+                continue
+
+        return None
+        
     ##########################################################
     ###                                                    ###
     ##                   SPECIFIC METHODS                   ##
@@ -544,12 +566,16 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
             'formation_times': self.units['time'],
             'metallicity': self.units['dimensionless']
         }
+        vec_fields = ['coords', 'vels', 'bcoords', 'bvels', 'cyl_coords', 'cyl_vels', 'sp_coords', 'sp_vels', 'box_coords', 'box_vels']
         if field_name  in self._dynamic_fields.keys():
             if field_name in self._fields_loaded:
                 return self._fields_loaded[field_name].in_units(funits[field_name]) if field_name in funits else self._fields_loaded[field_name]
             else:
                 field = (self._base_ptype, self._dynamic_fields[field_name])
-                self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
+                if field_name in vec_fields:
+                    self._fields_loaded[field_name] = vectorized_base_change(np.linalg.inv(self.basis), self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field])
+                else:
+                    self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
                 return self._fields_loaded[field_name]
                 
         elif field_name  in ['b'+ f for f in list(self._dynamic_fields.keys())]:
@@ -557,7 +583,10 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
                 return self._fields_loaded[field_name].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._fields_loaded[field_name]
             else:
                 field = (self._base_ptype, self._dynamic_fields[field_name[1:]])
-                self._fields_loaded[field_name] = self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask]
+                if field_name in vec_fields:
+                    self._fields_loaded[field_name] = vectorized_base_change(np.linalg.inv(self.basis), self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask])
+                else:
+                    self._fields_loaded[field_name] = self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask]
                 return self._fields_loaded[field_name]
 
         try:
@@ -577,7 +606,26 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
             return self._dynamic_fields.keys()
         else:
             return np.append(list(self._dynamic_fields.keys()), ['b'+f for f in list(self._dynamic_fields.keys())])    
-            
+
+    def _delete_vectorial_fields(self):
+        """Deletes vectorial fields: a.k.a. coordinates and velocities from cache when called. Used to force the dynamical field loader to re-load vectorial
+        fields after a new line of sight has been set, so that the fields are properly oriented.
+        """
+        f = ['coords', 'vels', 'bcoords', 'bvels']
+        for key in f:
+            try:      
+                del self._fields_loaded[key]
+            except:
+                continue
+
+        return None
+        
+    ##########################################################
+    ###                                                    ###
+    ##                   SPECIFIC METHODS                   ##
+    ###                                                    ###
+    ##########################################################
+    
     def info(self, get_str = False):
         """Returns a pretty information summary.
         

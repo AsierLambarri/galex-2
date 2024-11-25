@@ -12,7 +12,7 @@ from scipy.optimize import root_scalar
 from scipy.stats import binned_statistic
 from copy import copy
 
-from .center_of_mass import center_of_mass
+from .center_of_mass import center_of_mass_pos
 import pprint
 pp = pprint.PrettyPrinter(depth=4)
 
@@ -75,7 +75,7 @@ def enclosed_mass(pos, mass, cm = None):
     if cm:
         pass
     else:
-        cm = center_of_mass(pos, mass)
+        cm = center_of_mass_pos(pos, mass)
 
     relpos = pos - cm
     r = np.sqrt(relpos[:,0]**2 + relpos[:,1]**2 + relpos[:,2]**2)
