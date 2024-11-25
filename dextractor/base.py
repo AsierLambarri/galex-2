@@ -8,7 +8,7 @@ Created on Wed Nov 20 10:03:19 2024
 import numpy as np
 from unyt import unyt_array
 from .config import config
-from .class_methods import gram_schmidt, vectorized_base_change, center_of_mass_pos, center_of_mass_vel, refine_center, half_mass_radius
+from .class_methods import gram_schmidt, vectorized_base_change, center_of_mass_pos, center_of_mass_vel, refine_center, half_mass_radius, easy_los_velocity
 
 
 class BaseSimulationObject:
@@ -288,10 +288,18 @@ class BaseComponent:
         return rh
 
 
-    def los_velocity(self, los, rcyl=(1, 'kpc')):
+    def los_velocity(self, rcyl=(1, 'kpc'), return_projections = False):
         """Computes the line of sight velocity of particles inside a cylinder of radius rcyl aligned with the line of sight direction.
         """
-        return None
+        mask = np.linalg.norm(self.coords[:, 0:2] - self.cm[0:2], axis=1) < unyt_array(*rcyl)
+        
+        los_velocities = easy_los_velocity(self.vels[mask], self.los)
+        losvel = np.std(los_velocities)
+        
+        if return_projections:
+            return losvel, los_velocities
+        else:
+            return losvel
 
 
     
