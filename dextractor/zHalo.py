@@ -87,14 +87,14 @@ class zHalo(BaseSimulationObject):
             return self._time.in_units(f"{self.units['time']}")
         else:
             return None
-    @property
-    def Mdyn(self):
-        """Dynamical mass
-        """
-        if self._Mdyn is not None:
-            return self._Mdyn.in_units(f"{self.units['mass']}")
-        else:
-            return None
+    #@property
+    #def Mdyn(self):
+    #    """Dynamical mass
+    #    """
+    #    if self._Mdyn is not None:
+    #        return self._Mdyn.in_units(f"{self.units['mass']}")
+    #    else:
+    #        return None
     @property  
     def redshift(self):
         """Redshift
@@ -344,13 +344,20 @@ class zHalo(BaseSimulationObject):
         Changes basis and los instances in the class instance and all its childs. All vectorial quantities get expressed in the new
         coordinate basis.
         """
-        self._set_los(los)
-        #if (self.stars.cm is None) or (self.stars.vcm is None) or (self.darkmatter.cm is None) or (self.darkmatter.vcm is None):
-        #    raise Exception(f"CoM and CoM velocity must be defined to change the L.O.S. STARS: cm={self.stars.cm}, vcm={self.stars.vcm}. DARKMATTER: cm={self.darkmatter.cm}, vcm={self.darkmatter.vcm}")
-            
+        self._set_los(los)            
         self.stars.set_line_of_sight(los)
         self.darkmatter.set_line_of_sight(los)
         return None
+
+    def dynamical_mass(self):
+        """Computes the dynamical mass: the mass enclonsed inside the 3D half light radius of stars.
+        """
+        mass_stars = self.stars.enclosed_mass(self.stars.rh_3D, self.stars.cm)
+        mass_dm = self.darkmatter.enclosed_mass(self.stars.rh_3D, self.stars.cm)
+
+        self.Mdyn = mass_stars + mass_dm
+        return self.Mdyn
+        
     
 
 

@@ -8,7 +8,7 @@ Created on Wed Nov 20 10:03:19 2024
 import numpy as np
 from unyt import unyt_array
 from .config import config
-from .class_methods import gram_schmidt, vectorized_base_change, center_of_mass_pos, center_of_mass_vel, refine_center, half_mass_radius, easy_los_velocity
+from .class_methods import gram_schmidt, vectorized_base_change, center_of_mass_pos, center_of_mass_vel, refine_center, half_mass_radius, easy_los_velocity, encmass
 
 
 class BaseSimulationObject:
@@ -301,6 +301,11 @@ class BaseComponent:
         else:
             return losvel
 
+    def enclosed_mass(self, r0, center):
+        """Computes the enclosed mass on a sphere centered on center, and with radius r0.
+        """
+        mask = np.linalg.norm(self.bcoords - center, axis=1) <= r0
+        return self.bmasses[mask].sum()
 
     
 

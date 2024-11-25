@@ -51,7 +51,7 @@ def zero_disc(x, y):
         pass
     return root
     
-def enclosed_mass(pos, mass, cm = None):
+def encmass(pos, mass, r0, cm = None):
     """Given the massess and positions of a set of particles it computes the enclosed mass
     at each particles location M(<r_p). By default, it does so w.r.t. the cm of the massess.
     Alternativelly, another cm may be provided (halo, cm of a set of particles, ...)
@@ -97,12 +97,7 @@ def compute_stars_in_halo(pos,
                           vels,
                           pindices,
                           halo_params,
-# =============================================================================
-#                           halo_cen
-#                           halo_rvir,
-#                           halo_vmax,
-#                           halo_vrms,
-# =============================================================================
+
                           max_radius = (30, 'kpc'), 
                           imax = 200,
                           verbose=False
@@ -146,35 +141,6 @@ def compute_stars_in_halo(pos,
     delta_rel : float
         Obtained convergence for selected total mass after imax iterations. >1E-2.
     """
-#     kpccm = ds.units.kpccm
-#     kms = ds.units.km/ds.units.s
-#     try:
-#         halo_center = halo_table[['position_x','position_y','position_z']].values[0] * kpccm
-#         halo_center_vel = halo_table[['velocity_x','velocity_y','velocity_z']].values[0] * kms
-#         halo_Rvir = halo_table['virial_radius'].values[0] * kpccm
-#         halo_vmax = halo_table['vmax'].values[0] * kms
-#         halo_vrms = halo_table['vrms'].values[0] * kms
-# 
-#     except:
-#         halo_center = halo_table[['position_x','position_y','position_z']] * kpccm
-#         halo_center_vel = halo_table[['velocity_x','velocity_y','velocity_z']] * kms
-#         halo_Rvir = halo_table['virial_radius'] * kpccm
-#         halo_vmax = halo_table['vmax'] * kms
-#         halo_vrms = halo_table['vrms'] * kms
-#   
-#     if data_source:
-#         sp = data_source
-#     else:
-#         sp = ds.sphere( halo_center, np.minimum(0.8 * halo_Rvir, max_radius * kpccm) )
-# 
-#     pos = sp['stars','particle_position'].in_units('kpccm')
-#     vel = sp['stars','particle_velocity'].in_units('km/s')
-#     masses = sp['stars','particle_mass'].in_units('Msun')
-#     pi = np.array([i for i in sp['stars', 'particle_index'].value], dtype="int")
-# =============================================================================
-#     if len(masses) == 0:
-#         return np.array([]), np.array([]), sp, np.nan
-# =============================================================================
     if len(masses) == 0:
              return np.array([]), np.array([]), np.nan
          
