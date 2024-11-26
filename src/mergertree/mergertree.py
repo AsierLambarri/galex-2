@@ -58,8 +58,11 @@ class MergerTree:
         """Deletes arbor in temporary_arbor, if existing, and creates a new one for use in current instance.
         """
         a = ytree.load(self.fn)
-        b = a.save_arbor()
-        return ytree.load(b)
+        try:
+            b = a.save_arbor()
+            return ytree.load(b)
+        except:
+            ## IMPLEMENT SEARCH OF LAS GOOD TREE AND CUT THE WHOLE FOREST THERE
         
     def _compute_subtreid(self, old_df):
         """Computes subtree id for given merger-tree tree.
@@ -177,6 +180,13 @@ class MergerTree:
         return None
 
     def construct_equivalence_table(self):
+        """
+        """
+        return None
+
+
+
+    def select_halos(self, constraints):
         """
         """
         return None
