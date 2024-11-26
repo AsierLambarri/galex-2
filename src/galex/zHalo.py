@@ -9,7 +9,7 @@ from .base import BaseSimulationObject
 from .ptype import StellarComponent, DarkComponent, GasComponentSPH, GasComponentMESH
 from .class_methods import bound_particlesBH, bound_particlesAPROX
 
-class zHalo(BaseSimulationObject):
+class SnapshotHalo(BaseSimulationObject):
     """zHalo class that implements a variety of functions to analyze the internal structure of a halo at a certain redshift, and the galaxy that
     is contained within it, such as computing their respective moments (x_cm and v_cm), projected and deprojected half-mass radii, total and LOS
     velocity dispersions, surface and volumetric density profiles, computation of dynamical and M_x masses and much more!
