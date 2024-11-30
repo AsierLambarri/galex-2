@@ -1,6 +1,7 @@
 import os
 import yt
 import ytree
+import warnings
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -15,12 +16,13 @@ class MergerTree:
     For now, it only accepts consistent-trees output.
     """
     def __init__(self,
-                 fn
+                 fn,
+                 arbor=None
                 ):
         """Initialization function.
         """
         self.fn = fn
-        self.arbor = self._load_ytree_tree()
+        self.arbor = self._load_ytree_tree() if arbor is None else arbor
         self.size = self.arbor.size
         self.all_fields = self.arbor.field_list
         self.minium_halomass = 1E7
@@ -57,12 +59,19 @@ class MergerTree:
     def _load_ytree_tree(self):
         """Deletes arbor in temporary_arbor, if existing, and creates a new one for use in current instance.
         """
-        a = ytree.load(self.fn)
-        try:
-            b = a.save_arbor()
-            return ytree.load(b)
-        except:
-            ## IMPLEMENT SEARCH OF LAS GOOD TREE AND CUT THE WHOLE FOREST THERE
+        sfn = "/".join(self.fn.split("/")[:-1]) + "/arbor/arbor.h5"
+        
+        if self.fn.endswith("arbor.h5"):
+            return ytree.load(self.fn)
+            
+        elif os.path.exists(sfn):
+            warnings.warn("h5 formatted arbor has been detected in the provided folder", UserWarning)
+            return ytree.load(sfn)
+            
+        else:
+            a = ytree.load(self.fn)
+            fn = a.save_arbor(filename=sfn)
+            return ytree.load(fn)
         
     def _compute_subtreid(self, old_df):
         """Computes subtree id for given merger-tree tree.
