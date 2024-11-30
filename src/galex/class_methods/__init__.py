@@ -5,3 +5,5 @@ from .starry_halo import encmass, zero_disc, compute_stars_in_halo
 from .bound_particles import bound_particlesBH, bound_particlesAPROX
 from .half_mass_radius import half_mass_radius
 
+from .loaders import load_ftable
+

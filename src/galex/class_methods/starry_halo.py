@@ -97,8 +97,8 @@ def compute_stars_in_halo(pos,
                           vels,
                           pindices,
                           halo_params,
-
                           max_radius = (30, 'kpc'), 
+                          nmin=6,
                           imax = 200,
                           verbose=False
                           ):
@@ -126,7 +126,9 @@ def compute_stars_in_halo(pos,
     halo_params : dict[str : unyt_quantity or unyt_array]
         Parameters of the halo in which we are searching: center, center_vel, Rvir, vmax and vrms.
     max_radius : float, optional
-        Maximum radius to consider for particle unbinding. Default: 30 kpc
+        Maximum radius to consider for particle unbinding. Default: 30 kpc.
+    nmin : int
+        Minimum number of stellar particles to consider an ensemble a galaxy. Default: 6
     imax : int, optional
         Maximum number of iterations. Default 200.
     verbose : bool
@@ -247,7 +249,7 @@ def compute_stars_in_halo(pos,
             definite_mask = copy(mask_loop)
             indices = pindices[definite_mask]
             return indices, definite_mask, delta_rel
-        if np.count_nonzero(mask_loop) < 6:    
+        if np.count_nonzero(mask_loop) < nmin:    
             definite_mask = copy(mask_loop)
             indices = pindices[definite_mask]
             return indices, definite_mask, delta_rel
