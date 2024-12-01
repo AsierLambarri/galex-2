@@ -161,7 +161,8 @@ def compute_stars_in_halo(pos,
     halorel_R = np.sqrt(halorel_positions[:,0]**2 + halorel_positions[:,1]**2 + halorel_positions[:,2]**2)
 
     mask_vmax = (halorel_absvel < 2*halo_vmax)
-    mask_loop = copy(mask_vmax)
+    mask_rad = (halorel_R <= np.minimum(0.8 * halo_Rvir, max_radius))                                        ###############################################################################
+    mask_loop = copy(mask_vmax) & mask_rad                                                                   ###############################################################################
 
     
     if verbose:
@@ -173,7 +174,7 @@ def compute_stars_in_halo(pos,
         print(f"\nHalo virial radius: {halo_Rvir:.4f}")
         print(f"Halo maximum Vcirc: {halo_vmax:.4f}")
         print(f"Halo Vrms: {halo_vrms:.4f}")
-        print(f"Stellar mass inside {np.minimum(0.8 * halo_Rvir, max_radius):3f}: {masses.sum()}. Total of {len(masses)} particles.")
+        print(f"Stellar mass inside {np.minimum(0.8 * halo_Rvir, max_radius):3f}: {masses[mask_rad].sum()}. Total of {len(masses[mask_rad])} particles.")
         print(f"Accepted by Vmax criterion: {masses[mask_loop].sum()}. Total of {len(masses[mask_loop])} particles.")
 
     if np.count_nonzero(mask_loop)==0:

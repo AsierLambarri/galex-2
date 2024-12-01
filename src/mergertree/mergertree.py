@@ -57,7 +57,7 @@ class MergerTree:
                 'Tidal_ID': 'Tidal_ID'
         })
         self.min_halo_mass = 1E7
-
+        self.main_Rvir = 1
     
     def _load_ytree_tree(self):
         """Deletes arbor in temporary_arbor, if existing, and creates a new one for use in current instance.
@@ -120,36 +120,8 @@ class MergerTree:
             
         return df
 
-    def _has_stars_or_galaxy(self, CrossingSats_R1, pdir):
-        """Finds stars and galaxies in seleted halos.
-        """
-        snapequiv = deepcopy(self.equivalence_table)
-        
-        for snapnum in np.unique(CrossingSats_R1['Snapshot'].values):
-            filtered_halos  = CrossingSats_R1[(CrossingSats_R1['Snapshot'] == snapnum)]
-            fn = snapequiv[snapequiv['snapid'] == snapnum]['snapshot'].values[0]
-            ds = yt.load(pdir + fn)
-            
-            for index in filtered_halos.index:
-                filtered_node = filtered_halos.loc[[index]]
-                istars, mask_stars, sp, delta_rel = compute_stars_in_halo(filtered_node, ds, verbose=True)
-                
-                hasstars = np.count_nonzero(mask_stars) != 0
-                hassgal = np.count_nonzero(mask_stars) >= 6
-                
-                CrossingSats_R1.loc[index, 'has_stars'] = hasstars 
-                CrossingSats_R1.loc[index, 'has_galaxy'] = hassgal
-                CrossingSats_R1.loc[index, 'delta_rel'] = float(delta_rel)
-                if hasstars:
-                    CrossingSats_R1.loc[index, 'stellar_mass'] = sp['stars','particle_mass'][mask_stars].sum().in_units("Msun").value
-        
-        
-            ds.close()
-
 
     
-
-
     def set_fields(self, fields_dict):
         """Sets the fields to be saved into a df
         """
@@ -245,17 +217,17 @@ class MergerTree:
 
 
 
-    def select_halos(self, main_Rvir = 1, extra_Rvirs = None, **constraints):
+    def select_halos(self, Rvir = 1, **constraints):
         """Selects halos according to the provided constraints. Constraints are pased as kwargs. Sub_tree_id == 1 is avoided.
 
         Parameters
         ----------
-        main_Rvir : float
+        Rvir : float
             First radius in which to search. Default: R/Rvir=1.
         extra_Rvirs : array[float]
-            Extra R/Rvir in which to search for the halos found at main_Rvir.
+            Extra R/Rvir in which to search for the halos found at Rvir.
         constraints : kwargs
-            Constraints to apply at main_Rvir. 
+            Constraints to apply at Rvir. 
 
             List:
             ------------
@@ -264,40 +236,110 @@ class MergerTree:
             Secondary : True or False
             Rvir_tol : 0.2
 
-            stellar_mass : [n*low, n*high] -- number of particles is provided, not stellar_mass
+            Constraints on stellar mass must be performed afterwards, as the computation of bound stellar particles is not straitgforward.
+            Furthermore, that would require particle data.
+            After constraining in stellar_mass, one can trace-back the halos to more extreme R/Rvir with the 'traceback_halos' method.
+
+        Returns
+        -------
+        crossing_haloes : pd.DataFrame
+            Haloes crossing Rvir and fullfilling constraints.
         """
+        self.main_Rvir = Rvir
         CompleteTree = deepcopy(self.CompleteTree)
-        zlow, zhigh, mlow, mhigh, secondary, st_low, st_high, Rvir_tol = -1, 1E4, -1, 1E20, True, -1, int(1E20), 0.2
+        zlow, zhigh, mlow, mhigh, secondary, st_low, st_high, Rvir_tol, nmin = -1, 1E4, -1, 1E20, True, -1, int(1E20), 0.2, 6
         
-        if 'Redshift' in constraints.keys():
-            zlow, zhigh = constraints['Redshift']
+        if 'redshift' in constraints.keys():
+            zlow, zhigh = constraints['redshift']
         if 'mass' in constraints.keys():
             mlow, mhigh = constraints['mass']
-        if 'Secondary' in constraints.keys():
-            secondary = constraints['Secondary']
-        if 'stellar_mass' in constraints.keys():
-            st_low, st_high = constraints['stellar_mass']        
+        if 'keep_secondary' in constraints.keys():
+            keep_secondary = constraints['keep_secondary']
         if 'Rvir_tol' in constraints.keys():
            Rvir_tol = constraints['Rvir_tol'] 
 
-        print(mlow, mhigh)
-        constrainedTree_Rmain = CompleteTree[(np.abs(CompleteTree['R/Rvir'] - main_Rvir) < Rvir_tol) & 
-                                             #(mlow <= CompleteTree['mass'])                      & (CompleteTree['mass'] <= mhigh) &
-                                             (zlow <= CompleteTree['Redshift'])                  & (CompleteTree['Redshift'] <= zhigh)
+
+        constrainedTree_Rmain = CompleteTree[(np.abs(CompleteTree['R/Rvir'] - Rvir) < Rvir_tol) & 
+                                             (mlow <= CompleteTree['mass'])                          & (CompleteTree['mass'] <= mhigh)      &
+                                             (zlow <= CompleteTree['Redshift'])                      & (CompleteTree['Redshift'] <= zhigh)  &
+                                             ((CompleteTree['Secondary'] == False)                   | (CompleteTree['Secondary'] == keep_secondary))
                                             ].sort_values(by=['Snapshot', 'Sub_tree_id'], ascending=[True, True])
 
-        #constrainedTree_Rmain['Priority'] = (constrainedTree_Rmain['R/Rvir'] > main_Rvir).astype(int)  # 1 if R/Rvir > 1, else 0
-        
-        #constrainedTree_Rmain_sorted = constrainedTree_Rmain.sort_values(by=['Sub_tree_id', 'Priority', 'R/Rvir', 'Redshift'], 
-                                                                         #ascending=[True, False, True, False]
-                                                                        #)
-        
-        #crossing_haloes_mainRvir = constrainedTree_Rmain_sorted.groupby('Sub_tree_id').first()
+        constrainedTree_Rmain['Priority'] = (constrainedTree_Rmain['R/Rvir'] > Rvir).astype(int)  # 1 if R/Rvir > 1, else 0
+        constrainedTree_Rmain['R_diff'] = np.abs(constrainedTree_Rmain['R/Rvir'] - Rvir)
+        constrainedTree_Rmain_sorted = constrainedTree_Rmain.sort_values(by=['Sub_tree_id', 'Priority', 'R_diff', 'Redshift'], 
+                                                                 ascending=[True, False, True, False]
+                                                                )
+        crossing_haloes_mainRvir = constrainedTree_Rmain_sorted.groupby('Sub_tree_id').first().reset_index().drop(["R_diff", 'Priority'], axis=1)
+
+        return crossing_haloes_mainRvir, constrainedTree_Rmain
 
 
-
+    def traceback_halos(self, Rvirs, halodf):
+        """Traces back selected halos to different Rvirs. This method accompanies select_halos: this selects halos at a given Rvir and according to certain
+        constraints on mass, radshift, merging histories etc. traceback_halos traces back those halos to more outer R/Rvir radii.
         
-        return constrainedTree_Rmain
+        It is a requirement that Rvirs > Rvir.
+
+        Parameters
+        ----------
+        Rvirs : list[float]
+            Rvirs to traceback.
+        halodf : list[int]
+            Halo dataframe created with select_halos.
+
+        Returns
+        -------
+        
+        """
+        self.extra_Rvirs = np.array(Rvirs)
+        if np.any(self.extra_Rvirs<=self.main_Rvir):
+            raise Exception("All extra R/Rvir must be greater than the main Rvir.")
+
+        concated = np.append(self.extra_Rvirs, self.main_Rvir)
+        concated = np.sort(np.append(concated, np.max(self.extra_Rvirs)*2))
+        lower = 0.5*(concated[:-1] - np.roll(concated, -1)[:-1])
+        upper = 0.5*(concated[1:] - np.roll(concated, 1)[1:])
+        rvir_bounds = {v : [v+l, v+u] for v, l, u in zip(concated[1:-1], lower, upper[1:])}
+        
+        CompleteTree = deepcopy(self.CompleteTree)
+        
+        if np.unique(halodf['Sub_tree_id'].values).shape != halodf['Sub_tree_id'].values.shape:
+            raise Exception("Subtree shapes are fucked up")
+        else:
+            subtree_redshifts = {sid : z for sid, z in zip(halodf['Sub_tree_id'].values, halodf['Redshift'].values)}
+            
+        dataframes = {}
+        
+        for rvir, bounds in rvir_bounds.items():
+            constrainedTree_rvir = CompleteTree[CompleteTree['Sub_tree_id'].isin( list(subtree_redshifts.keys()) )]
+            
+            constrainedTree_rvir = constrainedTree_rvir[(constrainedTree_rvir['R/Rvir'] >= bounds[0]) & 
+                                                        (constrainedTree_rvir['R/Rvir'] <= bounds[1])
+                                                       ]
+            
+            constrainedTree_rvir['R_diff'] = np.abs(constrainedTree_rvir['R/Rvir'] - rvir)
+            
+            constrainedTree_rvir = constrainedTree_rvir.merge(pd.DataFrame({'Sub_tree_id': list(subtree_redshifts.keys()), 'reference_z': list(subtree_redshifts.values())}),
+                                                              on='Sub_tree_id',
+                                                              how='left'
+                                                             )
+
+            constrainedTree_rvir['z_diff'] = constrainedTree_rvir['Redshift'] - constrainedTree_rvir['reference_z']
+            
+            constrainedTree_rvir = constrainedTree_rvir[constrainedTree_rvir['z_diff'] >= 0]
+            
+            constrainedTree_rvir_sorted = constrainedTree_rvir.sort_values(by=['Sub_tree_id', 'R_diff', 'z_diff'], 
+                                                                           ascending=[True, True, True]
+                                                                          )
+            
+            crossing_haloes_rvir = constrainedTree_rvir_sorted.groupby('Sub_tree_id').first().reset_index().drop(columns=['R_diff', 'z_diff', 'reference_z'])
+
+            dataframes[rvir] = crossing_haloes_rvir
+
+        return dataframes
+
+
     
     
     
