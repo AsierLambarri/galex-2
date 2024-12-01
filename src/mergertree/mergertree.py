@@ -58,6 +58,7 @@ class MergerTree:
         })
         self.min_halo_mass = 1E7
 
+    
     def _load_ytree_tree(self):
         """Deletes arbor in temporary_arbor, if existing, and creates a new one for use in current instance.
         """
@@ -199,6 +200,7 @@ class MergerTree:
             self._PrincipalTree = single_tree_final[single_tree_final['Sub_tree_id'] == 1]
             
         single_tree_final['Halo_at_z0'] = mytree.uid * np.ones_like(single_tree_final['Halo_ID'].values)
+        single_tree_final['TreeNum'] =  int(treenum) * np.ones_like(single_tree_final['Halo_ID'].values)
 
         if self._computing_forest:
             pass
