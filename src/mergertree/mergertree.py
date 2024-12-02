@@ -339,6 +339,24 @@ class MergerTree:
 
         return dataframes
 
+    def save(self, code=""):
+        """Saves Main, Satellite, Complete and Host merger trees
+        """
+        if code == "":
+            self.MainTree.to_csv("MainTree.csv", index=False)
+            self.SatelliteTrees.to_csv("SatelliteTrees.csv", index=False)
+            self.CompleteTree.to_csv("CompleteTree.csv", index=False)
+            self._PrincipalTree.to_csv("HostTree.csv", index=False)
+        else:
+            self.MainTree.to_csv(f"{code}_MainTree.csv", index=False)
+            self.SatelliteTrees.to_csv(f"{code}_SatelliteTrees.csv", index=False)
+            self.CompleteTree.to_csv(f"{code}_CompleteTree.csv", index=False)
+            self._PrincipalTree.to_csv(f"{code}_HostTree.csv", index=False)
+
+        return None
+            
+        
+
 
     
     
