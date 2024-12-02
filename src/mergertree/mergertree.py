@@ -58,6 +58,7 @@ class MergerTree:
         })
         self.min_halo_mass = 1E7
         self.main_Rvir = 1
+        self._computing_forest = False
     
     def _load_ytree_tree(self):
         """Deletes arbor in temporary_arbor, if existing, and creates a new one for use in current instance.
@@ -125,10 +126,10 @@ class MergerTree:
 
         df['R/Rvir'] = pd.Series()
         for snapnum in tqdm(range(self.snap_min, self.snap_max + 1), desc=f"Computing R/Rvir", ncols=200):
-            cx = self._PrincipalTree[self._PrincipalTree['Snapshot'] == snapnum]['position_x'].values
-            cy = self._PrincipalTree[self._PrincipalTree['Snapshot'] == snapnum]['position_y'].values
-            cz = self._PrincipalTree[self._PrincipalTree['Snapshot'] == snapnum]['position_z'].values
-            cRvir = self._PrincipalTree[self._PrincipalTree['Snapshot'] == snapnum]['virial_radius'].values
+            cx = self.PrincipalLeaf[self.PrincipalLeaf['Snapshot'] == snapnum]['position_x'].values
+            cy = self.PrincipalLeaf[self.PrincipalLeaf['Snapshot'] == snapnum]['position_y'].values
+            cz = self.PrincipalLeaf[self.PrincipalLeaf['Snapshot'] == snapnum]['position_z'].values
+            cRvir = self.PrincipalLeaf[self.PrincipalLeaf['Snapshot'] == snapnum]['virial_radius'].values
             isnap = df[df['Snapshot'] == snapnum].index
             df.loc[isnap, 'R/Rvir'] = np.sqrt(   (df.loc[isnap, 'position_x'] - cx)**2 + 
                                                  (df.loc[isnap, 'position_y'] - cy)**2 + 
@@ -185,7 +186,11 @@ class MergerTree:
         single_tree_final = self._compute_subtreid(single_tree_final)
 
         if maingal:
-            self._PrincipalTree = single_tree_final[single_tree_final['Sub_tree_id'] == 1]
+            sids = single_tree_final[single_tree_final['Snapshot'] == self.snap_max]['Sub_tree_id'].values
+            assert len(sids) == 1, "More than one halo found for the main tree, at z=0!! So Strange!!"
+            
+            self._principal__subid = int(sids[0])
+            self.PrincipalLeaf = single_tree_final[single_tree_final['Sub_tree_id'] == self._principal__subid]
             
         single_tree_final['Halo_at_z0'] = mytree.uid * np.ones_like(single_tree_final['Halo_ID'].values)
         single_tree_final['TreeNum'] =  int(treenum) * np.ones_like(single_tree_final['Halo_ID'].values)
@@ -283,10 +288,26 @@ class MergerTree:
 
         constrainedTree_Rmain['Priority'] = (constrainedTree_Rmain['R/Rvir'] > Rvir).astype(int)  # 1 if R/Rvir > 1, else 0
         constrainedTree_Rmain['R_diff'] = np.abs(constrainedTree_Rmain['R/Rvir'] - Rvir)
-        constrainedTree_Rmain_sorted = constrainedTree_Rmain.sort_values(by=['Sub_tree_id', 'Priority', 'R_diff', 'Redshift'], 
-                                                                 ascending=[True, False, True, False]
-                                                                )
-        crossing_haloes_mainRvir = constrainedTree_Rmain_sorted.groupby('Sub_tree_id').first().reset_index().drop(["R_diff", 'Priority'], axis=1)
+
+        constrainedTree_Rmain.loc[constrainedTree_Rmain.index,'crossings'] = (
+            constrainedTree_Rmain.groupby('Sub_tree_id')['Priority']
+            .transform(lambda x: (x != x.shift()).cumsum() - 1)
+        )
+        
+        constrainedTree_Rmain_sorted = constrainedTree_Rmain.sort_values(
+            by=['Sub_tree_id', 'Priority', 'crossings', 'R_diff'],
+            ascending=[True, False, True, True]
+        )
+        
+        selected_halos = constrainedTree_Rmain_sorted.groupby('Sub_tree_id').first().reset_index()
+        
+        crossing_haloes_mainRvir = selected_halos.drop(['crossings', 'Priority', 'R_diff'], axis=1)
+
+        
+        #constrainedTree_Rmain_sorted = constrainedTree_Rmain.sort_values(by=['Sub_tree_id', 'Priority', 'Redshift', 'R_diff'], 
+                                                                 #ascending=[True, False, False, True]
+                                                                #)
+        #crossing_haloes_mainRvir = constrainedTree_Rmain_sorted.groupby('Sub_tree_id').first().reset_index().drop(["R_diff", 'Priority'], axis=1)
 
         return crossing_haloes_mainRvir, constrainedTree_Rmain
 
@@ -362,12 +383,12 @@ class MergerTree:
             self.MainTree.to_csv("MainTree.csv", index=False)
             self.SatelliteTrees.to_csv("SatelliteTrees.csv", index=False)
             self.CompleteTree.to_csv("CompleteTree.csv", index=False)
-            self._PrincipalTree.to_csv("HostTree.csv", index=False)
+            self.PrincipalLeaf.to_csv("HostTree.csv", index=False)
         else:
             self.MainTree.to_csv(f"{code}_MainTree.csv", index=False)
             self.SatelliteTrees.to_csv(f"{code}_SatelliteTrees.csv", index=False)
             self.CompleteTree.to_csv(f"{code}_CompleteTree.csv", index=False)
-            self._PrincipalTree.to_csv(f"{code}_HostTree.csv", index=False)
+            self.PrincipalLeaf.to_csv(f"{code}_HostTree.csv", index=False)
 
         return None
             
@@ -375,5 +396,9 @@ class MergerTree:
 
 
     
-    
+#df = mt
+#df = df.reset_index(drop=True)
+#idx = df.groupby('Snapshot')['mass'].idxmax()
+
+#result = df.loc[idx].reset_index(drop=True)    combine result into one df
     
