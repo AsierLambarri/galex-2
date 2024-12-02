@@ -82,24 +82,40 @@ class MergerTree:
         df = deepcopy(old_df)
         
         df['Sub_tree_id'] = np.zeros(len(df))
-       
-        for snapnum in range(self.snap_min, self.snap_max + 1):
-            Halo_ID_list = np.unique(df[(df['Snapshot']==snapnum)]['uid'])
-            if snapnum == 0:
-                index = df[(df['uid'].isin(Halo_ID_list))].index
-                values = df[(df['uid'].isin(Halo_ID_list))]['uid']
-                df.loc[index, 'Sub_tree_id'] = values
-            else:
-                Existing_halos = Halo_ID_list[np.isin(Halo_ID_list, df['desc_uid'])]
-                New_halos = Halo_ID_list[~np.isin(Halo_ID_list, df['desc_uid'])]
-                index_existing = df[(df['uid'].isin(Existing_halos))].sort_values('uid').index
-                index_new = df[(df['uid'].isin(New_halos))].index
-                values_existing = df[(df['desc_uid'].isin(Existing_halos))&
-                                                 (df['Secondary']==False)].sort_values('desc_uid')['Sub_tree_id']
-                values_new = df[(df['uid'].isin(New_halos))]['uid']
-                df.loc[index_existing, 'Sub_tree_id'] = np.array(values_existing)
-                df.loc[index_new, 'Sub_tree_id'] = np.array(values_new)
-
+        if maingal:
+            for snapnum in tqdm(range(self.snap_min, self.snap_max + 1), desc="Computing Sub_tree_id's", leave=False):
+                Halo_ID_list = np.unique(df[(df['Snapshot']==snapnum)]['uid'])
+                if snapnum == 0:
+                    index = df[(df['uid'].isin(Halo_ID_list))].index
+                    values = df[(df['uid'].isin(Halo_ID_list))]['uid']
+                    df.loc[index, 'Sub_tree_id'] = values
+                else:
+                    Existing_halos = Halo_ID_list[np.isin(Halo_ID_list, df['desc_uid'])]
+                    New_halos = Halo_ID_list[~np.isin(Halo_ID_list, df['desc_uid'])]
+                    index_existing = df[(df['uid'].isin(Existing_halos))].sort_values('uid').index
+                    index_new = df[(df['uid'].isin(New_halos))].index
+                    values_existing = df[(df['desc_uid'].isin(Existing_halos))&
+                                                     (df['Secondary']==False)].sort_values('desc_uid')['Sub_tree_id']
+                    values_new = df[(df['uid'].isin(New_halos))]['uid']
+                    df.loc[index_existing, 'Sub_tree_id'] = np.array(values_existing)
+                    df.loc[index_new, 'Sub_tree_id'] = np.array(values_new)
+        else:
+            for snapnum in range(self.snap_min, self.snap_max + 1):
+                Halo_ID_list = np.unique(df[(df['Snapshot']==snapnum)]['uid'])
+                if snapnum == 0:
+                    index = df[(df['uid'].isin(Halo_ID_list))].index
+                    values = df[(df['uid'].isin(Halo_ID_list))]['uid']
+                    df.loc[index, 'Sub_tree_id'] = values
+                else:
+                    Existing_halos = Halo_ID_list[np.isin(Halo_ID_list, df['desc_uid'])]
+                    New_halos = Halo_ID_list[~np.isin(Halo_ID_list, df['desc_uid'])]
+                    index_existing = df[(df['uid'].isin(Existing_halos))].sort_values('uid').index
+                    index_new = df[(df['uid'].isin(New_halos))].index
+                    values_existing = df[(df['desc_uid'].isin(Existing_halos))&
+                                                     (df['Secondary']==False)].sort_values('desc_uid')['Sub_tree_id']
+                    values_new = df[(df['uid'].isin(New_halos))]['uid']
+                    df.loc[index_existing, 'Sub_tree_id'] = np.array(values_existing)
+                    df.loc[index_new, 'Sub_tree_id'] = np.array(values_new)
         return df
         
     def _compute_R_Rvir(self, old_df):
