@@ -231,9 +231,19 @@ class MergerTree:
 
         return None
 
-    def construct_equivalence_table(self):
+    def construct_equivalence_table(self, basename, snapshot_format, pdir):
         """work in progress
         """
+
+
+        redshifts = []
+        scale_factors = []
+        times = []
+        for snap in tqdm(snapshots):
+            ds = yt.load(pdir + snap)
+            redshifts.append(ds.current_redshift)
+            scale_factors.append(ds.scale_factor)
+            times.append(ds.current_time.in_units("Gyr").value)
         return None
 
 
@@ -347,35 +357,91 @@ class MergerTree:
             subtree_redshifts = {sid : z for sid, z in zip(halodf['Sub_tree_id'].values, halodf['Redshift'].values)}
             
         dataframes = {}
+        selected_halos = pd.DataFrame()
         
         for rvir, bounds in rvir_bounds.items():
             constrainedTree_rvir = CompleteTree[CompleteTree['Sub_tree_id'].isin( list(subtree_redshifts.keys()) )]
             
             constrainedTree_rvir = constrainedTree_rvir[(constrainedTree_rvir['R/Rvir'] >= bounds[0]) & 
-                                                        (constrainedTree_rvir['R/Rvir'] <= bounds[1])
+                                                        (constrainedTree_rvir['R/Rvir'] <= bounds[1]) 
                                                        ]
-            
-            constrainedTree_rvir['R_diff'] = np.abs(constrainedTree_rvir['R/Rvir'] - rvir)
-            
+
             constrainedTree_rvir = constrainedTree_rvir.merge(pd.DataFrame({'Sub_tree_id': list(subtree_redshifts.keys()), 'reference_z': list(subtree_redshifts.values())}),
                                                               on='Sub_tree_id',
                                                               how='left'
                                                              )
 
-            constrainedTree_rvir['z_diff'] = constrainedTree_rvir['Redshift'] - constrainedTree_rvir['reference_z']
+            constrainedTree_rvir = constrainedTree_rvir[constrainedTree_rvir['Redshift'] >= constrainedTree_rvir['reference_z']]
             
-            constrainedTree_rvir = constrainedTree_rvir[constrainedTree_rvir['z_diff'] >= 0]
-            
-            constrainedTree_rvir_sorted = constrainedTree_rvir.sort_values(by=['Sub_tree_id', 'R_diff', 'z_diff'], 
-                                                                           ascending=[True, True, True]
-                                                                          )
-            
-            crossing_haloes_rvir = constrainedTree_rvir_sorted.groupby('Sub_tree_id').first().reset_index().drop(columns=['R_diff', 'z_diff', 'reference_z'])
+            constrainedTree_rvir['Priority'] = (constrainedTree_rvir['R/Rvir'] > rvir).astype(int)  # 1 if R/Rvir > 1, else 0
 
-            dataframes[rvir] = crossing_haloes_rvir
+            constrainedTree_rvir['R_diff'] = np.abs(constrainedTree_rvir['R/Rvir'] - rvir)
+            
+            constrainedTree_rvir = constrainedTree_rvir.sort_values(by=['Sub_tree_id', 'Redshift'], ascending=[True, False])
+            
+            constrainedTree_rvir['crossings'] = (
+                constrainedTree_rvir.groupby('Sub_tree_id')['Priority']
+                .transform(lambda x: (x != x.shift()).cumsum() - 1)
+            )
 
+            
+            sorted_tree_top = constrainedTree_rvir.sort_values(by=['Sub_tree_id', 'Priority', 'crossings', 'R_diff'], ascending=[True, False, False, True])
+            sorted_tree_bottom = constrainedTree_rvir.sort_values(by=['Sub_tree_id', 'Priority', 'crossings', 'R_diff'], ascending=[True, True, False, True])
+
+            selected_at_target_top = sorted_tree_top.groupby('Sub_tree_id').first().reset_index()
+            selected_at_target_bottom = sorted_tree_bottom.groupby('Sub_tree_id').first().reset_index()
+
+            all_subtrees = np.unique(
+                np.concatenate( (selected_at_target_top['Sub_tree_id'].values, selected_at_target_bottom['Sub_tree_id'].values) )
+            )
+            selected_at_target = pd.DataFrame()
+            for subtree in all_subtrees:
+                in_top = selected_at_target_top[selected_at_target_top['Sub_tree_id'] == subtree]
+                in_bottom = selected_at_target_bottom[selected_at_target_bottom['Sub_tree_id'] == subtree]
+    
+                if (not in_top.empty) and (not in_bottom.empty):
+                    if in_top['R_diff'].iloc[0] <= in_bottom['R_diff'].iloc[0]:
+                        selected_at_target = pd.concat([selected_at_target, in_top])
+                    else:
+                        selected_at_target = pd.concat([selected_at_target, in_bottom])
+                elif not in_top.empty:
+                    selected_at_target = pd.concat([selected_at_target, in_top])
+                elif not in_bottom.empty:
+                    selected_at_target = pd.concat([selected_at_target, in_bottom])
+
+            selected_at_target = selected_at_target.reset_index(drop=True)
+            selected_at_target['target_R/Rvir'] = rvir
+            
+            selected_halos = pd.concat([selected_halos, selected_at_target])
+
+        non_monotonic_mask = selected_halos.groupby('Sub_tree_id')['Redshift'].apply(lambda x: x != x.sort_values().cummax())
+        selected_halos = selected_halos[~non_monotonic_mask.values]
+
+        dataframes = {rvir_value: df.drop(columns=['R_diff', 'target_R/Rvir', 'crossings'], inplace=False)
+                      for rvir_value, df in selected_halos.groupby('target_R/Rvir')}
         return dataframes
 
+
+
+
+            #constrainedTree_rvir['R_diff'] = np.abs(constrainedTree_rvir['R/Rvir'] - rvir)
+            #constrainedTree_rvir = constrainedTree_rvir.merge(pd.DataFrame({'Sub_tree_id': list(subtree_redshifts.keys()), 'reference_z': list(subtree_redshifts.values())}),
+            #                                                  on='Sub_tree_id',
+            #                                                  how='left'
+            #                                                 )
+            #constrainedTree_rvir['z_diff'] = constrainedTree_rvir['Redshift'] - constrainedTree_rvir['reference_z']
+            #constrainedTree_rvir = constrainedTree_rvir[constrainedTree_rvir['z_diff'] >= 0]
+            #constrainedTree_rvir_sorted = constrainedTree_rvir.sort_values(by=['Sub_tree_id', 'R_diff', 'z_diff'], 
+            #                                                               ascending=[True, True, True]
+            #                                                              )
+            #crossing_haloes_rvir = constrainedTree_rvir_sorted.groupby('Sub_tree_id').first().reset_index().drop(columns=['R_diff', 'z_diff', 'reference_z'])
+            #
+        #dataframes[rvir] = crossing_haloes_rvir
+
+        #return selected_halos
+
+
+    
     def save(self, code=""):
         """Saves Main, Satellite, Complete and Host merger trees
         """
