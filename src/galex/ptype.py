@@ -70,8 +70,11 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields["stars"]]
         if missing_fields:
             raise ValueError(f"Missing mandatory fields {missing_fields} for particle type stars")
-        
-        self._default_center_of_mass()
+
+        if self.masses.sum() != 0:
+            self._default_center_of_mass()
+        else:
+            self.cm = None
         
         del self.loader
         del self.parser
@@ -347,7 +350,7 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
                                                            verbose=verbose
                                                           )
         self.bmask = mask
-        self.delta_rel = delta_rel.value
+        self.delta_rel = delta_rel
         self.bound_method = "starry-halo"
         for key in list(self._fields_loaded.keys()):  
             if key.startswith("b"):
