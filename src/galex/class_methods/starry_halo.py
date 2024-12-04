@@ -144,7 +144,7 @@ def compute_stars_in_halo(pos,
         Obtained convergence for selected total mass after imax iterations. >1E-2.
     """
     if len(masses) == 0:
-             return np.array([]), np.array([]), np.nan
+             return np.array([]), np.zeros_like(masses, dtype=bool), np.nan
          
     halo_center = halo_params['center'].in_units(pos.units)
     halo_center_vel = halo_params['center_vel'].in_units(vels.units)
@@ -181,7 +181,7 @@ def compute_stars_in_halo(pos,
         if verbose:
             print("Interations terminated on 0. No coherent star structures where found.")
                 
-        return np.array([]), np.array([]), np.nan
+        return np.array([]), np.zeros_like(masses, dtype=bool), np.nan
 
     delta_mm = []
     for i in range(imax):
@@ -218,7 +218,7 @@ def compute_stars_in_halo(pos,
             if verbose:
                 print(f"Interations terminated on {i+1}. No coherent star structures where found.")
                 
-            return np.array([]), np.array([]), np.nan
+            return np.array([]), np.zeros_like(masses, dtype=bool), np.nan
 
 
         n_init = len(masses[mask_loop])
