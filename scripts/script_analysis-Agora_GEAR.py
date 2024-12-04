@@ -10,7 +10,7 @@ import concurrent.futures
 from src import galex as dge
 from src.galex.class_methods import random_vector_spherical
 
-ytLogger.setLevel(30)
+ytLogger.setLevel(50)
 
 def load_ftable(fn):
     """Loads astropy tables formated with ascii.fixed_width and sep='\t'. These tables are human readable but
@@ -35,10 +35,9 @@ def load_ftable(fn):
 dge.config.code = "GEAR"
 files = ["GEAR_satellitesV5_Rvir1.0.csv", "GEAR_satellitesV5_Rvir1.5.csv", "GEAR_satellitesV5_Rvir2.0.csv", "GEAR_satellitesV5_Rvir3.0.csv", "GEAR_satellitesV5_Rvir4.0.csv", "GEAR_satellitesV5_Rvir5.0.csv"]
 
-def analyzer(f):
-    print(f"Analyzing {f}")
+for f in files:
     tdir = "/home/asier/StructuralAnalysis/satellite_tables/"
-    
+    errors = []
     snapequiv = load_ftable("./GEAR_equivalenceV2.dat")
     
     file = tdir + f
@@ -75,18 +74,29 @@ def analyzer(f):
             vrms = (halo['vrms'], 'km/s')
     
             print(f"#####   {halo['Sub_tree_id']}:snapshot-{halo['Snapshot']}   #####\n")
+            print(f"####  {fn}  #####")
             halo_instance = dge.SnapshotHalo("/media/asier/T7/GEAR/" + fn, center=halocen, radius=rvir,
                                   dm_params={'rockstar_center': halocen, 'rockstar_vel': halovel, 'rvir': rvir, 'rs': rs, 'vmax': vmax, 'vrms': vrms},
                                   stars_params={'ML': (3, 'Msun/Lsun')}
                                  )
+            
+            
         except:
             continue
+
+        if halo_instance.stars.masses.sum() == 0:
+            errors.append(f"Sub_tree_id {halo['Sub_tree_id']} in snapshot-{halo['Snapshot']} has no stars at all.")
+            continue
             
+        halo_instance.stars.compute_stars_in_halo(verbose=False)
+        if halo_instance.stars.bmasses.sum() == 0:
+            errors.append(f"Sub_tree_id {halo['Sub_tree_id']} in snapshot-{halo['Snapshot']} has no stars bound.")
+            continue
+        
         lines_of_sight = random_vector_spherical(N=16)
     
         
     
-        halo_instance.stars.compute_stars_in_halo(verbose=False)
         candidates.loc[index, "stellar_mass"] =  halo_instance.stars.bmasses.sum().in_units("Msun").value
         candidates.loc[index, "delta_rel"] = float(halo_instance.stars.delta_rel)
         halo_instance.stars.refined_center_of_mass(method="hm", mfrac=0.5, delta=1E-2)
@@ -133,20 +143,9 @@ def analyzer(f):
     
     
     candidates.to_csv(file, index=False)
-    return f"{file} processed"
-        
-    
-
-
- 	 	 	 	 	 	
-
-
-
-
-with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
-    results = list(executor.map(analyzer, files))
-
-print(results)
+    errors.append(f"{file} processed")
+    print( "\n".join(errors))
+                    
 print(f"Finished")
 
 
