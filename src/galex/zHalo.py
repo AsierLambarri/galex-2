@@ -87,14 +87,6 @@ class SnapshotHalo(BaseSimulationObject):
             return self._time.in_units(f"{self.units['time']}")
         else:
             return None
-    #@property
-    #def Mdyn(self):
-    #    """Dynamical mass
-    #    """
-    #    if self._Mdyn is not None:
-    #        return self._Mdyn.in_units(f"{self.units['mass']}")
-    #    else:
-    #        return None
     @property  
     def redshift(self):
         """Redshift
@@ -131,7 +123,13 @@ class SnapshotHalo(BaseSimulationObject):
         """
         return self._omega
     
-    
+    @property
+    def Mdyn(self):
+        """Dynamical mass
+        """
+        if self.stars.rh_3D is None:
+            raise ValueError("The 3D half-mass radius is not defined. Cannot calculate dynamical mass.")
+        return self._dynamical_mass()
 
     ##########################################################
     ###                                                    ###
@@ -201,7 +199,7 @@ class SnapshotHalo(BaseSimulationObject):
         output.append(f"{'dm':<20}: {self.darkmatter.masses.sum():.3e}")
         output.append(f"{'stars':<20}: {self.stars.masses.sum():.3e}")
         output.append(f"{'gas':<20}: yes")
-        output.append(f"{'Mdyn':<20}: {self.Mdyn}")
+        output.append(f"{'Mdyn':<20}: {0 if self.Mdyn is None else self.Mdyn}")
 
         output.append(f"\nunits")
         output.append(f"{'':-<21}")
@@ -307,7 +305,6 @@ class SnapshotHalo(BaseSimulationObject):
         if self.base_units is None:
             self.base_units = base_units
         
-        #**{k: v for kw_key in self._kwargs for k, v in self._kwargs[kw_key].items()}
         self.stars = StellarComponent(hashable_data, **self._kwargs['stars_params'])
         self.darkmatter = DarkComponent(hashable_data, **self._kwargs['dm_params'])
 
@@ -349,7 +346,7 @@ class SnapshotHalo(BaseSimulationObject):
         self.darkmatter.set_line_of_sight(los)
         return None
 
-    def dynamical_mass(self):
+    def _dynamical_mass(self):
         """Computes the dynamical mass: the mass enclonsed inside the 3D half light radius of stars.
         """
         mass_stars = self.stars.enclosed_mass(self.stars.rh_3D, self.stars.cm)
