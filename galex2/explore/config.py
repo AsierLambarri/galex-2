@@ -3,6 +3,7 @@ import yaml
 from pathlib import Path
 from unyt import unyt_quantity
 
+from .loaders import ARTI_loader, GEAR_loader
 
 class Config:
     """Config class that provides configuration options for pkg. Here one can set the loader, units, conversion tables
@@ -81,13 +82,13 @@ class Config:
 
     def _load_code_config(self):
         """Loads base_units, ptypes and their fields and gas type from the .yaml configuration file corresponding
-        to the precise code. YAML files are stored in package-dir/loaders_config
+        to the precise code. YAML files are stored in package-dir/conde_fields_config
 
         Returns
         -------
         None
         """
-        with open(self._package_dir + "/loaders_config/" + self._code + ".yaml", 'r') as f:
+        with open(self._package_dir + "/conde_fields_config/" + self._code + ".yaml", 'r') as f:
             config_data = yaml.safe_load(f)
 
             #self.base_units = config_data['base_units']
@@ -124,7 +125,7 @@ class Config:
 
     @staticmethod
     def check_consistent_units(base_units, units):
-        """Checks if base_units == units for consistency when loading and parsing data with yt and using loaders_config files.
+        """Checks if base_units == units for consistency when loading and parsing data with yt and using conde_fields_config files.
         Parameters
         ----------
         units : dict[str : str]
@@ -145,7 +146,13 @@ class Config:
     def default_loader(fn):
         """Default loader. Returns yt.dataset
         """
-        ds = yt.load(fn)
+        if self.code == "ART":
+            ds = ARTI_loader(fn)
+        elif self.code == "GEAR":
+            ds = GEAR_loader(fn)
+        else:
+            ds = yt.load(fn)
+            
         Config._instance.ds = ds
         return ds
 

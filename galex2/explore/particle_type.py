@@ -578,10 +578,19 @@ class GasComponent(BaseSimulationObject, BaseComponent):
 
 
 
+    def __getattr__(self, field_name):
+            """Dynamical loader for accessing fields.
+            """
+            return self._priv__getattr__(field_name)
 
 
-
-
+    def get_gas_fields(self):
+        """Returns all loadable particle fields
+        """
+        if self.bmask is None:
+            return self._dynamic_fields.keys()
+        else:
+            return np.append(list(self._dynamic_fields.keys()), ['b'+f for f in list(self._dynamic_fields.keys())]) 
 
 
 
