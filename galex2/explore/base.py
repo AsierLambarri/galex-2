@@ -201,8 +201,11 @@ class BaseComponent:
 
                 CoM = sum(mass * pos) / sum(mass)        
         """
-        self.cm = center_of_mass_pos(self.coords, self.masses)
-        return None
+        if self.masses.sum() != 0:
+            self.cm = center_of_mass_pos(self.coords, self.masses)
+        else:
+            self.empty_component = True
+            return None
 
 
         
