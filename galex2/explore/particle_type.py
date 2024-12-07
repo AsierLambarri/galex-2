@@ -32,14 +32,7 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
     
     IMPLEMENTATION OF MANDATORY FIELDS FOR EACH PARTICLE TYPE. MIGHT SEPARATE INTO THREE PTYPES.
     IMPLEMENTATION OF DYNAMICAL FIELD LOADING
-    """
-
-    ##########################################################
-    ###                                                    ###
-    ##                    INNIT FUNCTION                    ##
-    ###                                                    ###
-    ##########################################################
-    
+    """ 
     def __init__(self,
                  data,
                  **kwargs
@@ -52,41 +45,36 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         self._dynamic_fields = copy(self.fields["stars"])
         self._fields_loaded = {}
         self._data = data
-        self._kwargs = kwargs
         
         self.use_bound_if_computed = True
         self.bound_method = None
-        
+        self.bmask = None
+
         self.cm = None
         self.vcm = None
-        self.bmask = None
         
         self.rh = None
-        self.rh_3D = None
+        self.rh3d = None
         self.sigma_los = None
         
-        self.set_shared_attrs(self.ptype, self._kwargs)
 
         missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields["stars"]]
         if missing_fields:
             raise ValueError(f"Missing mandatory fields {missing_fields} for particle type stars")
 
-        if self.masses.sum() != 0:
-            self._default_center_of_mass()
-        else:
-            self.cm = None
+        self.set_shared_attrs(self.ptype, kwargs)
+        self._default_center_of_mass()
+
         
         del self.loader
         del self.parser
         del self.ptypes
         del self.fields
         
-        
-    ##########################################################
-    ###                                                    ###
-    ##                      PROPERTIES                      ##
-    ###                                                    ###
-    ##########################################################   
+
+
+
+    
     
     @property
     def ML(self):
@@ -102,7 +90,6 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         else:
             raise AttributeError("Cannot set 'ML' for dark matter.")
 
-    # "Hidden" properties for the partner instance
     @property
     def _rvir(self):
         if self.ptype == "stars":
@@ -153,73 +140,14 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         raise AttributeError("Attribute 'vrms' is hidden for stars.")
 
 
-            
-    ##########################################################
-    ###                                                    ###
-    ##                      UTILITIES                       ##
-    ###                                                    ###
-    ##########################################################
+
+
+    
 
     def __getattr__(self, field_name):
         """Dynamical loader for accessing fields.
-        
-        Parameters
-        ----------
-        field_name : str
-            Name of the field to be accessed
-
-        Returns
-        -------
-        field : unyt_array
         """
-        funits = {
-            'coords': self.units['length'],
-            'hsml': self.units['length'],
-            'masses': self.units['mass'],
-            'masses_ini': self.units['mass'],
-            'vels': self.units['velocity'],
-            'formation_times': self.units['time'],
-            'metallicity': self.units['dimensionless']
-        }
-        vec_fields = ['coords', 'vels', 'bcoords', 'bvels', 'cyl_coords', 'cyl_vels', 'sp_coords', 'sp_vels', 'box_coords', 'box_vels']
-        if field_name  in self._dynamic_fields.keys():
-            if field_name in self._fields_loaded:
-                return self._fields_loaded[field_name].in_units(funits[field_name]) if field_name in funits else self._fields_loaded[field_name]
-            else:
-                field = (self._base_ptype, self._dynamic_fields[field_name])
-                if field_name in vec_fields:
-                    self._fields_loaded[field_name] = vectorized_base_change(np.linalg.inv(self.basis), self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field])
-                else:
-                    self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
-                return self._fields_loaded[field_name]
-                
-        elif field_name  in ['b'+ f for f in list(self._dynamic_fields.keys())]:
-            if field_name in self._fields_loaded:
-                return self._fields_loaded[field_name].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._fields_loaded[field_name]
-            else:
-                field = (self._base_ptype, self._dynamic_fields[field_name[1:]])
-                if field_name in vec_fields:
-                    self._fields_loaded[field_name] = vectorized_base_change(np.linalg.inv(self.basis), self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask])
-                else:
-                    self._fields_loaded[field_name] = self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask]
-                return self._fields_loaded[field_name]
-
-        try:
-            print(f"with __getattribute__")
-            return self.__getattribute__(field_name)
-        except AttributeError:
-            raise AttributeError(f"Field '{field_name}' not found for particle type {self.ptype}. "+ f"Available fields are: {list(self._dynamic_fields.keys())}")
-
-        AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._dynamic_fields.keys())}")
-        return None
-        
-    def get_particle_fields(self):
-        """Returns all loadable particle fields
-        """
-        if self.bmask is None:
-            return self._dynamic_fields.keys()
-        else:
-            return np.append(list(self._dynamic_fields.keys()), ['b'+f for f in list(self._dynamic_fields.keys())])    
+        return self._priv__getattr__(field_name)
 
     def _delete_vectorial_fields(self):
         """Deletes vectorial fields: a.k.a. coordinates and velocities from cache when called. Used to force the dynamical field loader to re-load vectorial
@@ -233,14 +161,22 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
                 continue
 
         return None
-        
-    ##########################################################
-    ###                                                    ###
-    ##                   SPECIFIC METHODS                   ##
-    ###                                                    ###
-    ##########################################################
 
-    def info(self, get_str = False):
+
+
+
+
+    def get_particle_fields(self):
+        """Returns all loadable particle fields
+        """
+        if self.bmask is None:
+            return self._dynamic_fields.keys()
+        else:
+            return np.append(list(self._dynamic_fields.keys()), ['b'+f for f in list(self._dynamic_fields.keys())])
+
+    def info(self, 
+             get_str=False
+            ):
         """Returns a pretty information summary.
         
         Parameters
@@ -260,20 +196,12 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         try:
             output.append(f"{'len_pos':<20}: {len(self.coords)}")
             output.append(f"{'pos[0]':<20}: [{self.coords[0,0].value:.2f}, {self.coords[0,1].value:.2f}, {self.coords[0,2].value:.2f}] {self.units['length']}")
-            output.append(f"{'pos[-1]':<20}: [{self.coords[-1,0].value:.2f}, {self.coords[-1,1].value:.2f}, {self.coords[-1,2].value:.2f}] {self.units['length']}")
-            
             output.append(f"{'len_vel':<20}: {len(self.vels)}")
             output.append(f"{'vel[0]':<20}: [{self.vels[0,0].value:.2f}, {self.vels[0,1].value:.2f}, {self.vels[0,2].value:.2f}] {self.units['velocity']}")
-            output.append(f"{'vel[-1]':<20}: [{self.vels[-1,0].value:.2f}, {self.vels[-1,1].value:.2f}, {self.vels[-1,2].value:.2f}] {self.units['velocity']}")
-    
-            
             output.append(f"{'len_mass':<20}: {len(self.masses)}")
             output.append(f"{'mass[0]':<20}: {self.masses[0]}")
-            output.append(f"{'mass[-1]':<20}: {self.masses[-1]}")
-            
             output.append(f"{'len_ids':<20}: {len(self.IDs)}")
             output.append(f"{'ID[0]':<20}: {self.IDs[0].value}")
-            output.append(f"{'ID[-1]':<20}: {self.IDs[-1].value}")
             
         except:
             output.append(f"{'len_pos':<20}: {len(self.coords)}")
@@ -281,13 +209,12 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
             output.append(f"{'len_mass':<20}: {len(self.coords)}")
             output.append(f"{'len_ids':<20}: {len(self.coords)}")
 
+        output.append(f"{'cm':<20}: {self.cm}")
+        output.append(f"{'vcm':<20}: {self.vcm}")
         
-        output.append(f"{'CoM':<20}: {self.cm}")
-        output.append(f"{'V_CoM':<20}: {self.vcm}")
-        
-        output.append(f"{'rh, rh_3D':<20}: {self.rh}, {self.rh_3D}")
+        output.append(f"{'rh, rh3D':<20}: {self.rh}, {self.rh3d}")
             
-        output.append(f"{'sigma*':<20}: {self.sigma_los}")
+        output.append(f"{'sigma_los':<20}: {self.sigma_los}")
         output.append(f"{'ML':<20}: {self.ML}")
         
 
@@ -297,7 +224,9 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
             print("\n".join(output))
             return None
     
-    def compute_stars_in_halo(self, verbose=False):
+    def compute_stars_in_halo(self, 
+                              verbose=False
+                             ):
         """Computes the stars that form a galaxy inside a given halo using the recipe of Jenna Samuel et al. (2020). 
         For this one needs a catalogue of halos (e.g. Rockstar). The steps are the following:
     
@@ -337,24 +266,28 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         delta_rel : float
             Obtained convergence for selected total mass after imax iterations. >1E-2.
         """ 
-        _, mask, delta_rel = compute_stars_in_halo(self.coords,
-                                                          self.masses,
-                                                          self.vels,
-                                                          self.IDs,
-                                                          {'center': self._rockstar_center ,
-                                                           'center_vel': self._rockstar_vel,
-                                                           'rvir': self._rvir,
-                                                           'vmax': self._vmax,
-                                                           'vrms': self._vrms                                                             
-                                                           },
-                                                           verbose=verbose
-                                                          )
+        _, mask, delta_rel = compute_stars_in_halo(
+            self.coords,
+            self.masses,
+            self.vels,
+            self.IDs,
+            {'center': self._rockstar_center ,
+            'center_vel': self._rockstar_vel,
+            'rvir': self._rvir,
+            'vmax': self._vmax,
+            'vrms': self._vrms                                                             
+            },
+            verbose=verbose
+        )
+        
         self.bmask = mask
         self.delta_rel = delta_rel
         self.bound_method = "starry-halo"
+        
         for key in list(self._fields_loaded.keys()):  
             if key.startswith("b"):
                 del self._fields_loaded[key]
+                
         return None        
     
 
@@ -385,13 +318,6 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
     IMPLEMENTATION OF MANDATORY FIELDS FOR EACH PARTICLE TYPE. MIGHT SEPARATE INTO THREE PTYPES.
     IMPLEMENTATION OF DYNAMICAL FIELD LOADING
     """
-
-    ##########################################################
-    ###                                                    ###
-    ##                    INNIT FUNCTION                    ##
-    ###                                                    ###
-    ##########################################################
-    
     def __init__(self,
                  data,
                  **kwargs
@@ -403,7 +329,6 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
         self._dynamic_fields = copy(self.fields["darkmatter"])
         self._fields_loaded = {}
         self._data = data
-        self._kwargs = kwargs
         
         self.use_bound_if_computed = True
         self.bound_method = None
@@ -413,31 +338,24 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
         self.vcm = None
         
         self.rh = None
-        self.rh_3D = None
-
-
-        self.set_shared_attrs(self.ptype, self._kwargs)
+        self.rh3d = None
                 
         missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields["darkmatter"]]
         if missing_fields:
             raise ValueError(f"Missing mandatory fields {missing_fields} for particle type darkmatter")
 
-        
+        self.set_shared_attrs(self.ptype, kwargs)
         self._default_center_of_mass()
-        
-        
         
         del self.loader
         del self.parser
         del self.ptypes
         del self.fields
-        
-        
-    ##########################################################
-    ###                                                    ###
-    ##                       UTILITIES                      ##
-    ###                                                    ###
-    ##########################################################   
+          
+
+
+
+
     
     @property
     def rvir(self):
@@ -546,73 +464,13 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
 
 
 
-    ##########################################################
-    ###                                                    ###
-    ##                       UTILITIES                      ##
-    ###                                                    ###
-    ##########################################################
+
+    
 
     def __getattr__(self, field_name):
         """Dynamical loader for accessing fields.
-        
-        Parameters
-        ----------
-        field_name : str
-            Name of the field to be accessed
-
-        Returns
-        -------
-        field : unyt_array
         """
-        funits = {
-            'coords': self.units['length'],
-            'hsml': self.units['length'],
-            'masses': self.units['mass'],
-            'masses_ini': self.units['mass'],
-            'vels': self.units['velocity'],
-            'formation_times': self.units['time'],
-            'metallicity': self.units['dimensionless']
-        }
-        vec_fields = ['coords', 'vels', 'bcoords', 'bvels', 'cyl_coords', 'cyl_vels', 'sp_coords', 'sp_vels', 'box_coords', 'box_vels']
-        if field_name  in self._dynamic_fields.keys():
-            if field_name in self._fields_loaded:
-                return self._fields_loaded[field_name].in_units(funits[field_name]) if field_name in funits else self._fields_loaded[field_name]
-            else:
-                field = (self._base_ptype, self._dynamic_fields[field_name])
-                if field_name in vec_fields:
-                    self._fields_loaded[field_name] = vectorized_base_change(np.linalg.inv(self.basis), self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field])
-                else:
-                    self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
-                return self._fields_loaded[field_name]
-                
-        elif field_name  in ['b'+ f for f in list(self._dynamic_fields.keys())]:
-            if field_name in self._fields_loaded:
-                return self._fields_loaded[field_name].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._fields_loaded[field_name]
-            else:
-                field = (self._base_ptype, self._dynamic_fields[field_name[1:]])
-                if field_name in vec_fields:
-                    self._fields_loaded[field_name] = vectorized_base_change(np.linalg.inv(self.basis), self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask])
-                else:
-                    self._fields_loaded[field_name] = self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask]
-                return self._fields_loaded[field_name]
-
-        try:
-            print(f"with __getattribute__")
-            return self.__getattribute__(field_name)
-        except AttributeError:
-            raise AttributeError(f"Field '{field_name}' not found for particle type {self.ptype}. "+ f"Available fields are: {list(self._dynamic_fields.keys())}")
-
-        AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._dynamic_fields.keys())}")
-        return None
-    
-
-    def get_particle_fields(self):
-        """Returns all loadable particle fields
-        """
-        if self.bmask is None:
-            return self._dynamic_fields.keys()
-        else:
-            return np.append(list(self._dynamic_fields.keys()), ['b'+f for f in list(self._dynamic_fields.keys())])    
+        return self._priv__getattr__(field_name)
 
     def _delete_vectorial_fields(self):
         """Deletes vectorial fields: a.k.a. coordinates and velocities from cache when called. Used to force the dynamical field loader to re-load vectorial
@@ -626,14 +484,22 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
                 continue
 
         return None
-        
-    ##########################################################
-    ###                                                    ###
-    ##                   SPECIFIC METHODS                   ##
-    ###                                                    ###
-    ##########################################################
+
+
+
+
+
+    def get_particle_fields(self):
+        """Returns all loadable particle fields
+        """
+        if self.bmask is None:
+            return self._dynamic_fields.keys()
+        else:
+            return np.append(list(self._dynamic_fields.keys()), ['b'+f for f in list(self._dynamic_fields.keys())]) 
     
-    def info(self, get_str = False):
+    def info(self, 
+             get_str=False
+            ):
         """Returns a pretty information summary.
         
         Parameters
@@ -653,20 +519,12 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
         try:
             output.append(f"{'len_pos':<20}: {len(self.coords)}")
             output.append(f"{'pos[0]':<20}: [{self.coords[0,0].value:.2f}, {self.coords[0,1].value:.2f}, {self.coords[0,2].value:.2f}] {self.units['length']}")
-            output.append(f"{'pos[-1]':<20}: [{self.coords[-1,0].value:.2f}, {self.coords[-1,1].value:.2f}, {self.coords[-1,2].value:.2f}] {self.units['length']}")
-            
             output.append(f"{'len_vel':<20}: {len(self.vels)}")
             output.append(f"{'vel[0]':<20}: [{self.vels[0,0].value:.2f}, {self.vels[0,1].value:.2f}, {self.vels[0,2].value:.2f}] {self.units['velocity']}")
-            output.append(f"{'vel[-1]':<20}: [{self.vels[-1,0].value:.2f}, {self.vels[-1,1].value:.2f}, {self.vels[-1,2].value:.2f}] {self.units['velocity']}")
-    
-            
             output.append(f"{'len_mass':<20}: {len(self.masses)}")
             output.append(f"{'mass[0]':<20}: {self.masses[0]}")
-            output.append(f"{'mass[-1]':<20}: {self.masses[-1]}")
-            
             output.append(f"{'len_ids':<20}: {len(self.IDs)}")
             output.append(f"{'ID[0]':<20}: {self.IDs[0].value}")
-            output.append(f"{'ID[-1]':<20}: {self.IDs[-1].value}")
             
         except:
             output.append(f"{'len_pos':<20}: {len(self.coords)}")
@@ -674,10 +532,10 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
             output.append(f"{'len_mass':<20}: {len(self.coords)}")
             output.append(f"{'len_ids':<20}: {len(self.coords)}")
 
+        output.append(f"{'cm':<20}: {self.cm}")
+        output.append(f"{'vcm':<20}: {self.vcm}")
         
-        output.append(f"{'CoM':<20}: {self.cm}")
-        output.append(f"{'V_CoM':<20}: {self.vcm}")
-        output.append(f"{'rh, rh_3D':<20}: {self.rh}, {self.rh_3D}")
+        output.append(f"{'rh, rh3D':<20}: {self.rh}, {self.rh3d}")
         output.append(f"{'rvir, rs, c':<20}: {self.rvir}, {self.rs}, {self.c}")
 
         if get_str:
@@ -686,7 +544,12 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
             print("\n".join(output))
             return None
 
-    def compute_bound_particles(self, method, refine=True, delta=1E-5, verbose = False):
+    def compute_bound_particles(self, 
+                                method, 
+                                refine=True, 
+                                delta=1E-5, 
+                                verbose=False
+                               ):
         """Computes the bound particles of a halo/ensemble of particles using the Barnes-Hut algorithm implemented in PYTREEGRAV or 
         approximating it as:
 
@@ -709,36 +572,40 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
         """
         
         if method == "APROX":
-            self.E, self.kin, self.pot = bound_particlesAPROX(self.coords,
-                                                             self.vels,
-                                                             self.masses,
-                                                             cm = self.rockstar_center,
-                                                             vcm = self.rockstar_vel,
-                                                             refine = refine,
-                                                             delta = delta,
-                                                             verbose = verbose
-                                                            )
+            self.E, self.kin, self.pot = bound_particlesAPROX(
+                self.coords,
+                self.vels,
+                self.masses,
+                cm = self.rockstar_center,
+                vcm = self.rockstar_vel,
+                refine = refine,
+                delta = delta,
+                verbose = verbose
+            )
 
 
         
         elif method == "BH":
             try:
-                hsml = halo.hsml
+                hsml = self.hsml
             except:
                 hsml = None
     
-            self.E, self.kin, self.pot = bound_particlesBH(self.coords,
-                                                           self.vels,
-                                                           self.masses,
-                                                           soft = hsml,
-                                                           cm = self.cm,
-                                                           vcm = self.vcm,
-                                                           refine = refine,
-                                                           delta = delta,
-                                                           verbose = verbose                                  
-                                                          )
+            self.E, self.kin, self.pot = bound_particlesBH(
+                self.coords,
+                self.vels,
+                self.masses,
+                soft = hsml,
+                cm = self.cm,
+                vcm = self.vcm,
+                refine = refine,
+                delta = delta,
+                verbose = verbose                                  
+            )
+            
         self.bmask = self.E < 0
         self.bound_method = f"grav-{method}".lower()
+        
         for key in list(self._fields_loaded.keys()):  
             if key.startswith("b"):
                 del self._fields_loaded[key]
@@ -765,13 +632,7 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
 
 
 
-class GasComponentSPH(BaseSimulationObject, BaseComponent):
-    ##########################################################
-    ###                                                    ###
-    ##                    INNIT FUNCTION                    ##
-    ###                                                    ###
-    ##########################################################
-    
+class GasComponent(BaseSimulationObject, BaseComponent):
     def __init__(self,
                  data,
                  ):
@@ -784,20 +645,6 @@ class GasComponentSPH(BaseSimulationObject, BaseComponent):
 
 
 
-
-
-class GasComponentMESH(BaseSimulationObject, BaseComponent):
-    ##########################################################
-    ###                                                    ###
-    ##                    INNIT FUNCTION                    ##
-    ###                                                    ###
-    ##########################################################
-    
-    def __init__(self,
-                 data,
-                 ):
-        """Initializes the ptype class.
-        """
 
 
 

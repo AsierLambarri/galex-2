@@ -30,13 +30,19 @@ class Config:
         List of attributes
         ------------------
         loader : func
-            Loader of data
+            
         parser : func
             Parser of data: extracts raw data, units, parameters, ...
         base_units : dict[str : str]
             Units of the simulation.
         working_units : dict[str : str]
             Units to work with.
+        fields : dict[str : dict[str  : str]]
+            Field to be loaded as pkg_field : data_field_name for each particle type.
+        code : str
+            Code you are working with. 
+        ptypes : dict[str : str]
+            Particle types present.
         """
         self._package_dir = str(Path(__file__).resolve().parent)
         self.loader = Config.default_loader
@@ -75,33 +81,50 @@ class Config:
 
     def _load_code_config(self):
         """Loads base_units, ptypes and their fields and gas type from the .yaml configuration file corresponding
-        to the precise code. YAML files are stored in package-dir/CodeConfig
+        to the precise code. YAML files are stored in package-dir/loaders_config
 
         Returns
         -------
         None
         """
-        with open(self._package_dir + "/CodeConfig/" + self._code + ".yaml", 'r') as f:
+        with open(self._package_dir + "/loaders_config/" + self._code + ".yaml", 'r') as f:
             config_data = yaml.safe_load(f)
 
+            #self.base_units = config_data['base_units']
+            #self.ptypes = {
+            #    'stars': config_data['stars']['pt'],
+            #    'darkmatter': config_data['darkmatter']['pt'],
+            #    'gas': config_data['gas']['pt'],
+            #    'gas_type': config_data['gas_type']
+            #}
+            #self.fields = {
+            #    'stars': config_data['stars']['fields'],
+            #    'darkmatter': config_data['darkmatter']['fields'],
+            #    'gas': config_data['gas']['fields']
+            #}
+
+            self.ptypes = {}
+            self.fields = {}
             self.base_units = config_data['base_units']
-            self.ptypes = {
-                'stars': config_data['stars']['pt'],
-                'darkmatter': config_data['darkmatter']['pt'],
-                'gas': config_data['gas']['pt'],
-                'gas_type': config_data['gas_type']
-            }
-            self.fields = {
-                'stars': config_data['stars']['fields'],
-                'darkmatter': config_data['darkmatter']['fields'],
-                'gas': config_data['gas']['fields']
-            }
+            
+            if 'stars' in config_data:
+                self.ptypes['stars'] = config_data['stars']['pt']
+                self.fields['stars'] = config_data['stars']['fields']
+            
+            if 'darkmatter' in config_data:
+                self.ptypes['darkmatter'] = config_data['darkmatter']['pt']
+                self.fields['darkmatter'] = config_data['darkmatter']['fields']
+            
+            if 'gas' in config_data:
+                self.ptypes['gas'] = config_data['gas']['pt']
+                self.fields['gas'] = config_data['gas']['fields']
+                self.fields['gas']['type'] = config_data['gas']['type']
 
         return None
 
     @staticmethod
     def check_consistent_units(base_units, units):
-        """Checks if base_units == units for consistency when loading and parsing data with yt and using CodeConfig files.
+        """Checks if base_units == units for consistency when loading and parsing data with yt and using loaders_config files.
         Parameters
         ----------
         units : dict[str : str]
@@ -175,6 +198,11 @@ class Config:
             u = f"{un.value:.10e} * {'*'.join(un_bits[:])}"
 
         return u
+
+
+
+
+
 
 
 config = Config()

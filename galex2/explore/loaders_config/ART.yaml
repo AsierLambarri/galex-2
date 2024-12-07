@@ -25,6 +25,7 @@ darkmatter:
         IDs: particle_index
     
 gas:
+    type: MESH
     pt: art
     fields: 
         coords: c
@@ -32,8 +33,6 @@ gas:
         masses: m 
         IDs: i
  
-        
-gas_type: MESH
-    
+            
 
     

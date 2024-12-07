@@ -6,7 +6,7 @@ from unyt import unyt_array, unyt_quantity
 
 from .config import config
 from .base import BaseSimulationObject
-from .ptype import StellarComponent, DarkComponent, GasComponentSPH, GasComponentMESH
+from .particle_type import StellarComponent, DarkComponent
 from .class_methods import bound_particlesBH, bound_particlesAPROX
 
 class SnapshotHalo(BaseSimulationObject):
@@ -127,8 +127,8 @@ class SnapshotHalo(BaseSimulationObject):
     def Mdyn(self):
         """Dynamical mass
         """
-        if self.stars.rh_3D is None:
-            raise ValueError("The 3D half-mass radius is not defined. Cannot calculate dynamical mass.")
+        if self.stars.rh3d is None:
+            return None
         return self._dynamical_mass()
 
     ##########################################################
@@ -199,7 +199,7 @@ class SnapshotHalo(BaseSimulationObject):
         output.append(f"{'dm':<20}: {self.darkmatter.masses.sum():.3e}")
         output.append(f"{'stars':<20}: {self.stars.masses.sum():.3e}")
         output.append(f"{'gas':<20}: yes")
-        output.append(f"{'Mdyn':<20}: {0 if self.Mdyn is None else self.Mdyn}")
+        output.append(f"{'Mdyn':<20}: {None if self.Mdyn is None else self.Mdyn:.3e}")
 
         output.append(f"\nunits")
         output.append(f"{'':-<21}")
@@ -349,8 +349,8 @@ class SnapshotHalo(BaseSimulationObject):
     def _dynamical_mass(self):
         """Computes the dynamical mass: the mass enclonsed inside the 3D half light radius of stars.
         """
-        mass_stars = self.stars.enclosed_mass(self.stars.rh_3D, self.stars.cm)
-        mass_dm = self.darkmatter.enclosed_mass(self.stars.rh_3D, self.stars.cm)
+        mass_stars = self.stars.enclosed_mass(self.stars.rh3d, self.stars.cm)
+        mass_dm = self.darkmatter.enclosed_mass(self.stars.rh3d, self.stars.cm)
 
         self.Mdyn = mass_stars + mass_dm
         return self.Mdyn

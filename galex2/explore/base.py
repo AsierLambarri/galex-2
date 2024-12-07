@@ -73,8 +73,27 @@ class BaseComponent:
     It also simplifies the code, as a plethora of common methods are displaced to here.
     """
     _shared_attrs = {
-        "darkmatter": {"rockstar_center": None, "rockstar_vel": None, "rvir": None, "rs": None, "c": None, 'vmax': None, 'vrms': None},
-        "stars": {"ML": None},
+        "darkmatter": {
+            "rockstar_center": None, 
+            "rockstar_vel": None,
+            "cm": None,
+            "vcm": None,
+            "rh":None,
+            "rh3d":None,
+            "rvir": None, 
+            "rs": None, 
+            "c": None, 
+            "vmax": None, 
+            "vrms": None
+        },
+        
+        "stars": {
+            "cm": None,
+            "vcm": None,
+            "rh":None,
+            "rh3d":None,
+            "ML": None
+        }
     }
 
 
@@ -131,11 +150,51 @@ class BaseComponent:
         return list(cls._shared_attrs.get(pt, {}).keys())
 
 
-    ##########################################################
-    ###                                                    ###
-    ##                    GENERAL METHODS                   ##
-    ###                                                    ###
-    ##########################################################
+
+    def _priv__getattr__(self, field_name):
+        """Dynamical loader for accessing fields.
+        """
+        funits = {
+            'coords': self.units['length'],
+            'hsml': self.units['length'],
+            'masses': self.units['mass'],
+            'masses_ini': self.units['mass'],
+            'vels': self.units['velocity'],
+            'formation_times': self.units['time'],
+            'metallicity': self.units['dimensionless']
+        }
+        vec_fields = ['coords', 'vels', 'bcoords', 'bvels', 'cyl_coords', 'cyl_vels', 'sp_coords', 'sp_vels', 'box_coords', 'box_vels']
+        if field_name  in self._dynamic_fields.keys():
+            if field_name in self._fields_loaded:
+                return self._fields_loaded[field_name].in_units(funits[field_name]) if field_name in funits else self._fields_loaded[field_name]
+            else:
+                field = (self._base_ptype, self._dynamic_fields[field_name])
+                if field_name in vec_fields:
+                    self._fields_loaded[field_name] = vectorized_base_change(np.linalg.inv(self.basis), self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field])
+                else:
+                    self._fields_loaded[field_name] = self._data[field].in_units(funits[field_name]) if field_name in funits else self._data[field]
+                return self._fields_loaded[field_name]
+                
+        elif field_name  in ['b'+ f for f in list(self._dynamic_fields.keys())]:
+            if field_name in self._fields_loaded:
+                return self._fields_loaded[field_name].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._fields_loaded[field_name]
+            else:
+                field = (self._base_ptype, self._dynamic_fields[field_name[1:]])
+                if field_name in vec_fields:
+                    self._fields_loaded[field_name] = vectorized_base_change(np.linalg.inv(self.basis), self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask])
+                else:
+                    self._fields_loaded[field_name] = self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask]
+                return self._fields_loaded[field_name]
+        
+        try:
+            return self.__getattribute__(field_name)
+        except AttributeError:
+            raise AttributeError(f"Field '{field_name}' not found for particle type {self.ptype}. "+ f"Available fields are: {list(self._dynamic_fields.keys())}")
+        
+        AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._dynamic_fields.keys())}")
+        return None
+
+    
 
     def _default_center_of_mass(self):
         """Computes coarse CoM using all the particles as 

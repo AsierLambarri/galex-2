@@ -28,6 +28,7 @@ darkmatter:
         IDs: ParticleIDs
     
 gas:
+    type: SPH
     pt: PartType0
     fields: 
         coords: Coordinates
@@ -52,4 +53,3 @@ gas:
         XHeIII: XHeIII
         XMetal: XMetal
         
-gas_type: SPH
