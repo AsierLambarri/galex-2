@@ -50,14 +50,6 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         self.bound_method = None
         self.bmask = None
 
-        self.cm = None
-        self.vcm = None
-        
-        self.rh = None
-        self.rh3d = None
-        self.sigma_los = None
-        
-
         missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields["stars"]]
         if missing_fields:
             raise ValueError(f"Missing mandatory fields {missing_fields} for particle type stars")
@@ -74,73 +66,48 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
 
 
 
-    
-    
     @property
     def ML(self):
-        if self.ptype == "stars":
-            value = self.get_shared_attr(self.ptype, "ML")
-            return value if value is None else value.in_units("Msun/Lsun")
-        raise AttributeError("Attribute 'ML' is hidden for dark matter.")
-
+        value = self.get_shared_attr(self.ptype, "ML")
+        return value if value is None else value.in_units("Msun/Lsun")
     @ML.setter
     def ML(self, value):
-        if self.ptype == "stars":
-            self.update_shared_attr(self.ptype, "ML", value)
-        else:
-            raise AttributeError("Cannot set 'ML' for dark matter.")
-
+        self.update_shared_attr(self.ptype, "ML", value)
     @property
-    def _rvir(self):
-        if self.ptype == "stars":
-            value = self.get_shared_attr("darkmatter", "rvir")
-            return value if value is None else value.in_units(self.units['length'])
-        raise AttributeError("Attribute '_rvir' is not accessible for dark matter.")
-
+    def cm(self):
+        value = self.get_shared_attr(self.ptype, "cm")
+        return value if value is None else value.in_units(self.units['length'])
+    @cm.setter
+    def cm(self, value):
+        self.update_shared_attr(self.ptype, "cm", value)
     @property
-    def _rs(self):
-        if self.ptype == "stars":
-            value = self.get_shared_attr("darkmatter", "rs")
-            return value if value is None else value.in_units(self.units['length'])
-        raise AttributeError("Attribute '_rs' is not accessible for dark matter.")
-
+    def vcm(self):
+        value = self.get_shared_attr(self.ptype, "vcm")
+        return value if value is None else value.in_units(self.units['velocity'])
+    @vcm.setter
+    def vcm(self, value):
+        self.update_shared_attr(self.ptype, "vcm", value)
     @property
-    def _c(self):
-        if self.ptype == "stars":
-            value = self.get_shared_attr("darkmatter", "c")
-            return value if value is None else value.in_units(self.units['dimensionless'])
-        raise AttributeError("Attribute '_c' is not accessible for dark matter.")
-
+    def rh(self):
+        value = self.get_shared_attr(self.ptype, "rh")
+        return value if value is None else value.in_units(self.units['length'])
+    @rh.setter
+    def rh(self, value):
+        self.update_shared_attr(self.ptype, "rh", value)
     @property
-    def _rockstar_center(self):
-        if self.ptype == "stars":
-            value = self.get_shared_attr("darkmatter", "rockstar_center")
-            return value if value is None else np.linalg.inv(self.basis) @ value.in_units(self.units['length'])
-        raise AttributeError("Attribute '_rockstar_center' is not accessible for dark matter.")
-
+    def rh3d(self):
+        value = self.get_shared_attr(self.ptype, "rh3d")
+        return value if value is None else value.in_units(self.units['length'])
+    @rh3d.setter
+    def rh3d(self, value):
+        self.update_shared_attr(self.ptype, "rh3d", value)
     @property
-    def _rockstar_vel(self):
-        if self.ptype == "stars":
-            value = self.get_shared_attr("darkmatter", "rockstar_vel")
-            return value if value is None else np.linalg.inv(self.basis) @ value.in_units(self.units['velocity'])
-        raise AttributeError("Attribute '_rockstar_vel' is not accessible for dark matter.")
-
-    @property
-    def _vmax(self):
-        if self.ptype == "stars":
-            value = self.get_shared_attr("darkmatter", "vmax")
-            return value if value is None else value.in_units(self.units['velocity'])
-        raise AttributeError("Attribute 'vmax' is hidden for stars.")
-
-    @property
-    def _vrms(self):
-        if self.ptype == "stars":
-            value = self.get_shared_attr("darkmatter", "vrms")
-            return value if value is None else value.in_units(self.units['velocity'])
-        raise AttributeError("Attribute 'vrms' is hidden for stars.")
-
-
-
+    def sigma_los(self):
+        value = self.get_shared_attr(self.ptype, "sigma_los")
+        return value if value is None else value.in_units(self.units['velocity'])
+    @sigma_los.setter
+    def sigma_los(self, value):
+        self.update_shared_attr(self.ptype, "sigma_los", value)
 
     
 
@@ -333,12 +300,6 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
         self.use_bound_if_computed = True
         self.bound_method = None
         self.bmask = None
-
-        self.cm = None
-        self.vcm = None
-        
-        self.rh = None
-        self.rh3d = None
                 
         missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields["darkmatter"]]
         if missing_fields:
@@ -356,111 +317,84 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
 
 
 
-    
     @property
-    def rvir(self):
-        if self.ptype == "darkmatter":
-            value = self.get_shared_attr(self.ptype, "rvir")
-            return value if value is None else value.in_units(self.units['length'])
-        raise AttributeError("Attribute 'rvir' is hidden for stars.")
-
-    @rvir.setter
-    def rvir(self, value):
-        if self.ptype == "darkmatter":
-            self.update_shared_attr(self.ptype, "rvir", value)
-        else:
-            raise AttributeError("Cannot set 'rvir' for stars.")
-
+    def cm(self):
+        value = self.get_shared_attr(self.ptype, "cm")
+        return value if value is None else value.in_units(self.units['length'])
+    @cm.setter
+    def cm(self, value):
+        self.update_shared_attr(self.ptype, "cm", value)
     @property
-    def rs(self):
-        if self.ptype == "darkmatter":
-            value = self.get_shared_attr(self.ptype, "rs")
-            return value if value is None else value.in_units(self.units['length'])
-        raise AttributeError("Attribute 'rs' is hidden for stars.")
-
-    @rs.setter
-    def rs(self, value):
-        if self.ptype == "darkmatter":
-            self.update_shared_attr(self.ptype, "rs", value)
-        else:
-            raise AttributeError("Cannot set 'rs' for stars.")
-
+    def vcm(self):
+        value = self.get_shared_attr(self.ptype, "vcm")
+        return value if value is None else value.in_units(self.units['velocity'])
+    @vcm.setter
+    def vcm(self, value):
+        self.update_shared_attr(self.ptype, "vcm", value)
     @property
-    def c(self):
-        if self.ptype == "darkmatter":
-            value = self.get_shared_attr(self.ptype, "c")
-            return value if value is None else value.in_units(self.units['dimensionless'])
-        raise AttributeError("Attribute 'c' is hidden for stars.")
-
-    @c.setter
-    def c(self, value):
-        if self.ptype == "darkmatter":
-            self.update_shared_attr(self.ptype, "c", value)
-        else:
-            raise AttributeError("Cannot set 'c' for stars.")
-
+    def rh(self):
+        value = self.get_shared_attr(self.ptype, "rh")
+        return value if value is None else value.in_units(self.units['length'])
+    @rh.setter
+    def rh(self, value):
+        self.update_shared_attr(self.ptype, "rh", value)
     @property
-    def rockstar_center(self):
-        if self.ptype == "darkmatter":
-            value = self.get_shared_attr(self.ptype, "rockstar_center")
-            return value if value is None else np.linalg.inv(self.basis) @ value.in_units(self.units['length'])
-        raise AttributeError("Attribute 'rockstar_center' is hidden for stars.")
-
-    @rockstar_center.setter
-    def rockstar_center(self, value):
-        if self.ptype == "darkmatter":
-            self.update_shared_attr(self.ptype, "rockstar_center", value)
-        else:
-            raise AttributeError("Cannot set 'rockstar_center' for stars.")
-
-    @property
-    def rockstar_vel(self):
-        if self.ptype == "darkmatter":
-            value = self.get_shared_attr(self.ptype, "rockstar_vel")
-            return value if value is None else np.linalg.inv(self.basis) @ value.in_units(self.units['velocity'])
-        raise AttributeError("Attribute 'rockstar_vel' is hidden for stars.")
-
-    @rockstar_vel.setter
-    def rockstar_vel(self, value):
-        if self.ptype == "darkmatter":
-            self.update_shared_attr(self.ptype, "rockstar_vel", value)
-        else:
-            raise AttributeError("Cannot set 'rockstar_vel' for stars.")
-
-    @property
-    def vmax(self):
-        if self.ptype == "darkmatter":
-            value = self.get_shared_attr(self.ptype, "vmax")
-            return value if value is None else value.in_units(self.units['velocity'])
-        raise AttributeError("Attribute 'vmax' is hidden for stars.")
-
-    @rockstar_vel.setter
-    def vmax(self, value):
-        if self.ptype == "darkmatter":
-            self.update_shared_attr(self.ptype, "vmax", value)
-        else:
-            raise AttributeError("Cannot set 'vmax' for stars.")
-
-    @property
-    def vrms(self):
-        if self.ptype == "darkmatter":
-            value = self.get_shared_attr(self.ptype, "vrms")
-            return value if value is None else value.in_units(self.units['velocity'])
-        raise AttributeError("Attribute 'vrms' is hidden for stars.")
-
-    @rockstar_vel.setter
-    def vrms(self, value):
-        if self.ptype == "darkmatter":
-            self.update_shared_attr(self.ptype, "vrms", value)
-        else:
-            raise AttributeError("Cannot set 'vrms' for stars.")
+    def rh3d(self):
+        value = self.get_shared_attr(self.ptype, "rh3d")
+        return value if value is None else value.in_units(self.units['length'])
+    @rh3d.setter
+    def rh3d(self, value):
+        self.update_shared_attr(self.ptype, "rh3d", value)
         
     @property
-    def _ML(self):
-        if self.ptype == "darkmatter":
-            value = self.get_shared_attr("stars", "ML")
-            return value if value is None else value.in_units("Msun/Lsun")
-        raise AttributeError("Attribute '_ML' is not accessible for stars.")
+    def rvir(self):
+        value = self.get_shared_attr(self.ptype, "rvir")
+        return value if value is None else value.in_units(self.units['length'])
+    @rvir.setter
+    def rvir(self, value):
+        self.update_shared_attr(self.ptype, "rvir", value)
+    @property
+    def rs(self):
+        value = self.get_shared_attr(self.ptype, "rs")
+        return value if value is None else value.in_units(self.units['length'])
+    @rs.setter
+    def rs(self, value):
+        self.update_shared_attr(self.ptype, "rs", value)
+    @property
+    def c(self):
+        value = self.get_shared_attr(self.ptype, "c")
+        return value if value is None else value.in_units(self.units['dimensionless'])
+    @c.setter
+    def c(self, value):
+        self.update_shared_attr(self.ptype, "c", value)
+    @property
+    def rockstar_center(self):
+        value = self.get_shared_attr(self.ptype, "rockstar_center")
+        return value if value is None else np.linalg.inv(self.basis) @ value.in_units(self.units['length'])
+    @rockstar_center.setter
+    def rockstar_center(self, value):
+        self.update_shared_attr(self.ptype, "rockstar_center", value)
+    @property
+    def rockstar_vel(self):
+        value = self.get_shared_attr(self.ptype, "rockstar_vel")
+        return value if value is None else np.linalg.inv(self.basis) @ value.in_units(self.units['velocity'])
+    @rockstar_vel.setter
+    def rockstar_vel(self, value):
+        self.update_shared_attr(self.ptype, "rockstar_vel", value)
+    @property
+    def vmax(self):
+        value = self.get_shared_attr(self.ptype, "vmax")
+        return value if value is None else value.in_units(self.units['velocity'])
+    @rockstar_vel.setter
+    def vmax(self, value):
+        self.update_shared_attr(self.ptype, "vmax", value)
+    @property
+    def vrms(self):
+        value = self.get_shared_attr(self.ptype, "vrms")
+        return value if value is None else value.in_units(self.units['velocity'])
+    @rockstar_vel.setter
+    def vrms(self, value):
+        self.update_shared_attr(self.ptype, "vrms", value)
 
 
 
