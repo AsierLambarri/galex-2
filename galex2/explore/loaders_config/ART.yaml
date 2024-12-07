@@ -26,13 +26,17 @@ darkmatter:
     
 gas:
     type: MESH
-    pt: art
+    pt: gas
     fields: 
-        coords: c
-        vels: v
-        masses: m 
-        IDs: i
- 
+        coords: cell_position
+        vels: cell_velocity
+        masses: cell_mass
+        density: density
+        temperature: temperature
+        metallicity: metallicity
+        XH: H_mass_fraction
+        XHe: He_mass_fraction
+        XM: metal_mass_fraction
             
 
     

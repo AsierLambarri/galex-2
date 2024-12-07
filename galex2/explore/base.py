@@ -93,7 +93,15 @@ class BaseComponent:
             "rh":None,
             "rh3d":None,
             "ML": None
+        },
+
+        "gas": {
+            "cm": None,
+            "vcm": None,
+            "rh":None,
+            "rh3d":None,
         }
+        
     }
 
 
