@@ -72,7 +72,7 @@ class BaseComponent:
     
     It also simplifies the code, as a plethora of common methods are displaced to here.
     """
-    _default_shared_attrs = {
+    _shared_attrs = {
         "darkmatter": {
             "rockstar_center": None, 
             "rockstar_vel": None,
@@ -105,7 +105,6 @@ class BaseComponent:
         }
         
     }
-
 
     @classmethod
     def format_value(cls, value):
@@ -167,7 +166,22 @@ class BaseComponent:
         """List all shared attributes for a given particle type."""
         return list(cls._shared_attrs.get(pt, {}).keys())
 
+    @classmethod
+    def clean_shared_attrs(cls, pt):
+        """Reset all shared attributes for a specific particle type to None."""
+        if pt not in cls._shared_attrs:
+            raise ValueError(f"Unknown particle type: {pt}")
+        for key in cls._shared_attrs[pt].keys():
+            cls._shared_attrs[pt][key] = None
 
+        return None
+
+
+    
+
+
+
+    
 
     def _priv__getattr__(self, field_name):
         """Dynamical loader for accessing fields.

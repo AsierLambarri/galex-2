@@ -37,6 +37,7 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         """Initializes the ptype class.
         """
         super().__init__()
+
         self.ptype, self._base_ptype = "stars", copy(self.ptypes["stars"])
         
         self._dynamic_fields = copy(self.fields["stars"])
@@ -51,6 +52,7 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         if missing_fields:
             raise ValueError(f"Missing mandatory fields {missing_fields} for particle type stars")
 
+        self.clean_shared_attrs(self.ptype)
         self.set_shared_attrs(self.ptype, kwargs)
         self._default_center_of_mass()
 
@@ -272,7 +274,7 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
                  ):
         """Initializes the ptype class.
         """
-        super().__init__()
+        super().__init__()        
         self.ptype, self._base_ptype = "darkmatter", copy(self.ptypes["darkmatter"])
         self._dynamic_fields = copy(self.fields["darkmatter"])
         self._fields_loaded = {}
@@ -286,6 +288,7 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
         if missing_fields:
             raise ValueError(f"Missing mandatory fields {missing_fields} for particle type darkmatter")
 
+        self.clean_shared_attrs(self.ptype)
         self.set_shared_attrs(self.ptype, kwargs)
         self._default_center_of_mass()
         
@@ -558,6 +561,7 @@ class GasComponent(BaseSimulationObject, BaseComponent):
         if missing_fields:
             raise ValueError(f"Missing mandatory fields {missing_fields} for particle type stars")
 
+        self.clean_shared_attrs(self.ptype)
         self.set_shared_attrs(self.ptype, kwargs)
         self._default_center_of_mass()
 
