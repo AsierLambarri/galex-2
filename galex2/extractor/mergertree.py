@@ -9,7 +9,7 @@ from unyt import unyt_quantity
 
 from copy import copy, deepcopy
 
-from ..explore.class_methods import compute_stars_in_halo, load_ftable
+from ..explorer.class_methods import compute_stars_in_halo, load_ftable
 
 
 class MergerTree:

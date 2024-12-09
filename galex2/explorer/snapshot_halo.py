@@ -252,7 +252,7 @@ class SnapshotHalo(BaseSimulationObject):
 
         assert self.loader, "The module-level loader is not set! You can set it up as: import pkg; pkg.config.loader = loader_function before you start your scripts or use the default one.\nBeware of the requirements that this loader must fulfill!"
     
-        return self.loader(self.fn)
+        return self.loader(self.fn, config.code)
         
         
     def parse_dataset(self, dataset):

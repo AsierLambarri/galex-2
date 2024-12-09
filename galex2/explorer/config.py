@@ -82,13 +82,13 @@ class Config:
 
     def _load_code_config(self):
         """Loads base_units, ptypes and their fields and gas type from the .yaml configuration file corresponding
-        to the precise code. YAML files are stored in package-dir/conde_fields_config
+        to the precise code. YAML files are stored in package-dir/code_fields_config
 
         Returns
         -------
         None
         """
-        with open(self._package_dir + "/conde_fields_config/" + self._code + ".yaml", 'r') as f:
+        with open(self._package_dir + "/code_fields_config/" + self._code + ".yaml", 'r') as f:
             config_data = yaml.safe_load(f)
 
             #self.base_units = config_data['base_units']
@@ -125,7 +125,7 @@ class Config:
 
     @staticmethod
     def check_consistent_units(base_units, units):
-        """Checks if base_units == units for consistency when loading and parsing data with yt and using conde_fields_config files.
+        """Checks if base_units == units for consistency when loading and parsing data with yt and using code_fields_config files.
         Parameters
         ----------
         units : dict[str : str]
@@ -143,12 +143,12 @@ class Config:
             )} units do not coincide to 1E-10 precision. Units read from config file is {unit} but those read from yt are {units[key]}!"
 
     @staticmethod
-    def default_loader(fn):
+    def default_loader(fn, code=None):
         """Default loader. Returns yt.dataset
         """
-        if self.code == "ART":
+        if code == "ART":
             ds = ARTI_loader(fn)
-        elif self.code == "GEAR":
+        elif code == "GEAR":
             ds = GEAR_loader(fn)
         else:
             ds = yt.load(fn)

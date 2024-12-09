@@ -14,8 +14,8 @@ stars:
         vels: Velocities
         masses: Masses
         masses_ini: InitialMass
-        age: star_age
-        metallicity: correct_metallicity_Zsun
+        ages: star_age
+        metallicities: particle_metallicity_Zsun
         
     
 darkmatter:

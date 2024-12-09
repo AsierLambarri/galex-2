@@ -1,4 +1,5 @@
 import yt
+import numpy as np
 from yt.units import dimensions
 from unyt import unyt_array, unyt_quantity
 
@@ -145,22 +146,22 @@ def GEAR_loader(fn):
 
 
     ds.add_field(
-        ("PartType1", "correct_metal_mass_fraction"),
+        ("PartType1", "particle_metal_mass_fraction"),
         function=lambda field, data: data["PartType1", "StarMetals"].in_units("") if len(data["PartType1", "StarMetals"].shape) == 1 else data["PartType1", "StarMetals"][:,9].in_units(""),
         sampling_type="local",
         units='auto',
         dimensions=dimensions.dimensionless,
     )
     ds.add_field(
-        ("PartType1", "correct_metal_mass"),
-        function=lambda field, data: data["PartType1", "correct_metal_mass_fraction"] * data["PartType1", "Masses"],
+        ("PartType1", "particle_metal_mass"),
+        function=lambda field, data: data["PartType1", "particle_metal_mass_fraction"] * data["PartType1", "Masses"],
         sampling_type="local",
         units='auto',
         dimensions=dimensions.mass,
     )
     ds.add_field(
-        ("PartType1", "correct_metallicity_Zsun"),
-        function=lambda field, data: np.log10(data["PartType1", "correct_metal_mass_fraction"] / Z_Solar),
+        ("PartType1", "particle_metallicity_Zsun"),
+        function=lambda field, data: np.log10(data["PartType1", "particle_metal_mass_fraction"] / Z_Solar),
         sampling_type="local",
         units='auto',
         dimensions=dimensions.dimensionless,

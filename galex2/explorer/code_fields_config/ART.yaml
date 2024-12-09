@@ -14,7 +14,7 @@ stars:
         vels: particle_velocity
         masses: particle_mass
         masses_ini: particle_mass_initial
-        metallicity: correct_metallicity_Zsun
+        metallicities: particle_metallicity_Zsun
         
     
 darkmatter:
@@ -34,9 +34,9 @@ gas:
         coords: cell_position
         vels: cell_velocity
         masses: cell_mass
-        density: density
-        temperature: temperature
-        metallicity: correct_metallicity_Zsun
+        densities: density
+        temperatures: temperature
+        metallicities: correct_metallicity_Zsun
         XH: H_mass_fraction
         XHe: He_mass_fraction
         XFe: Fe_mass_fraction
