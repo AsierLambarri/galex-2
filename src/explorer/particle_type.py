@@ -29,9 +29,6 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
     - velocities : stored as self.vels
     - masses : stored as self.masses
     - IDs : stored as self.ids
-    
-    IMPLEMENTATION OF MANDATORY FIELDS FOR EACH PARTICLE TYPE. MIGHT SEPARATE INTO THREE PTYPES.
-    IMPLEMENTATION OF DYNAMICAL FIELD LOADING
     """ 
     def __init__(self,
                  data,
@@ -48,7 +45,7 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         
         self.use_bound_if_computed = True
         self.bound_method = None
-        self.bmask = None
+        self.bmask = np.ones_like(self.masses.value, dtype=bool)
 
         missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields["stars"]]
         if missing_fields:
@@ -116,20 +113,7 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         """
         return self._priv__getattr__(field_name)
 
-    def _delete_vectorial_fields(self):
-        """Deletes vectorial fields: a.k.a. coordinates and velocities from cache when called. Used to force the dynamical field loader to re-load vectorial
-        fields after a new line of sight has been set, so that the fields are properly oriented.
-        """
-        f = ['coords', 'vels', 'bcoords', 'bvels']
-        for key in f:
-            try:      
-                del self._fields_loaded[key]
-            except:
-                continue
-
-        return None
-
-
+   
 
 
 
@@ -238,11 +222,11 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
             self.masses,
             self.vels,
             self.IDs,
-            {'center': self._rockstar_center ,
-            'center_vel': self._rockstar_vel,
-            'rvir': self._rvir,
-            'vmax': self._vmax,
-            'vrms': self._vrms                                                             
+            {'center': self._shared_attrs["darkmatter"]["rockstar_center"],
+            'center_vel': self._shared_attrs["darkmatter"]["rockstar_vel"],
+            'rvir': self._shared_attrs["darkmatter"]["rvir"],
+            'vmax': self._shared_attrs["darkmatter"]["vmax"],
+            'vrms': self._shared_attrs["darkmatter"]["vrms"]                                                             
             },
             verbose=verbose
         )
@@ -281,9 +265,6 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
     - velocities : stored as self.vels
     - masses : stored as self.masses
     - IDs : stored as self.ids
-    
-    IMPLEMENTATION OF MANDATORY FIELDS FOR EACH PARTICLE TYPE. MIGHT SEPARATE INTO THREE PTYPES.
-    IMPLEMENTATION OF DYNAMICAL FIELD LOADING
     """
     def __init__(self,
                  data,
@@ -299,7 +280,7 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
         
         self.use_bound_if_computed = True
         self.bound_method = None
-        self.bmask = None
+        self.bmask = np.ones_like(self.masses.value, dtype=bool)
                 
         missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields["darkmatter"]]
         if missing_fields:
@@ -405,19 +386,6 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
         """Dynamical loader for accessing fields.
         """
         return self._priv__getattr__(field_name)
-
-    def _delete_vectorial_fields(self):
-        """Deletes vectorial fields: a.k.a. coordinates and velocities from cache when called. Used to force the dynamical field loader to re-load vectorial
-        fields after a new line of sight has been set, so that the fields are properly oriented.
-        """
-        f = ['coords', 'vels', 'bcoords', 'bvels']
-        for key in f:
-            try:      
-                del self._fields_loaded[key]
-            except:
-                continue
-
-        return None
 
 
 
@@ -567,14 +535,74 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
 
 
 class GasComponent(BaseSimulationObject, BaseComponent):
+    """
+    """
     def __init__(self,
                  data,
+                 **kwargs
                  ):
         """Initializes the ptype class.
         """
+        super().__init__()
+        self.ptype, self._base_ptype = "gas", copy(self.ptypes["gas"])
+        
+        self._dynamic_fields = copy(self.fields["gas"])
+        self._fields_loaded = {}
+        self._data = data
+        
+        self.use_bound_if_computed = True
+        self.bound_method = None
+        self.bmask = np.ones_like(self.masses.value, dtype=bool)
+
+        missing_fields = [f for f in ['coords', 'vels', 'masses'] if f not in config.fields["gas"]]
+        if missing_fields:
+            raise ValueError(f"Missing mandatory fields {missing_fields} for particle type stars")
+
+        self.set_shared_attrs(self.ptype, kwargs)
+        self._default_center_of_mass()
+
+        
+        del self.loader
+        del self.parser
+        del self.ptypes
+        del self.fields
 
 
-
+    @property
+    def cm(self):
+        value = self.get_shared_attr(self.ptype, "cm")
+        return value if value is None else value.in_units(self.units['length'])
+    @cm.setter
+    def cm(self, value):
+        self.update_shared_attr(self.ptype, "cm", value)
+    @property
+    def vcm(self):
+        value = self.get_shared_attr(self.ptype, "vcm")
+        return value if value is None else value.in_units(self.units['velocity'])
+    @vcm.setter
+    def vcm(self, value):
+        self.update_shared_attr(self.ptype, "vcm", value)
+    @property
+    def rh(self):
+        value = self.get_shared_attr(self.ptype, "rh")
+        return value if value is None else value.in_units(self.units['length'])
+    @rh.setter
+    def rh(self, value):
+        self.update_shared_attr(self.ptype, "rh", value)
+    @property
+    def rh3d(self):
+        value = self.get_shared_attr(self.ptype, "rh3d")
+        return value if value is None else value.in_units(self.units['length'])
+    @rh3d.setter
+    def rh3d(self, value):
+        self.update_shared_attr(self.ptype, "rh3d", value)
+    @property
+    def sigma_los(self):
+        value = self.get_shared_attr(self.ptype, "sigma_los")
+        return value if value is None else value.in_units(self.units['velocity'])
+    @sigma_los.setter
+    def sigma_los(self, value):
+        self.update_shared_attr(self.ptype, "sigma_los", value)
 
 
 
@@ -584,6 +612,9 @@ class GasComponent(BaseSimulationObject, BaseComponent):
             return self._priv__getattr__(field_name)
 
 
+
+    
+
     def get_gas_fields(self):
         """Returns all loadable particle fields
         """
@@ -591,6 +622,84 @@ class GasComponent(BaseSimulationObject, BaseComponent):
             return self._dynamic_fields.keys()
         else:
             return np.append(list(self._dynamic_fields.keys()), ['b'+f for f in list(self._dynamic_fields.keys())]) 
+
+    def info(self, 
+             get_str=False
+            ):
+        """Returns a pretty information summary.
+        
+        Parameters
+        ----------
+        get_str : bool
+            Return str instead of print. Default: False
+
+        Returns
+        -------
+        info : str, optionally
+
+        """
+        output = []
+        
+        output.append(f"\n{self.ptype}")
+        output.append(f"{'':-<21}")
+        try:
+            output.append(f"{'len_pos':<20}: {len(self.coords)}")
+            output.append(f"{'pos[0]':<20}: [{self.coords[0,0].value:.2f}, {self.coords[0,1].value:.2f}, {self.coords[0,2].value:.2f}] {self.units['length']}")
+            output.append(f"{'len_vel':<20}: {len(self.vels)}")
+            output.append(f"{'vel[0]':<20}: [{self.vels[0,0].value:.2f}, {self.vels[0,1].value:.2f}, {self.vels[0,2].value:.2f}] {self.units['velocity']}")
+            output.append(f"{'len_mass':<20}: {len(self.masses)}")
+            output.append(f"{'mass[0]':<20}: {self.masses[0]}")
+            output.append(f"{'len_ids':<20}: {len(self.IDs)}")
+            
+        except:
+            output.append(f"{'len_pos':<20}: {len(self.coords)}")
+            output.append(f"{'len_vel':<20}: {len(self.coords)}")
+            output.append(f"{'len_mass':<20}: {len(self.coords)}")
+
+        output.append(f"{'cm':<20}: {self.cm}")
+        output.append(f"{'vcm':<20}: {self.vcm}")
+        output.append(f"{'rh, rh3D':<20}: {self.rh}, {self.rh3d}")
+
+        if get_str:
+            return "\n".join(output)
+        else:
+            print("\n".join(output))
+            return None
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

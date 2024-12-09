@@ -34,7 +34,7 @@ gas:
         coords: cell_position
         vels: cell_velocity
         masses: cell_mass
-        densities: density
+        dens: density
         temperatures: temperature
         metallicities: correct_metallicity_Zsun
         XH: H_mass_fraction

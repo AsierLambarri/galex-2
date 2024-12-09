@@ -6,7 +6,7 @@ from unyt import unyt_array, unyt_quantity
 
 from .config import config
 from .base import BaseSimulationObject
-from .particle_type import StellarComponent, DarkComponent
+from .particle_type import StellarComponent, DarkComponent, GasComponent
 from .class_methods import bound_particlesBH, bound_particlesAPROX
 
 class SnapshotHalo(BaseSimulationObject):
@@ -198,8 +198,8 @@ class SnapshotHalo(BaseSimulationObject):
         output.append(f"{'cut-out radius':<20}: {self.sp_radius:.2f}")
         output.append(f"{'dm':<20}: {self.darkmatter.masses.sum():.3e}")
         output.append(f"{'stars':<20}: {self.stars.masses.sum():.3e}")
-        output.append(f"{'gas':<20}: yes")
-        output.append(f"{'Mdyn':<20}: {None if self.Mdyn is None else self.Mdyn:.3e}")
+        output.append(f"{'gas':<20}: {self.gas.masses.sum():.3e}")
+        output.append(f"{'Mdyn':<20}: {None if self.Mdyn is None else f'{self.Mdyn:.3e}'}")
 
         output.append(f"\nunits")
         output.append(f"{'':-<21}")
@@ -220,8 +220,9 @@ class SnapshotHalo(BaseSimulationObject):
         str_main = "\n".join(output)
         str_stars = self.stars.info(get_str=True)
         str_darkmatter = self.darkmatter.info(get_str=True)
+        str_gas = self.gas.info(get_str=True)
 
-        str_info = "\n".join([str_main, str_stars, str_darkmatter])
+        str_info = "\n".join([str_main, str_stars, str_darkmatter, str_gas])
         if get_str:
             return str_info
         else:
@@ -305,21 +306,21 @@ class SnapshotHalo(BaseSimulationObject):
         if self.base_units is None:
             self.base_units = base_units
         
-        self.stars = StellarComponent(hashable_data, **self._kwargs['stars_params'])
-        self.darkmatter = DarkComponent(hashable_data, **self._kwargs['dm_params'])
-
+        self.stars = StellarComponent(hashable_data, **self._kwargs)
+        self.darkmatter = DarkComponent(hashable_data, **self._kwargs)
+        self.gas = GasComponent(hashable_data, **self._kwargs)
         return None
         
         
 
-
     def set_units(self, new_units):
-       """Sets units for zHalo and all particle types it contains.
-       """
-       self._set_units(new_units)
-       self.stars._set_units(new_units)
-       self.darkmatter._set_units(new_units)
-       return None
+        """Sets units for zHalo and all particle types it contains.
+        """
+        self._set_units(new_units)
+        self.stars._set_units(new_units)
+        self.darkmatter._set_units(new_units)
+        self.gas._set_units(new_units)
+        return None
         
     def set_line_of_sight(self, los):
         """Sets the line of sight to the provided value. The default value for the line of sight is the x-axis: [1,0,0].
@@ -344,6 +345,7 @@ class SnapshotHalo(BaseSimulationObject):
         self._set_los(los)            
         self.stars.set_line_of_sight(los)
         self.darkmatter.set_line_of_sight(los)
+        self.gas.set_line_of_sight(los)
         return None
 
     def _dynamical_mass(self):
@@ -351,9 +353,10 @@ class SnapshotHalo(BaseSimulationObject):
         """
         mass_stars = self.stars.enclosed_mass(self.stars.rh3d, self.stars.cm)
         mass_dm = self.darkmatter.enclosed_mass(self.stars.rh3d, self.stars.cm)
+        mass_gas = self.gas.enclosed_mass(self.stars.rh3d, self.stars.cm)
 
-        self.Mdyn = mass_stars + mass_dm
-        return self.Mdyn
+        #self.Mdyn = mass_stars + mass_dm + mass_gas
+        return mass_stars + mass_dm + mass_gas
         
     
 

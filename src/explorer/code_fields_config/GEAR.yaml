@@ -36,8 +36,8 @@ gas:
         masses: Masses
         hsml: SmoothingLength
         dens: Density
-        temperature: Temperature
-        metallicity: correct_metallicity_Zsun
+        temperatures: Temperature
+        metallicities: correct_metallicity_Zsun
         XM: correct_metal_mass_fraction
 
         

@@ -72,14 +72,14 @@ class BaseComponent:
     
     It also simplifies the code, as a plethora of common methods are displaced to here.
     """
-    _shared_attrs = {
+    _default_shared_attrs = {
         "darkmatter": {
             "rockstar_center": None, 
             "rockstar_vel": None,
             "cm": None,
             "vcm": None,
-            "rh":None,
-            "rh3d":None,
+            "rh": None,
+            "rh3d": None,
             "rvir": None, 
             "rs": None, 
             "c": None, 
@@ -90,16 +90,18 @@ class BaseComponent:
         "stars": {
             "cm": None,
             "vcm": None,
-            "rh":None,
-            "rh3d":None,
-            "ML": None
+            "rh": None,
+            "rh3d": None,
+            "ML": None,
+            "sigma_los": None
         },
 
         "gas": {
             "cm": None,
             "vcm": None,
-            "rh":None,
-            "rh3d":None,
+            "rh": None,
+            "rh3d": None,
+            "sigma_los": None
         }
         
     }
@@ -124,14 +126,22 @@ class BaseComponent:
     def set_shared_attrs(cls, pt, kwargs):
         """Set class-level shared attributes for a specific particle type.
         """
+        tmp = {
+            "darkmatter": "dm_params",
+            "stars": "stars_params",
+            "gas": "gas_params"
+        }
+
         if pt not in cls._shared_attrs:
             raise ValueError(f"Unknown particle type: {pt}")
-        
-        for key, value in kwargs.items():
-            if key in cls._shared_attrs[pt]:
-                cls._shared_attrs[pt][key] = cls.format_value(value)
-            else:
-                raise ValueError(f"Invalid shared attribute '{key}' for type '{pt}'")
+        if tmp[pt] not in kwargs.keys():
+            pass
+        else:
+            for key, value in kwargs[tmp[pt]].items():
+                if key in cls._shared_attrs[pt]:
+                    cls._shared_attrs[pt][key] = cls.format_value(value)
+                else:
+                    raise ValueError(f"Invalid shared attribute '{key}' for type '{pt}'")
 
         return None
     
@@ -168,8 +178,8 @@ class BaseComponent:
             'masses': self.units['mass'],
             'masses_ini': self.units['mass'],
             'vels': self.units['velocity'],
-            'formation_times': self.units['time'],
-            'metallicity': self.units['dimensionless']
+            'ages': self.units['time'],
+            'metallicities': self.units['dimensionless']
         }
         vec_fields = ['coords', 'vels', 'bcoords', 'bvels', 'cyl_coords', 'cyl_vels', 'sp_coords', 'sp_vels', 'box_coords', 'box_vels']
         if field_name  in self._dynamic_fields.keys():
@@ -202,7 +212,18 @@ class BaseComponent:
         AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._dynamic_fields.keys())}")
         return None
 
-    
+    def _delete_vectorial_fields(self):
+        """Deletes vectorial fields: a.k.a. coordinates and velocities from cache when called. Used to force the dynamical field loader to re-load vectorial
+        fields after a new line of sight has been set, so that the fields are properly oriented.
+        """
+        f = ['coords', 'vels', 'bcoords', 'bvels']
+        for key in f:
+            try:      
+                del self._fields_loaded[key]
+            except:
+                continue
+
+        return None
 
     def _default_center_of_mass(self):
         """Computes coarse CoM using all the particles as 
@@ -353,7 +374,7 @@ class BaseComponent:
         if project:
             self.rh = rh
         else:
-            self.rh_3D = rh
+            self.rh3d = rh
             
         return rh
 
