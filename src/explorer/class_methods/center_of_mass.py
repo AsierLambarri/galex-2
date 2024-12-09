@@ -2,6 +2,7 @@ import numpy as np
 from unyt import unyt_quantity
 
 from .half_mass_radius import half_mass_radius
+from .utils import easy_los_velocity
 
 def center_of_mass_pos(pos,
                        mass
@@ -54,9 +55,58 @@ def center_of_mass_vel(pos,
     -------
     CoM_vel : array-like
     """
-    mask = np.linalg.norm(pos - center) < unyt_quantity(*R)
-    print(np.count_nonzero(mask), vel[mask].shape, mass[mask].shape)
+    if center is None:
+        center = center_of_mass_pos(pos, mass)
+        
+    mask = np.linalg.norm(pos - center, axis=1) < unyt_quantity(*R)
     return np.average(vel[mask], axis=0, weights=mass[mask])
+    
+
+
+        
+
+
+def center_of_mass_vel_through_proj(pos,
+                                    vel,
+                                    center=None,
+                                    rcyl=(1E4, "Mpc"),
+                                    h=(1E4, "Mpc")
+                                   ):
+    """Computes the center of mass velocity by looking at the projected velocities through the x,y,z-axes of
+    the provided coordinates. At each projection, only the particles within cylindrical distance rmax from the center
+    and  a longitudinal distance h are taken into acocunt, to avoid picking up more than one kinematic component.
+    Center-of-mass is taken to be the simple mean of each cylinder/projection.
+
+    It is slightly different to center_of_mass_vel. Use not recomended.
+    
+    Parameters
+    ----------
+    pos : array
+        Position array.
+    vel : array
+        Velocity array.
+    center : array, optional
+        Pre-computed center-of-mass.
+    rcyl : tuple(float, str) or unyt_quantity
+        Maximum radius.
+
+    Returns
+    -------
+    cm_vel : array
+    """
+    mask_x = ( np.linalg.norm(pos[:,[1,2]] - center[1,2], axis=1) < unyt_array(*rcyl) ) & ( np.abs(pos[:,0] - center[0]) < unyt_array(*h) )
+    mask_y = ( np.linalg.norm(pos[:,[0,2]] - center[0,2], axis=1) < unyt_array(*rcyl) ) & ( np.abs(pos[:,1] - center[1]) < unyt_array(*h) )
+    mask_z = ( np.linalg.norm(pos[:,[0,1]] - center[0,1], axis=1) < unyt_array(*rcyl) ) & ( np.abs(pos[:,2] - center[2]) < unyt_array(*h) )
+
+    los_velocities_x = np.mean(easy_los_velocity(vel[mask_x], [1,0,0]))
+    los_velocities_y = np.mean(easy_los_velocity(vel[mask_y], [0,1,0]))
+    los_velocities_z = np.mean(easy_los_velocity(vel[mask_z], [0,0,1]))
+    try:
+        return unyt_array([los_velocities_x, los_velocities_y, los_velocities_z], vel.units)
+    except:
+        return np.array([los_velocities_x, los_velocities_y, los_velocities_z])
+     
+    
 
 
 def refine_center(pos, 
@@ -330,3 +380,7 @@ def _cm_iterative_mfrac_method(pos,
                         }
     
     return centering_results
+
+
+
+

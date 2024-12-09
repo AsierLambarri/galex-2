@@ -7,8 +7,17 @@ Created on Wed Nov 20 10:03:19 2024
 """
 import numpy as np
 from unyt import unyt_array
+
 from .config import config
-from .class_methods import gram_schmidt, vectorized_base_change, center_of_mass_pos, center_of_mass_vel, refine_center, half_mass_radius, easy_los_velocity, encmass
+from .class_methods import (
+                            gram_schmidt, 
+                            vectorized_base_change, 
+                            center_of_mass_pos, 
+                            center_of_mass_vel, 
+                            refine_center, 
+                            half_mass_radius, 
+                            easy_los_velocity
+                            )
 
 
 class BaseSimulationObject:
@@ -239,17 +248,35 @@ class BaseComponent:
 
         return None
 
+
+
+
+    
     def _default_center_of_mass(self):
         """Computes coarse CoM using all the particles as 
 
                 CoM = sum(mass * pos) / sum(mass)        
         """
         if self.masses.sum() != 0:
-            self.cm = center_of_mass_pos(self.coords, self.masses)
+            self.cm = center_of_mass_pos(
+                self.coords, 
+                self.masses
+            )
+            self.vcm = center_of_mass_vel(
+                self.coords, 
+                self.masses,
+                self.vels,
+                R=(1E4, "Mpc")
+            )
         else:
             self.empty_component = True
-            return None
+            self.cm = None 
+            self.vcm = None
+        return None
 
+
+
+    
 
         
     def set_line_of_sight(self, los):
