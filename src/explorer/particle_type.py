@@ -10,8 +10,11 @@ from copy import copy
 
 from .config import config
 from .base import BaseSimulationObject, BaseComponent
-
-from .class_methods import refine_center, half_mass_radius, compute_stars_in_halo, bound_particlesBH, bound_particlesAPROX, vectorized_base_change
+from .class_methods import (
+                            compute_stars_in_halo, 
+                            bound_particlesBH, 
+                            bound_particlesAPROX
+                            )
 
 
 
@@ -44,9 +47,7 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         self._fields_loaded = {}
         self._data = data
         
-        self.use_bound_if_computed = True
-        self.bound_method = None
-        self.bmask = np.ones_like(self.masses.value, dtype=bool)
+        self._bmask = np.ones_like(self.masses.value, dtype=bool)
 
         missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields["stars"]]
         if missing_fields:
@@ -122,7 +123,7 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
     def get_particle_fields(self):
         """Returns all loadable particle fields
         """
-        if self.bmask is None:
+        if self._bmask is None:
             return self._dynamic_fields.keys()
         else:
             return np.append(list(self._dynamic_fields.keys()), ['b'+f for f in list(self._dynamic_fields.keys())])
@@ -233,7 +234,7 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
             verbose=verbose
         )
         
-        self.bmask = mask
+        self._bmask = mask
         self.delta_rel = delta_rel
         self.bound_method = "starry-halo"
         
@@ -280,9 +281,7 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
         self._fields_loaded = {}
         self._data = data
         
-        self.use_bound_if_computed = True
-        self.bound_method = None
-        self.bmask = np.ones_like(self.masses.value, dtype=bool)
+        self._bmask = np.ones_like(self.masses.value, dtype=bool)
                 
         missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields["darkmatter"]]
         if missing_fields:
@@ -397,7 +396,7 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
     def get_particle_fields(self):
         """Returns all loadable particle fields
         """
-        if self.bmask is None:
+        if self._bmask is None:
             return self._dynamic_fields.keys()
         else:
             return np.append(list(self._dynamic_fields.keys()), ['b'+f for f in list(self._dynamic_fields.keys())]) 
@@ -508,7 +507,7 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
                 verbose = verbose                                  
             )
             
-        self.bmask = self.E < 0
+        self._bmask = self.E < 0
         self.bound_method = f"grav-{method}".lower()
         
         for key in list(self._fields_loaded.keys()):  
@@ -553,9 +552,7 @@ class GasComponent(BaseSimulationObject, BaseComponent):
         self._fields_loaded = {}
         self._data = data
         
-        self.use_bound_if_computed = True
-        self.bound_method = None
-        self.bmask = np.ones_like(self.masses.value, dtype=bool)
+        self._bmask = np.ones_like(self.masses.value, dtype=bool)
 
         missing_fields = [f for f in ['coords', 'vels', 'masses'] if f not in config.fields["gas"]]
         if missing_fields:
@@ -622,7 +619,7 @@ class GasComponent(BaseSimulationObject, BaseComponent):
     def get_gas_fields(self):
         """Returns all loadable particle fields
         """
-        if self.bmask is None:
+        if self._bmask is None:
             return self._dynamic_fields.keys()
         else:
             return np.append(list(self._dynamic_fields.keys()), ['b'+f for f in list(self._dynamic_fields.keys())]) 

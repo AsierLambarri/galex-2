@@ -69,6 +69,7 @@ class SnapshotHalo(BaseSimulationObject):
         self._Mdyn = None
         self._kwargs = kwargs
 
+        self.bound_method = None
         
         self.parse_dataset(dataset)
 

@@ -14,7 +14,7 @@ from .class_methods import (
                             vectorized_base_change, 
                             center_of_mass_pos, 
                             center_of_mass_vel, 
-                            refine_center, 
+                            refine_6Dcenter, 
                             half_mass_radius, 
                             easy_los_velocity
                             )
@@ -222,9 +222,9 @@ class BaseComponent:
             else:
                 field = (self._base_ptype, self._dynamic_fields[field_name[1:]])
                 if field_name in vec_fields:
-                    self._fields_loaded[field_name] = vectorized_base_change(np.linalg.inv(self.basis), self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask])
+                    self._fields_loaded[field_name] = vectorized_base_change(np.linalg.inv(self.basis), self._data[field][self._bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self._bmask])
                 else:
-                    self._fields_loaded[field_name] = self._data[field][self.bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self.bmask]
+                    self._fields_loaded[field_name] = self._data[field][self._bmask].in_units(funits[field_name[1:]]) if field_name[1:] in funits else self._data[field][self._bmask]
                 return self._fields_loaded[field_name]
         
         try:
@@ -309,17 +309,12 @@ class BaseComponent:
         return None
 
         
-    def refined_center_of_mass(self, 
-                                scaling=0.5,
-                                method="simple",
-                                delta=1E-1,
-                                alpha=0.95,
-                                m=2,
-                                nmin=40,
-                                mfrac=0.5
-                                ):
+    def refined_center6d(self, 
+                         method="adaptative",
+                         **kwargs
+                        ):
         
-        """Refined CM position estimation. 
+        """Refined center-of-mass position and velocity estimation. 
 
         The center of mass of a particle distribution is not well estimated by the full particle ensemble, since the outermost particles
         must not be distributed symmetrically around the TRUE center of mass. For that reason, a closer-to-truth value for th CM can be
@@ -329,35 +324,34 @@ class BaseComponent:
         porentials, as these are not available to observers. Only positions and masses (analogous to luminosities in some sense)
         are used:
             
-            1. SIMPLE: Discard all particles outside of rshell = scaling * rmax. 
-            2. ITERATIVE: An iterative version of the SIMPLE method, where rshell decreases in steps, with rshell_i+1 = alpha*rshell_i.
-                       Desired absolute accuracy can be set, but not guaranteed. This method suffers when there are few particles.
-            3. HALF-MASS: A variant of the SIMPLE method. Here the cut is done in mass instead of radius. The user can specify a
-                       X-mass-fraction and the X-mass radius and its center are computed iterativelly unitl convergence. Convergence is
-                       guaranteed, but the X-mass-center might or might not be close to the true center. The user can play around with
-                       mfrac to achieve the best result.
-            4. ITERATIVE HALF-MASS: Implements the same iterative process as in 2., but at each step the radius is computed using the
-                       same procedure as in method 3. The mass fraction is reduced by alpha at each step. As in method 2., convergence
-                       is not guaranteed.
-                        
+            1. RADIAL-CUT: Discard all particles outside of rshell = rc_scale * rmax. 
+            2. SHRINK-SPHERE: An iterative version of the SIMPLE method, where rshell decreases in steps, with rshell_i+1 = alpha*rshell_i,
+                       until an speficief minimun number of particles nmin is reached. Adapted from Pwer et al. 2003.
+            3. FRAC-MASS: A variant of the RADIAL-CUT method. Here the cut is done in mass instead of radius. The user can specify a
+                       X-mass-fraction and the X-mass radius and its center are computed iterativelly unitl convergence. 
+            4. ADAPTATIVE: Performs `SHRINK-SPHERE` if the number of particles is larger than 2*nmin. Otherwise: `RADIAL-CUT`.
 
+        The last radius; r_last, trace of cm positions; trace_cm, number of iterations; iters and final numper of particles; n_particles 
+        are stored alongside the center-of-mass.
+        
+        Center-of-mass velocity estimation is done is done with particles inside v_scale * r_last.
+        
         OPTIONAL Parameters
         -------------------
-        
-        scaling : float
-            rshell/rmax. Must be between 0 and 1. Default: 0.5
+
         method : str, optional
-            Method with which to refine the CoM: simple, interative, hm or iterative-hm. Default: simple
-        delta : float
-            Absolute tolerance for stopping re-refinement. Default 1E-1.
+            Method with which to refine the CoM: radial-cut/rcc, shrink-sphere/ssc, fractional-mass/mfc od adaptative. Default: ADAPTATIVE
+            
+        rc_scaling : float
+            rshell/rmax for radial-cut method. Must be between 0 and 1. Default: 0.5.
         alpha : float
-            rhsell_i+1/rshell_i. Default: 0.95
-        m : int
-            Consecutive iterations under delta to converge. Default: 2
+            Shrink factor for shrink-sphere method. Default: 0.7.
         nmin : int
-            Minimum  number of particles for reliable CoM estimation. Default: 40
+            Target number of particles for shrink-sphere method. Default: 250.
         mfrac : float
-            Mass fraction. Default: 0.5
+            Mass-fraction for fractional-mass method. Default: 0.3.
+        v_scale : float
+            Last Radius scale-factor for velocity estimation. Default: 1.5.
             
 
         Returns
@@ -365,27 +359,18 @@ class BaseComponent:
         cm : array
             Refined Center of mass and various quantities.
         """
-        if self.use_bound_if_computed:
-            self.centering_results = refine_center(self.coords[self.bmask], self.masses[self.bmask],
-                                                   scaling,
-                                                   method,
-                                                   delta,
-                                                   alpha,
-                                                   m,
-                                                   nmin,
-                                                   mfrac)
-        else:
-            self.centering_results = refine_center(self.coords, self.masses,
-                                           scaling,
-                                           method,
-                                           delta,
-                                           alpha,
-                                           m,
-                                           nmin,
-                                           mfrac)
-            
-        self.cm = self.centering_results['center']
-        return self.cm
+
+        self._centering_results = refine_6Dcenter(
+            self.bcoords,
+            self.bmasses,
+            self.bvels,
+            method=method,
+            **kwargs
+        )
+
+        self.cm = self._centering_results['center']
+        self.vcm = self._centering_results['velocity']
+        return self.cm, self.vcm
     
     def half_mass_radius(self, mfrac=0.5, project=False):
         """By default, it computes 3D half mass radius of a given particle ensemble. If the center of the particles 
@@ -407,8 +392,8 @@ class BaseComponent:
         MFRAC_mass_radius : float
             Desired mfrac mass fraction radius estimation. Provided in same units as pos, if any.
         """
-        if (self.use_bound_if_computed) and (self.bmask is not None):
-            rh = half_mass_radius(self.coords[self.bmask], self.masses[self.bmask], self.cm, mfrac, project=project)
+        if (self.use_bound_if_computed) and (self._bmask is not None):
+            rh = half_mass_radius(self.coords[self._bmask], self.masses[self._bmask], self.cm, mfrac, project=project)
         else:
             rh = half_mass_radius(self.coords, self.masses, self.cm, mfrac, project=project)
 

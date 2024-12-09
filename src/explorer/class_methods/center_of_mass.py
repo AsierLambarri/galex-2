@@ -57,8 +57,17 @@ def center_of_mass_vel(pos,
     """
     if center is None:
         center = center_of_mass_pos(pos, mass)
-        
-    mask = np.linalg.norm(pos - center, axis=1) < unyt_quantity(*R)
+
+
+    if isinstance(R, tuple) and len(R) == 2:
+        r = unyt_quantity(*R)
+    else:
+        try:
+            r = R * pos.units
+        except:
+            r = R
+    
+    mask = np.linalg.norm(pos - center, axis=1) < r
     return np.average(vel[mask], axis=0, weights=mass[mask])
     
 
@@ -101,6 +110,7 @@ def center_of_mass_vel_through_proj(pos,
     los_velocities_x = np.mean(easy_los_velocity(vel[mask_x], [1,0,0]))
     los_velocities_y = np.mean(easy_los_velocity(vel[mask_y], [0,1,0]))
     los_velocities_z = np.mean(easy_los_velocity(vel[mask_z], [0,0,1]))
+    
     try:
         return unyt_array([los_velocities_x, los_velocities_y, los_velocities_z], vel.units)
     except:
@@ -109,16 +119,13 @@ def center_of_mass_vel_through_proj(pos,
     
 
 
-def refine_center(pos, 
-                  mass, 
-                  scaling=0.5,
-                  method="simple",
-                  delta=1E-2,
-                  alpha=0.95,
-                  m=2,
-                  nmin=100,
-                  mfrac=0.5
-                 ):
+def refine_6Dcenter(pos, 
+                    mass, 
+                    vel,
+                    method="adaptative",
+                    **kwargs
+                   ):
+                
     """Refined CM position estimation. 
 
     The CoM of a particle distribution is not well estimated by the full particle ensemble, 
@@ -129,6 +136,8 @@ def refine_center(pos,
         Array of positions.
     mass : array
         Array of masses.
+    vel : array
+        Array of velocities.
     method : str, optional
         Method with which to refine the CoM: simple, interative or iterative-hm.
     delta : float
@@ -140,44 +149,73 @@ def refine_center(pos,
     -------
     centering_results : array
         Refined Center of mass and various quantities.
+
+
+      
     """    
     lengthunit = pos.units
-    
+    velunit = vel.units
     pos = pos.value
-    mass = mass.value
+    mass = mass.value    
+    vel = vel.value
+
+
+    rc_scale = 0.5 if "rc_scale" not in kwargs.keys() else kwargs['rc_scale']
+    v_scale = 1.5 if "v_scale" not in kwargs.keys() else kwargs['v_scale']
+    rsphere = unyt_quantity(4, 'kpc') if "rsphere" not in kwargs else unyt_quantity(*kwargs['rsphere']) if isinstance(kwargs['rsphere'], tuple) and len(kwargs['rsphere']) == 2 else unyt_quantity(kwargs['rsphere'], lengthunit)
+    alpha = 0.7 if "alpha" not in kwargs.keys() else kwargs['alpha']
+    nmin = 250 if "nmin" not in kwargs.keys() else kwargs['nmin']
+    mfrac = 0.3 if "mfrac" not in kwargs.keys() else kwargs['mfrac']
+
+    rsphere = rsphere.to(lengthunit).value
     
-    center = np.median(pos, axis=0)
-    
-    
-    if method == "hm":
-        centering_results = _cm_mfrac_method(pos, mass, center,
-                                             delta, m, mfrac)
-    if method == "simple":
-        centering_results = _cm_simple_method(pos, mass, center, scaling)
+    if method == "radial-cut" or method == "rcc":
+        centering_results = radial_cut_center(pos, mass, rc_scale=rc_scale)
         
-    if method == "iterative":
-        centering_results = _cm_iterative_method(pos, mass, center,
-                                                    delta, alpha, m, nmin)  
-    if method == "iterative-hm":
-        centering_results = _cm_iterative_mfrac_method(pos, mass, center,
-                                                          delta, m, nmin, alpha)  
+    if method == "shrink-sphere" or method == "ssc":
+        centering_results = shrink_sphere_center(pos, mass, rsphere=rsphere, alpha=alpha, nmin=nmin)  
         
+    if method == "fractional-mass" or method == "fmc":
+        centering_results = fractional_mass_center(pos, mass, mfrac=mfrac)
+        
+    if method == "adaptative":
+        n = len(mass)
+        if n < 2*nmin:
+            centering_results = radial_cut_center(pos, cass, rc_scale=rc_scale)
+        else:
+            centering_results = shrink_sphere_center(pos, mass, rsphere=rsphere, alpha=alpha, nmin=nmin)   
+            
+        
+    
+    centering_results['r_vel'] = v_scale * centering_results['r_last']
+    centering_results['velocity'] = center_of_mass_vel(
+        pos,
+        mass,
+        vel,
+        center=centering_results['center'],
+        R=centering_results['r_vel']
+    )
+    centering_results['npart_vel'] = np.count_nonzero( np.linalg.norm(pos - centering_results['center'], axis=1) < centering_results['r_vel'] )
+
+    
     centering_results['center'] *= lengthunit
+    centering_results['velocity'] *= velunit
+    
     centering_results['trace_cm'] *= lengthunit
+    centering_results['trace_r'] *= lengthunit
+    
     centering_results['r_last'] *= lengthunit
-    centering_results['delta'] *= lengthunit
-    centering_results['trace_delta'] *= lengthunit
+    centering_results['r_vel'] *= lengthunit
     
     return centering_results
 
 
 
 
-def _cm_simple_method(pos,
-                         mass, 
-                         center,
-                         scaling
-                        ):
+def radial_cut_center(pos,
+                      mass, 
+                      rc_scale=0.5
+                     ):
 
     """Computes the CoM by first finding the median of positions and then computing a refined CoM using
     only the particles inside r < 0.5*rmax. Usually is robust enough for estimations with precision of
@@ -185,30 +223,69 @@ def _cm_simple_method(pos,
 
     This approach has been inspired by Mark Grudic.
     """
-    trace_cm = np.array([center])
-
-    radii = np.linalg.norm(pos - center, axis=1)
-    rmax = radii.max()
-    center_new = np.average(pos[radii < scaling * rmax], axis=0, weights=mass[radii < scaling * rmax])
+    rmax = np.linalg.norm(pos - center, axis=1).max()
+    center_new = np.average(pos[radii < rc_scale * rmax], axis=0, weights=mass[radii < rc_scale * rmax])
+    
     centering_results = {'center': center_new ,
-                         'delta': np.linalg.norm(center_new - center),
-                         'r_last': scaling * rmax ,
+                         'r_last': rc_scale * rmax ,
                          'iters': 2,
-                         'trace_delta':  np.linalg.norm(center_new - center) ,
-                         'trace_cm': np.append(trace_cm, [center_new], axis=0),
-                         'n_particles': len(pos[radii < scaling * rmax]),
-                         'converged': True
+                         'trace_cm': np.vstack((trace_cm, center_new)),
+                         'npart_cen': len(pos[radii < rc_scale * rmax]),
                         }
 
     return centering_results
 
-def _cm_mfrac_method(pos,
-                        mass,
-                        center,
-                        delta,
-                        m,
-                        mfrac
+def shrink_sphere_center(pos,
+                         mass,
+                         rsphere=None,
+                         alpha=0.7, 
+                         nmin=100
                         ):
+    """Iterative method where the center-of-mass is computed using the particles inside an ever-shrinking
+    sphere, until the mnumber of particles inside the sphere reaches the user specified minimmum. This routine adapts
+    the method described in Power et al. 2003: 2003MNRAS.338...14P.
+    """
+    center = np.median(pos, axis=0)
+    if rsphere is None: 
+        rsphere = np.linalg.norm(pos - center, axis=1).max()
+    
+    mask = np.linalg.norm(pos - center, axis=1) <= rsphere
+    center = np.average(pos[mask], axis=0, weights=mass[mask])
+    npart = len(mass[mask])
+
+    iters = 0
+    trace_cm = np.array(center)
+    trace_r = np.array([rsphere])
+    while npart > nmin:
+        rsphere *= alpha
+        iters += 1
+
+        mask = np.linalg.norm(pos - center, axis=1) <= rsphere
+        center = np.average(pos[mask], axis=0, weights=mass[mask])
+        trace_cm = np.vstack((trace_cm, center))
+        trace_r = np.append(trace_r, rsphere)
+        
+        npart = len(mass[mask])        
+        prev_npart = npart
+
+
+    
+    centering_results = {
+        'center': trace_cm[-2, :] ,
+        'r_last': rsphere / alpha,
+        'iters': iters - 1,
+        'trace_cm': trace_cm[:-1, :],
+        'trace_r': trace_r[:-1],
+        'npart_cen': prev_npart
+    }    
+
+    return centering_results
+
+
+def fractional_mass_center(pos,
+                           mass,
+                           mfrac=0.5
+                          ):
     """Computes the center of mass by computing the half mass radius iteratively until the center of mass
     of the enclosed particles converges to DELTA in M consecutive iterations. This method is less affected by particle 
     number because the CoM estimation is always done with half the particles of the ensemble, this way, we avoid
@@ -223,10 +300,9 @@ def _cm_mfrac_method(pos,
 
     The routine has a maximum of 100 iterations to avoid endless looping.
     """
-
-    trace_cm = np.array([center])
-    trace_delta = np.array([1])
-    converged = False
+    center = np.median(pos, axis=0)
+    
+    trace_cm = np.array(center)
     for i in range(100):
         rhalf = half_mass_radius(pos, mass,  center=center, mfrac=mfrac)
         mask = np.linalg.norm(pos - center, axis=1) <= rhalf
@@ -235,151 +311,22 @@ def _cm_mfrac_method(pos,
         center_new = np.average(pos[mask], axis=0, weights=mass[mask])
 
         diff = np.sqrt( np.sum((center_new - center)**2, axis=0) )           
-        trace_cm = np.append(trace_cm, [center_new], axis=0)
-        trace_delta = np.append(trace_delta, diff)
+        trace_cm = np.vstack((trace_cm, center_new))
         
-        if np.all(trace_delta[-m:] < delta):
-            converged = True            
+        if diff < 1E-5:
             break
             
         else:
             center = center_new
 
     centering_results = {'center': center_new ,
-                         'delta': diff,
                          'r_last': rhalf ,
                          'iters': i + 1,
-                         'trace_delta': trace_delta ,
                          'trace_cm': trace_cm,
-                         'n_particles': npart,
-                         'converged': converged
+                         'npart_cen': npart,
                         }
     return centering_results
 
-def _cm_iterative_method(pos,
-                            mass,
-                            center,
-                            delta,
-                            alpha, 
-                            m, 
-                            nmin
-                           ):
-    """Iterative method where the center of mass is computed using the particles inside an ever-shrinking
-    sphere, until subsequent CoM estimations converge to DELTA in M consecutive iterations, the number of enclosed
-    particles is smaller than NMIN or the radius reaches 0.3 in units of POS. The radius of the sphere shrinks 
-    by 1-alpha in each iteration. More generally: r_i = alpha^i * r_0 where r_0 is RADII.max().
-
-    For systems with few particles (this is left to user discretion, usually we take <100 particles or <5*nmin) this
-    routine struggles to converge bellow DELTA=5E-2 because the removal of a single particle may cause the CoM to 
-    move by more than said amount. This is an inherent problem to this method when applied to low particle count systems
-    because each shrinkage removes some particles. In said cases, the routine may not converge, in which case,
-    the user is splicitly told that the subroutine did not converge.
-    """
-    radii = np.linalg.norm(pos - center, axis=1)
-    rmax, rmin = 1.001 * radii.max(), 0.1
-    
-    n = int( -np.log(rmax/rmin)/np.log(alpha))
-    ri = rmax * alpha**np.linspace(0,n, n+1)
-    
-    trace_cm = np.array([center])
-    trace_delta = np.array([1])
-    
-    for i, rshell in enumerate(ri):
-        shellmask = np.sqrt(np.sum((pos - center)**2, axis=1)) <= rshell
-        
-        if len(pos[shellmask]) <= nmin:
-            final_cm = center
-            centering_results = {'center': final_cm ,
-                                 'delta': diff ,
-                                 'r_last': rshell ,
-                                 'iters': i ,
-                                 'trace_delta': trace_delta ,
-                                 'trace_cm': trace_cm,
-                                 'n_particles': len(pos[shellmask]),
-                                 'converged': False
-                                }
-            break
-            
-        center_new = np.average(pos[shellmask], axis=0, weights=mass[shellmask])
-        diff = np.sqrt( np.sum((center_new - center)**2, axis=0) )           
-        trace_cm = np.append(trace_cm, [center_new], axis=0)
-        trace_delta = np.append(trace_delta, diff)
-        
-        if np.all(trace_delta[-m:] < delta):
-            final_cm = center_new
-            centering_results = {'center': final_cm ,
-                                 'delta': diff,
-                                 'r_last': rshell ,
-                                 'iters': i + 1,
-                                 'trace_delta': trace_delta ,
-                                 'trace_cm': trace_cm,
-                                 'n_particles': len(pos[shellmask]),
-                                 'converged': True 
-                                }
-            break
-            
-        else:
-            center = center_new
-
-
-    return centering_results                
-
-
-def _cm_iterative_mfrac_method(pos,
-                                  mass,
-                                  center,
-                                  delta,
-                                  m,
-                                  nmin,
-                                  alpha
-                                 ):
-    """This method is a combination of the mfrac and iterative method. In each iteration, the center of mass for a 
-    mfrac mass sphere is computed using the mfrac method, until convergence. This is iterated for decreasing values of
-    mfrac until convergence.
-
-    The last value of mfrac is determined by the MINIMUM NUMBER OF PARTICLES required by the user and convergence is stablished
-    when M consecutive iterations have converged to DELTA. The MFRAC gets reduced by 1-alpha for each iteration.
-    """
-    if nmin >= len(mass):
-        raise Exception(f"The particle ensemble you provided doesnt have enough particles! You specified {nmin} minimum particles but has {len(mass)}.")
-        
-    nmass = mass.sum() / len(mass)
-    min_mass_frac = 1.2 * nmass * nmin / mass.sum()
-    
-    n = int( -np.log(0.75/min_mass_frac)/np.log(alpha))
-    mfracs = 0.75 * alpha**np.linspace(0,n, n+1)
-    
-    trace_cm = np.array([center])
-    trace_delta = np.array([1])  
-    converged = False
-    for i, mfrac in enumerate(mfracs):
-        inter_cent = _cm_mfrac_method(pos, mass, center, 1E-1 * delta, m, mfrac)
-        center_new = inter_cent['center']
-        rshell = inter_cent['r_last']
-        npart = inter_cent['n_particles']
-        
-        diff = np.sqrt( np.sum((center_new - center)**2, axis=0) )           
-        trace_cm = np.append(trace_cm, [center_new], axis=0)
-        trace_delta = np.append(trace_delta, diff)
-        
-        if np.all(trace_delta[-m:] < delta):
-            converged = True
-            break
-            
-        else:
-            center = center_new
-
-    centering_results = {'center': center_new ,
-                         'delta': diff,
-                         'r_last': rshell ,
-                         'iters': i + 1,
-                         'trace_delta': trace_delta ,
-                         'trace_cm': trace_cm,
-                         'n_particles': npart,
-                         'converged': converged 
-                        }
-    
-    return centering_results
 
 
 
