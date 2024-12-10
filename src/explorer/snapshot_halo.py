@@ -42,14 +42,6 @@ class SnapshotHalo(BaseSimulationObject):
 
     SOME OF THESE ARGUMENTS WILL BE INHERITED FROM A BIGGER CLASS AT SOME POINT.
     """
-    #__slots__ = ['info', 'load_dataset']
-    
-    ##########################################################
-    ###                                                    ###
-    ##                    INNIT FUNCTION                    ##
-    ###                                                    ###
-    ##########################################################
-    
     def __init__(self,
                  fn,
                  center,
@@ -65,20 +57,21 @@ class SnapshotHalo(BaseSimulationObject):
         self.fn = fn
         self.sp_center = unyt_array(center[0], center[1])
         self.sp_radius = unyt_quantity(radius[0], radius[1])        
-    
-        self._Mdyn = None
-        self._kwargs = kwargs
-
         self.bound_method = None
+
+        self._kwargs = kwargs
+        self._fields_loaded = {}
+        self._dynamic_fields = {
+            "all_coords" : "coords",
+            "all_vels" : "vels",
+            "all_masses" : "masses",
+            "particle_type" : "particle_type"
+        }
         
         self.parse_dataset(dataset)
 
 
-    ##########################################################
-    ###                                                    ###
-    ##                      PROPERTIES                      ##
-    ###                                                    ###
-    ##########################################################
+    
     
     @property
     def time(self):
@@ -126,7 +119,36 @@ class SnapshotHalo(BaseSimulationObject):
     
 
 
-    
+    def __getattr__(self, field_name):
+        """Dynamical loader for accessing fields.
+        """
+        
+        if field_name  in self._dynamic_fields.keys():
+            component_data = [
+                self.stars.__getattr__(self._dynamic_fields[field_name]),
+                self.gas.__getattr__(self._dynamic_fields[field_name]),
+                self.darkmatter.__getattr__(self._dynamic_fields[field_name])
+            ]
+            #units = component_data[0].units
+            self.particle_types = np.concatenate((
+                np.full(len(component_data[0]),"stars"),
+                np.full(len(component_data[1]),"gas"),
+                np.full(len(component_data[2]),"darkmatter")
+            ))
+            return np.concatenate((
+                component_data[0],
+                component_data[1],
+                component_data[2]
+            )) 
+                
+
+        try:
+            return self.__getattribute__(field_name)
+        except AttributeError:
+            raise AttributeError(f"Field '{field_name}' not found for particle type {self.ptype}. "+ f"Available fields are: {list(self._dynamic_fields.keys())}")
+        
+        AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._dynamic_fields.keys())}")
+        return None
     
     def _update_kwargs(self, default_kw, new_kw):
         """Update default kwargs with user provided kwargs.
