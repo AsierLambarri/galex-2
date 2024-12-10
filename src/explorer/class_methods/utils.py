@@ -1,7 +1,7 @@
 import numpy as np
 from numba import njit
 
-def random_vector_spherical(N):
+def random_vector_spherical(N, half_sphere=False):
     """
     Generate N uniformly distributed random points on the surface of a sphere of radius 1.
     
@@ -9,16 +9,17 @@ def random_vector_spherical(N):
     ----------
     N : int
         Number of random poits to sample
-
+    half_sphere : bool
+        Whether to sample only half the sphere. Default: False
     
     Returns
     -------
     points : array[float]
     """
     np.random.seed()
-    phi = np.random.uniform(0, 2 * np.pi, size=N)
     
-    cos_theta = np.random.uniform(-1, 1, size=N)
+    phi = np.random.uniform(0, 2 * np.pi, size=N)
+    cos_theta = np.random.uniform(-1, 1, size=N) if ~half_sphere else np.random.uniform(0, 1, size=N)
     theta = np.arccos(cos_theta)
     
     x =  np.sin(theta) * np.cos(phi)
