@@ -7,6 +7,7 @@ Created on Wed Nov 20 10:03:19 2024
 """
 import numpy as np
 from unyt import unyt_array
+from scipy.spatial import KDTree
 
 from .config import config
 from .class_methods import (
@@ -277,6 +278,24 @@ class BaseComponent:
 
 
     
+    def knn_distance(self, center_point, k):
+        """Returns the distance from center_point to the k nearest neighbour.
+
+        Parameters
+        ----------
+        center_point : array
+            center point of the knn search.
+        k : int
+            number of neighbours
+
+        Returns
+        -------
+        dist : foat
+        """        
+        self._KDTree = KDTree(self.coords)        
+        distances, _ = tree.query(center_point, k=k)
+        
+        return distances[-1] * self.coords.units
 
         
     def set_line_of_sight(self, los):

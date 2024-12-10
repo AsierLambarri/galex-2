@@ -124,19 +124,9 @@ class SnapshotHalo(BaseSimulationObject):
         """
         return self._omega
     
-    @property
-    def Mdyn(self):
-        """Dynamical mass
-        """
-        if self.stars.rh3d is None:
-            return None
-        return self._dynamical_mass()
 
-    ##########################################################
-    ###                                                    ###
-    ##                       UTILITIES                      ##
-    ###                                                    ###
-    ##########################################################    
+
+    
     
     def _update_kwargs(self, default_kw, new_kw):
         """Update default kwargs with user provided kwargs.
@@ -149,28 +139,11 @@ class SnapshotHalo(BaseSimulationObject):
 
         self._kwargs = default_kw
         return None
-    
-    def _set_metadata_properties(self, fields):
-        for key, value in fields.items():
-             self._metadata[key] = value  
-        
-             def setter(self, new_value, key=key):  
-                 self._metadata[key] = new_value
-                 
-             def getter(self, key=key):  
-                 return self._metadata[key]
-        
-
-        
-             setattr(
-                 self.__class__,
-                 key,
-                 property(getter, setter)
-             )
-        return None
+   
     
     
-            
+    
+        
             
     def info(self, get_str = False):
         """Prints information about the loaded halo: information about the position of the halo in the simulation
@@ -287,7 +260,6 @@ class SnapshotHalo(BaseSimulationObject):
                                                            )    
         self._data = hashable_data
         self._metadata = metadata
-        #self._set_metadata_properties(metadata)
         for meta, value in metadata.items():
             if meta in ['redshift',
                         'scale_factor',
@@ -349,15 +321,24 @@ class SnapshotHalo(BaseSimulationObject):
         self.gas.set_line_of_sight(los)
         return None
 
-    def _dynamical_mass(self):
-        """Computes the dynamical mass: the mass enclonsed inside the 3D half light radius of stars.
-        """
-        mass_stars = self.stars.enclosed_mass(self.stars.rh3d, self.stars.cm)
-        mass_dm = self.darkmatter.enclosed_mass(self.stars.rh3d, self.stars.cm)
-        mass_gas = self.gas.enclosed_mass(self.stars.rh3d, self.stars.cm)
+    def Mdyn(self, components=["stars", "gas", "darkmatter"]):
+        """Computes the dynamical mass: the mass enclonsed inside the 3D half light radius of stars. Right now, the half-mass-radius is
+        used, under the assumptionn that M/L does not vary much from star-particle to star-particle.
 
-        #self.Mdyn = mass_stars + mass_dm + mass_gas
-        return mass_stars + mass_dm + mass_gas
+        OPTIONAL Parameters
+        ----------
+        components
+        """
+        mgas, mstars, mdm = unyt_quantity(0, "Msun"), unyt_quantity(0, "Msun"), unyt_quantity(0, "Msun") 
+        
+        if "stars" in components:
+            mstars = self.stars.enclosed_mass(self.stars.rh3d, self.stars.cm)
+        if "gas" in components:
+            mgas = self.gas.enclosed_mass(self.stars.rh3d, self.stars.cm)
+        if "darkmatter" in components:
+            mdm = self.darkmatter.enclosed_mass(self.stars.rh3d, self.stars.cm)
+
+        return  mstars + mdm + mgas
         
     
 
