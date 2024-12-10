@@ -179,7 +179,8 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
             return None
     
     def compute_stars_in_halo(self, 
-                              verbose=False
+                              verbose=False,
+                              **kwargs
                              ):
         """Computes the stars that form a galaxy inside a given halo using the recipe of Jenna Samuel et al. (2020). 
         For this one needs a catalogue of halos (e.g. Rockstar). The steps are the following:
@@ -196,20 +197,27 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
     
             4. We only keep the galaxy if it has more than six stellar particles.
     
-        Parameters
+        OPTIONAL Parameters
         ----------
-        pos, masses, vels : array-like[float] with units
-            Absolute position, mass and velocity of particles.
-        pindices : array[int]
-            Indices of particles.
-        halo_params : dict[str : unyt_quantity or unyt_array]
-            Parameters of the halo in which we are searching: center, center_vel, Rvir, vmax and vrms.
-        max_radius : float, optional
-            Maximum radius to consider for particle unbinding. Default: 30 kpc
-        imax : int, optional
-            Maximum number of iterations. Default 200.
         verbose : bool
-            Wether to verbose or not. Default: False.
+            Wether to verbose or not. Default: False.        
+
+        KEYWORD Parameters
+        ----------
+        center, center_vel : unyt_array
+            Dark Matter halo center and center velocity.
+        rvir : unyt_quantity
+            virial radius
+        vmax : unyt_quantity
+            Maximum circular velocity of the halo
+        vrms : unyt_quantity
+            Disperion velocity of the halo
+        max_radius : tuple[float, str] 
+            Max radius to consider stellar particles. Default: 30 'kpc'
+        imax : int
+            Maximum number of iterations. Default: 200
+            
+        
             
         Returns
         -------
@@ -220,17 +228,27 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         delta_rel : float
             Obtained convergence for selected total mass after imax iterations. >1E-2.
         """ 
+        halo_params = {
+            'center': self._shared_attrs["darkmatter"]["rockstar_center"],
+            'center_vel': self._shared_attrs["darkmatter"]["rockstar_vel"],
+            'rvir': self._shared_attrs["darkmatter"]["rvir"],
+            'vmax': self._shared_attrs["darkmatter"]["vmax"],
+            'vrms': self._shared_attrs["darkmatter"]["vrms"]                                                             
+        }
+        
+        for key in halo_params.keys():
+            halo_params[key] = halo_params[key] if key not in kwargs.keys() else kwargs[key]
+        
+        print(halo_params)
+        
         _, mask, delta_rel = compute_stars_in_halo(
             self.coords,
             self.masses,
             self.vels,
             self.IDs,
-            {'center': self._shared_attrs["darkmatter"]["rockstar_center"],
-            'center_vel': self._shared_attrs["darkmatter"]["rockstar_vel"],
-            'rvir': self._shared_attrs["darkmatter"]["rvir"],
-            'vmax': self._shared_attrs["darkmatter"]["vmax"],
-            'vrms': self._shared_attrs["darkmatter"]["vrms"]                                                             
-            },
+            halo_params=halo_params,
+            max_radius=(30, 'kpc') if "max_radius" not in kwargs.keys() else kwargs["max_radius"],
+            imax=200 if "imax" not in kwargs.keys() else int(kwargs["imax"]),
             verbose=verbose
         )
         

@@ -223,13 +223,15 @@ def radial_cut_center(pos,
 
     This approach has been inspired by Mark Grudic.
     """
-    rmax = np.linalg.norm(pos - center, axis=1).max()
-    center_new = np.average(pos[radii < rc_scale * rmax], axis=0, weights=mass[radii < rc_scale * rmax])
+    radii = np.linalg.norm(pos - np.median(pos, axis=0), axis=1)
+    rmax = radii.max()
+    center_new = np.average(pos[radii <= rc_scale * rmax], axis=0, weights=mass[radii <= rc_scale * rmax])
     
     centering_results = {'center': center_new ,
                          'r_last': rc_scale * rmax ,
                          'iters': 2,
-                         'trace_cm': np.vstack((trace_cm, center_new)),
+                         'trace_cm': np.vstack((np.median(pos, axis=0), center_new)),
+                         'trace_r': np.array([rmax, rc_scale * rmax]),
                          'npart_cen': len(pos[radii < rc_scale * rmax]),
                         }
 
@@ -301,16 +303,19 @@ def fractional_mass_center(pos,
     The routine has a maximum of 100 iterations to avoid endless looping.
     """
     center = np.median(pos, axis=0)
-    
-    trace_cm = np.array(center)
+
+    trace_r = np.array([])
+    trace_cm = np.empty((0,pos.shape[1]))
     for i in range(100):
         rhalf = half_mass_radius(pos, mass,  center=center, mfrac=mfrac)
         mask = np.linalg.norm(pos - center, axis=1) <= rhalf
-        npart = len(pos[mask])
         
         center_new = np.average(pos[mask], axis=0, weights=mass[mask])
 
-        diff = np.sqrt( np.sum((center_new - center)**2, axis=0) )           
+        diff = np.sqrt( np.sum((center_new - center)**2, axis=0) ) 
+        npart = len(pos[mask])
+
+        trace_r = np.append(trace_r, rhalf)
         trace_cm = np.vstack((trace_cm, center_new))
         
         if diff < 1E-5:
@@ -321,8 +326,9 @@ def fractional_mass_center(pos,
 
     centering_results = {'center': center_new ,
                          'r_last': rhalf ,
-                         'iters': i + 1,
+                         'iters': i ,
                          'trace_cm': trace_cm,
+                         'trace_r': trace_r,
                          'npart_cen': npart,
                         }
     return centering_results

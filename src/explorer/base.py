@@ -392,10 +392,14 @@ class BaseComponent:
         MFRAC_mass_radius : float
             Desired mfrac mass fraction radius estimation. Provided in same units as pos, if any.
         """
-        if (self.use_bound_if_computed) and (self._bmask is not None):
-            rh = half_mass_radius(self.coords[self._bmask], self.masses[self._bmask], self.cm, mfrac, project=project)
-        else:
-            rh = half_mass_radius(self.coords, self.masses, self.cm, mfrac, project=project)
+
+        rh = half_mass_radius(
+            self.bcoords, 
+            self.bmasses, 
+            self.cm, 
+            mfrac, 
+            project=project
+        )
 
         if project:
             self.rh = rh
@@ -405,8 +409,22 @@ class BaseComponent:
         return rh
 
 
-    def los_velocity(self, rcyl=(1, 'kpc'), return_projections = False):
-        """Computes the line of sight velocity of particles inside a cylinder of radius rcyl aligned with the line of sight direction.
+    def los_dispersion(self, rcyl=(1, 'kpc'), return_projections = False):
+        """Computes the line of sight velocity dispersion:  the width/std of f(v)dv of particles iside rcyl along the L.O.S. This is NOT the
+        same as the dispersion velocity (which would be the rms of vx**2 + vy**2 + vz**2). All particles are used, including non-bound ones,
+        given that observationally they are indistinguishable.
+
+        OPTIONAL Parameters
+        ----------
+        rcyl : float, tuple[float, str] or unyt_quantity
+            Axial radius of the cylinder. Default: 1 kpc.
+        return_projections : bool
+            Whether to return projected velocities. Default: False.
+
+        Returns
+        -------
+        stdvel : unyt_quantity
+        los_velocities : unyt_array
         """
         mask = np.linalg.norm(self.coords[:, 0:2] - self.cm[0:2], axis=1) < unyt_array(*rcyl)
         
@@ -420,6 +438,17 @@ class BaseComponent:
 
     def enclosed_mass(self, r0, center):
         """Computes the enclosed mass on a sphere centered on center, and with radius r0.
+
+        Parameters
+        ----------
+        r0 : unyt_quantity
+            Radius
+        center : unyt_array
+            Center
+
+        Returns
+        -------
+        encmass : unyt_quantity
         """
         mask = np.linalg.norm(self.bcoords - center, axis=1) <= r0
         return self.bmasses[mask].sum()
