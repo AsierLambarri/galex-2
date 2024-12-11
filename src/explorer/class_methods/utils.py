@@ -112,7 +112,23 @@ def easy_los_velocity(vel, los):
     los = los / np.linalg.norm(los)
     return np.dot(vel, los)
     
+def softmax(vals, T=1):
+    """Softmax function for computing weights for various applications.
+    T~0.25 works well for gravitational purposes, when many particles are present. Not so great when few particles are present
+    because it produces a sharped peak around few of the *already* few particles. Use (for gravitational purposes): T~2/3* sum(kin)/min(E)
+    instead.
 
+    More stable than the usuan N-most-bound particles, specially when combined with changing temperature.
+    
+    Parameters
+    ----------
+    vals : array
+        Quantity tobe weigthed with
+    T : float
+        Temperature used for the wheighting. Default: 1
+    """
+    exp_vals = np.exp((vals - np.max(vals))/T)  
+    return exp_vals / np.sum(exp_vals)
 
 
 
