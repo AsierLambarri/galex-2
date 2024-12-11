@@ -53,3 +53,41 @@ def _cm_iterative_mfrac_method(pos,
                         }
     
     return centering_results
+
+
+
+
+
+
+
+def __getattr__(self, field_name):
+    """Dynamical loader for accessing fields.
+    """
+    
+    if field_name  in self._dynamic_fields.keys():
+        component_data = [
+            self.stars.__getattr__(self._dynamic_fields[field_name]),
+            self.gas.__getattr__(self._dynamic_fields[field_name]),
+            self.darkmatter.__getattr__(self._dynamic_fields[field_name])
+        ]
+        #units = component_data[0].units
+        self.particle_types = np.concatenate((
+            np.full(len(component_data[0]),"stars"),
+            np.full(len(component_data[1]),"gas"),
+            np.full(len(component_data[2]),"darkmatter")
+        ))
+        return np.concatenate((
+            component_data[0],
+            component_data[1],
+            component_data[2]
+        )) 
+            
+
+    try:
+        return self.__getattribute__(field_name)
+    except AttributeError:
+        raise AttributeError(f"Field '{field_name}' not found for particle type {self.ptype}. "+ f"Available fields are: {list(self._dynamic_fields.keys())}")
+    
+    AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._dynamic_fields.keys())}")
+    return None
+

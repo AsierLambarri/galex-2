@@ -3,16 +3,21 @@ from unyt import unyt_array, unyt_quantity
 from pytreegrav import Potential
 from copy import deepcopy, copy
 
+from .utils import softmax
 
-def bound_particlesBH(pos, vel, mass, 
-                      #ids = None,
+def bound_particlesBH(pos, 
+                      vel, 
+                      mass, 
                       soft = None,
                       cm = None,
                       vcm = None,
+                      verbose = False,
+                      weighting="softmax",
                       theta = 0.7,
-                      refine = False,
+                      refine = True,
                       delta = 1E-5,
-                      verbose = False
+                      nbound=32,
+                      T=0.25
                      ):
     """Computes the bound particles of a halo/ensemble of particles using the Barnes-Hut algorithm implemented in PYTREEGRAV.
     The bound particles are defined as those with E= pot + kin < 0. The center of mass position is not required, as the potential 
@@ -38,8 +43,6 @@ def bound_particlesBH(pos, vel, mass,
         Velocity of the particles in pysical km/s.
     mass : array
         Masses of particles, with units. When calculatig, they are converted to Msun.
-    ids : array, optional
-        Array of unique particle ids. If provided, the function returns masks for bound particles and bound particle ids.
     soft : array, optional
         Softening of particles. Not required, results do not differ a lot.
     cm : array, optional
@@ -54,6 +57,12 @@ def bound_particlesBH(pos, vel, mass,
         Relative tolerance for determined if the unbinding is refined. Default is 1E-5.
     verbose : bool, optional
         Whether to print when running. Work in progrees. default is False.
+    weighting : str
+        SOFTMAX or MOST-BOUND. Names are self, explanatory.
+    nbound : int
+        Controls how many particles are used when estimating CoM properties through MOST-BOUND.
+    T : int
+        Controls how many particles are used when estimating CoM properties through MOST-BOUND.
     """
 
     cm = np.average(pos, axis=0, weights=mass) if cm is None else cm
@@ -61,9 +70,15 @@ def bound_particlesBH(pos, vel, mass,
 
     softenings = soft.in_units(pos.units) if soft is not None else None
 
-    pot = Potential(pos, mass, softenings,
-                    parallel=True, quadrupole=True, G=unyt_quantity(4.300917270038e-06, "kpc/Msun * (km/s)**2").in_units(pos.units/mass.units * (vel.units)**2), 
-                    theta=theta)
+    potential = Potential(
+        pos, 
+        mass, 
+        softenings,
+        parallel=True, 
+        quadrupole=True, 
+        G=unyt_quantity(4.300917270038e-06, "kpc/Msun * (km/s)**2").in_units(pos.units/mass.units * (vel.units)**2),   
+        theta=theta
+    )
 
     for i in range(100):
         abs_vel = np.sqrt( (vel[:,0]-vcm[0])**2 +
@@ -73,38 +88,48 @@ def bound_particlesBH(pos, vel, mass,
     
         kin = 0.5 * mass * abs_vel**2
         
-        pot = mass * unyt_array(pot, vel.units**2)
+        pot = mass * unyt_array(potential, vel.units**2)
         E = kin + pot
         bound_mask = E < 0
         
+        if weighting.lower() == "most-bound":
+            N = int(np.rint(np.minimum(0.1 * np.count_nonzero(bound_mask), nbound)))
+            most_bound_ids = np.argsort(E)[:N]
+            most_bound_mask = np.zeros(len(E), dtype=bool)
+            most_bound_mask[most_bound_ids] = True
+            
+            new_cm = np.average(pos[most_bound_mask], axis=0, weights=mass[most_bound_mask])
+            new_vcm = np.average(vel[most_bound_mask], axis=0, weights=mass[most_bound_mask])  
+        elif weighting.lower() == "softmax":
+            w = E[bound_mask]/E[bound_mask].min()
+            new_cm = np.average(pos[bound_mask], axis=0, weights=softmax(w, T))
+            new_vcm = np.average(vel[bound_mask], axis=0, weights=softmax(w, T))               
+        else:
+            raise Exception("Weighting mode doesnt exist!")
+
         
-        N = int(np.rint(np.minimum(0.1 * np.count_nonzero(bound_mask), 32)))
-        most_bound_ids = np.argsort(E)[:N]
-        most_bound_mask = np.zeros(len(E), dtype=bool)
-        most_bound_mask[most_bound_ids] = True
-        
-        new_cm = np.average(pos[most_bound_mask], axis=0, weights=mass[most_bound_mask])
-        new_vcm = np.average(vel[most_bound_mask], axis=0, weights=mass[most_bound_mask])        
-     
         delta_cm = np.sqrt(np.sum((new_cm - cm)**2, axis=0)) / np.linalg.norm(cm) < delta
         delta_vcm =  np.sqrt(np.sum((new_vcm - vcm)**2, axis=0)) / np.linalg.norm(vcm) < delta        
         
         if not refine or (delta_cm and delta_vcm):
             return E, kin, pot
-            #return (bound_mask, most_bound_mask, ids[bound_mask], ids[most_bound_mask]) if ids is not None else (bound_mask, most_bound_mask)
 
         cm, vcm = copy(new_cm), copy(new_vcm)
 
 
 
-def bound_particlesAPROX(pos, vel, mass, 
-                      #ids = None,
-                      cm = None,
-                      vcm = None,
-                      refine = False,
-                      delta = 1E-5,
-                      verbose = False
-                     ):
+def bound_particlesAPROX(pos, 
+                         vel, 
+                         mass, 
+                         cm = None,
+                         vcm = None,
+                         verbose = False,
+                         weighting="softmax",
+                         refine = False,
+                         delta = 1E-5,
+                         nbound=32,
+                         T=0.25
+                        ):
     """Computes the bound particles by approximating the ensemble as a point source for ease of potential calculation. 
     The bound particles are defined as those with E= pot + kin < 0. The center of mass position is required, as the potential 
     calculation is done relative to the cm position with the following expression:
@@ -134,8 +159,6 @@ def bound_particlesAPROX(pos, vel, mass,
         Velocity of the particles in pysical km/s.
     mass : array
         Masses of particles, with units. When calculatig, they are converted to Msun.
-    ids : array, optional
-        Array of unique particle ids. If provided, the function returns masks for bound particles and bound particle ids.
     soft : array, optional
         Softening of particles. Not required, results do not differ a lot.
     cm : array, optional
@@ -148,12 +171,18 @@ def bound_particlesAPROX(pos, vel, mass,
         Relative tolerance for determined if the unbinding is refined. Default is 1E-5.
     verbose : bool, optional
         Whether to print when running. Work in progrees. default is False.
+    weighting : str
+        SOFTMAX or MOST-BOUND. Names are self, explanatory.
+    nbound : int
+        Controls how many particles are used when estimating CoM properties through MOST-BOUND.
+    T : int
+        Controls how many particles are used when estimating CoM properties through MOST-BOUND.
     """
 
     cm = np.average(pos, axis=0, weights=mass) if cm is None else cm
     vcm = np.average(vel, axis=0, weights=mass) if vcm is None else vcm
     G = -unyt_quantity(4.300917270038e-06, "kpc/Msun * km**2/s**2").in_units(pos.units/mass.units * (vel.units)**2)
-    
+
     for i in range(100):
         radii = np.sqrt( (pos[:,0]-cm[0])**2 +
                          (pos[:,1]-cm[1])**2 + 
@@ -170,20 +199,27 @@ def bound_particlesAPROX(pos, vel, mass,
         bound_mask = E < 0
         
         
-        N = int(np.rint(np.minimum(0.1 * np.count_nonzero(bound_mask), 32)))
-        most_bound_ids = np.argsort(E)[:N]
-        most_bound_mask = np.zeros(len(E), dtype=bool)
-        most_bound_mask[most_bound_ids] = True
-        
-        new_cm = np.average(pos[most_bound_mask], axis=0, weights=mass[most_bound_mask])
-        new_vcm = np.average(vel[most_bound_mask], axis=0, weights=mass[most_bound_mask])        
+        if weighting.lower() == "most-bound":
+            N = int(np.rint(np.minimum(0.1 * np.count_nonzero(bound_mask), nbound)))
+            most_bound_ids = np.argsort(E)[:N]
+            most_bound_mask = np.zeros(len(E), dtype=bool)
+            most_bound_mask[most_bound_ids] = True
+            
+            new_cm = np.average(pos[most_bound_mask], axis=0, weights=mass[most_bound_mask])
+            new_vcm = np.average(vel[most_bound_mask], axis=0, weights=mass[most_bound_mask])  
+        elif weighting.lower() == "softmax":
+            w = E[bound_mask]/E[bound_mask].min()
+            new_cm = np.average(pos[bound_mask], axis=0, weights=softmax(w, T))
+            new_vcm = np.average(vel[bound_mask], axis=0, weights=softmax(w, T))               
+        else:
+            raise Exception("Weighting mode doesnt exist!")
+     
      
         delta_cm = np.sqrt(np.sum((new_cm - cm)**2, axis=0)) / np.linalg.norm(cm) < delta
         delta_vcm =  np.sqrt(np.sum((new_vcm - vcm)**2, axis=0)) / np.linalg.norm(vcm) < delta        
         
         if not refine or (delta_cm and delta_vcm):
             return E, kin, pot
-            #return (bound_mask, most_bound_mask, ids[bound_mask], ids[most_bound_mask]) if ids is not None else (bound_mask, most_bound_mask)
 
         cm, vcm = copy(new_cm), copy(new_vcm)
 
