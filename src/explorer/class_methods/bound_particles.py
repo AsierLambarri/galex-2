@@ -62,7 +62,7 @@ def bound_particlesBH(pos,
     nbound : int
         Controls how many particles are used when estimating CoM properties through MOST-BOUND.
     T : int
-        Controls how many particles are used when estimating CoM properties through MOST-BOUND.
+        Controls how many particles are used when estimating CoM properties through SOFTMAX.
     """
 
     cm = np.average(pos, axis=0, weights=mass) if cm is None else cm

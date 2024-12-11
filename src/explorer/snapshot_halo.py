@@ -119,36 +119,8 @@ class SnapshotHalo(BaseSimulationObject):
     
 
 
-    def __getattr__(self, field_name):
-        """Dynamical loader for accessing fields.
-        """
-        
-        if field_name  in self._dynamic_fields.keys():
-            component_data = [
-                self.stars.__getattr__(self._dynamic_fields[field_name]),
-                self.gas.__getattr__(self._dynamic_fields[field_name]),
-                self.darkmatter.__getattr__(self._dynamic_fields[field_name])
-            ]
-            #units = component_data[0].units
-            self.particle_types = np.concatenate((
-                np.full(len(component_data[0]),"stars"),
-                np.full(len(component_data[1]),"gas"),
-                np.full(len(component_data[2]),"darkmatter")
-            ))
-            return np.concatenate((
-                component_data[0],
-                component_data[1],
-                component_data[2]
-            )) 
-                
+    
 
-        try:
-            return self.__getattribute__(field_name)
-        except AttributeError:
-            raise AttributeError(f"Field '{field_name}' not found for particle type {self.ptype}. "+ f"Available fields are: {list(self._dynamic_fields.keys())}")
-        
-        AttributeError(f"Field {field_name} not found for particle type {self.ptype}. Available fields are: {list(self._dynamic_fields.keys())}")
-        return None
     
     def _update_kwargs(self, default_kw, new_kw):
         """Update default kwargs with user provided kwargs.
@@ -349,7 +321,12 @@ class SnapshotHalo(BaseSimulationObject):
 
         OPTIONAL Parameters
         ----------
-        components
+        components : list[str]
+            Components to use: stars, gas and/or darkmatter.
+
+        Returns
+        -------
+        mdyn : float
         """
         mgas, mstars, mdm = unyt_quantity(0, "Msun"), unyt_quantity(0, "Msun"), unyt_quantity(0, "Msun") 
         
@@ -361,8 +338,148 @@ class SnapshotHalo(BaseSimulationObject):
             mdm = self.darkmatter.enclosed_mass(self.stars.rh3d, self.stars.cm)
 
         return  mstars + mdm + mgas
+
+    def compute_bound_particles(self,
+                                method="BH",
+                                components=["stars","gas","darkmatter"],
+                                weighting="softmax",
+                                verbose=False,
+                                **kwargs
+                               ):
+        """Computes the kinetic, potential and total energies of the particles in the specified components and determines
+        which particles are bound (un-bound) as E<0 (E>=0). Energies are stored as attributes. The gravitational potential
+        canbe calculated in two distinct ways:
+
+                1) Barnes-Hut tree-code implemented in pytreegrav, with allowance for force softening.
+                2) By approximating the potential as for a particle of mass "m" located at "r" as:
+                                         pot(r) = -G* M(<r) * m / |r - r_cm|
+                   this requires knowledge of the center-of-mass position to a good degree.
+
+        Given that the initial center-of-mass position and velocity might be relativelly unknown (as the whole particle
+        distribution is usually not a good estimator for these), the posibility of performing a refinement exist, where several
+        iterationsa performed until the center-of-mass position and velocity converge `both` to delta. The enter-of-mass 
+        position and velocity can be calculated using the N-most bound particles of using softmax weighting.
+
+        OPTIONAL Parameters
+        ----------
+        method : str
+            Method of computation. Either BH or APROX. Default: BH
+        weighting : str
+            SOFTMAX or MOST-BOUND. Names are self, explanatory. Default: softmax.
+        components : list[str]
+            Components to use: stars, gas and/or darkmatter. Default: all
+        verbose : bool
+            Verbose. Default: False
+
+        KEYWORD ARGUMENTS
+        -----------------
+        cm, vcm : array
+            Optional initial center-of-mass position and velocity.
+        softenings : list[tuple[float, str]] or list[float]
+            Softening for each particle type. Same shape as components. Default: [0,0,0]
+        theta : float
+            Opening angle for BH. Default: 0.7
+        refine : bool
+            Whether to refine. Default: False
+        delta : float
+            Converge tolerance for refinement. Default: 1E-5
+        nbound : int
+        Controls how many particles are used when estimating CoM properties through MOST-BOUND.
+        T : int
+        Controls how many particles are used when estimating CoM properties through SOFTMAX.
+        parallel : bool
+            Whether to parallelize BH computation. Default: True
+        quadrupole : bool
+            Whether to use quardupole approximation istead of dipole. Default: True
+
+        Returns
+        -------
+        None
+        """
+        self.stars._delete_bound_fields()
+        self.gas._delete_bound_fields()
+        self.darkmatter._delete_bound_fields()
         
-    
+        if components == "particles":
+            components = ["stars", "darkmatter"]
+            
+        masses = unyt_array(np.empty((0,)), "Msun")
+        coords = unyt_array(np.empty((0,3)), "kpc")
+        vels = unyt_array(np.empty((0,3)), "km/s")
+        softenings = unyt_array(np.empty((0,)), "kpc")
+        
+        particle_types = np.empty((0,))
+        softs = [0,0,0] if "softenings" not in kwargs.keys() else kwargs["softenings"]
+        psofts = unyt_array([unyt_quantity(*s).to('kpc') for s in softs]) if isinstance(softs[0], tuple) else unyt_array(softs, 'kpc')
+
+        for component, psoft in zip(components, psofts):
+            N = len(getattr(self, component).masses)
+            masses = np.concatenate((
+                masses, getattr(self, component).masses.to("Msun")
+            ))
+            coords = np.vstack((
+                coords, getattr(self, component).coords.to("kpc")
+            ))
+            vels = np.vstack((
+                vels, getattr(self, component).vels.to("km/s")
+            ))
+            softenings = np.concatenate((
+                softenings, unyt_array(np.full(N, psoft.to("kpc")), 'kpc')
+            ))
+            particle_types = np.concatenate((
+                particle_types, np.full(N, component)
+            ))
+
+        
+
+        
+
+        if method.lower() == "bh":
+            E, kin, pot = bound_particlesBH(
+                coords,
+                vels,
+                masses,
+                soft=softenings,
+                cm=None if "cm" not in kwargs.keys() else unyt_array(*kwargs["cm"]),
+                vcm=None if "vcm" not in kwargs.keys() else unyt_array(*kwargs["vcm"]),
+                verbose=verbose,
+                weighting=weighting,
+                refine=True if "refine" not in kwargs.keys() else kwargs["refine"],
+                delta=1E-5 if "delta" not in kwargs.keys() else kwargs["delta"],
+                nbound=32 if "nbound" not in kwargs.keys() else kwargs["nbound"],
+                T=0.22 if "T" not in kwargs.keys() else kwargs["T"]
+            )
+        elif method.lower() == "aprox":
+            E, kin, pot = bound_particlesAPROX(
+                coords,
+                vels,
+                masses,
+                cm=None if "cm" not in kwargs.keys() else unyt_array(*kwargs["cm"]),
+                vcm=None if "vcm" not in kwargs.keys() else unyt_array(*kwargs["vcm"]),
+                verbose=verbose,
+                weighting=weighting,
+                refine=True if "refine" not in kwargs.keys() else kwargs["refine"],
+                delta=1E-5 if "delta" not in kwargs.keys() else kwargs["delta"],
+                nbound=32 if "nbound" not in kwargs.keys() else kwargs["nbound"],
+                T=0.22 if "T" not in kwargs.keys() else kwargs["T"]
+            )
+
+
+        for component in components:     
+            #del getattr(self, component)._bmask
+            
+            #getattr(self, component)._bmask = E[particle_types == component] < 0            
+            #getattr(self, component).E = E[particle_types == component]            
+            #getattr(self, component).kin = kin[particle_types == component]            
+            #getattr(self, component).pot = pot[particle_types == component]            
+
+
+            #setattr(getattr(self, component), '_bmask', E[particle_types == component] < 0)
+            setattr(getattr(self, component), 'E', E[particle_types == component].copy())
+            setattr(getattr(self, component), 'kin', kin[particle_types == component].copy())
+            setattr(getattr(self, component), 'pot', pot[particle_types == component].copy())
+
+        return None
 
 
 

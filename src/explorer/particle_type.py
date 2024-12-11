@@ -47,7 +47,7 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         self._fields_loaded = {}
         self._data = data
         
-        self._bmask = np.ones_like(self.masses.value, dtype=bool)
+        #self._bmask = np.ones_like(self.masses.value, dtype=bool)
 
         missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields["stars"]]
         if missing_fields:
@@ -109,7 +109,14 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
     def sigma_los(self, value):
         self.update_shared_attr(self.ptype, "sigma_los", value)
 
-    
+    @property
+    def _bmask(self):
+        if hasattr(self, "E"):
+            return self.E < 0
+        else:
+            return np.ones_like(self.masses.value, dtype=bool)
+
+        
 
     def __getattr__(self, field_name):
         """Dynamical loader for accessing fields.
@@ -299,7 +306,7 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
         self._fields_loaded = {}
         self._data = data
         
-        self._bmask = np.ones_like(self.masses.value, dtype=bool)
+        #self._bmask = np.ones_like(self.masses.value, dtype=bool)
                 
         missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields["darkmatter"]]
         if missing_fields:
@@ -397,8 +404,12 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
     def vrms(self, value):
         self.update_shared_attr(self.ptype, "vrms", value)
 
-
-
+    @property
+    def _bmask(self):
+        if hasattr(self, "E"):
+            return self.E < 0
+        else:
+            return np.ones_like(self.masses.value, dtype=bool)
 
     
 
@@ -468,6 +479,8 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
 
     def compute_bound_particles(self, 
                                 method, 
+                                cm=None,
+                                vcm=None,
                                 refine=True, 
                                 delta=1E-5, 
                                 verbose=False
@@ -498,15 +511,14 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
                 self.coords,
                 self.vels,
                 self.masses,
-                cm = self.rockstar_center,
-                vcm = self.rockstar_vel,
+                cm = cm,
+                vcm = vcm,
                 refine = refine,
                 delta = delta,
                 verbose = verbose
             )
 
 
-        
         elif method == "BH":
             try:
                 hsml = self.hsml
@@ -518,8 +530,8 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
                 self.vels,
                 self.masses,
                 soft = hsml,
-                cm = self.cm,
-                vcm = self.vcm,
+                cm=cm,
+                vcm=vcm,
                 refine = refine,
                 delta = delta,
                 verbose = verbose                                  
@@ -533,7 +545,6 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
                 del self._fields_loaded[key]
                 
         return None
-
 
 
 
@@ -570,7 +581,7 @@ class GasComponent(BaseSimulationObject, BaseComponent):
         self._fields_loaded = {}
         self._data = data
         
-        self._bmask = np.ones_like(self.masses.value, dtype=bool)
+        #self._bmask = np.ones_like(self.masses.value, dtype=bool)
 
         missing_fields = [f for f in ['coords', 'vels', 'masses'] if f not in config.fields["gas"]]
         if missing_fields:
@@ -623,7 +634,16 @@ class GasComponent(BaseSimulationObject, BaseComponent):
     def sigma_los(self, value):
         self.update_shared_attr(self.ptype, "sigma_los", value)
 
+    @property
+    def _bmask(self):
+        if hasattr(self, "E"):
+            return self.E < 0
+        else:
+            return np.ones_like(self.masses.value, dtype=bool)
 
+
+
+    
 
     def __getattr__(self, field_name):
             """Dynamical loader for accessing fields.

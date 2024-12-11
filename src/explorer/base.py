@@ -249,6 +249,16 @@ class BaseComponent:
 
         return None
 
+    def _delete_bound_fields(self):
+        """Deletes bound fields stored in cache. Used to force the dynamical field loader to re-load these fields after a new boundness has been computed.
+        """
+        for key in list(self._fields_loaded.keys()):
+            if key.startswith("b"):
+                del self._fields_loaded[key]
+
+        return None
+        
+
 
 
 
