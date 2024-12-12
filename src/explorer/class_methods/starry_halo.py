@@ -13,6 +13,7 @@ from scipy.stats import binned_statistic
 from copy import copy
 
 from .center_of_mass import center_of_mass_pos
+
 import pprint
 pp = pprint.PrettyPrinter(depth=4)
 

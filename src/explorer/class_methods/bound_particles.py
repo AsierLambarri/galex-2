@@ -5,6 +5,10 @@ from copy import deepcopy, copy
 
 from .utils import softmax
 
+import pprint
+pp = pprint.PrettyPrinter(depth=4)
+
+
 def bound_particlesBH(pos, 
                       vel, 
                       mass, 
@@ -16,8 +20,10 @@ def bound_particlesBH(pos,
                       theta = 0.7,
                       refine = True,
                       delta = 1E-5,
+                      f=0.1,
                       nbound=32,
-                      T=0.25
+                      T=0.25,
+                      return_cm=False
                      ):
     """Computes the bound particles of a halo/ensemble of particles using the Barnes-Hut algorithm implemented in PYTREEGRAV.
     The bound particles are defined as those with E= pot + kin < 0. The center of mass position is not required, as the potential 
@@ -70,6 +76,14 @@ def bound_particlesBH(pos,
 
     softenings = soft.in_units(pos.units) if soft is not None else None
 
+    
+    if verbose:
+        print(f"Initial center-of-mass position: {cm}")
+        print(f"Initial center-of-mass velocity: {vcm}")
+        print(f"Initial total mass: {mass.sum().to('Msun')}")
+        print(f"Number of particles: {len(mass)}")
+
+    
     potential = Potential(
         pos, 
         mass, 
@@ -93,7 +107,7 @@ def bound_particlesBH(pos,
         bound_mask = E < 0
         
         if weighting.lower() == "most-bound":
-            N = int(np.rint(np.minimum(0.1 * np.count_nonzero(bound_mask), nbound)))
+            N = int(np.rint(np.minimum(f * np.count_nonzero(bound_mask), nbound)))
             most_bound_ids = np.argsort(E)[:N]
             most_bound_mask = np.zeros(len(E), dtype=bool)
             most_bound_mask[most_bound_ids] = True
@@ -102,6 +116,9 @@ def bound_particlesBH(pos,
             new_vcm = np.average(vel[most_bound_mask], axis=0, weights=mass[most_bound_mask])  
         elif weighting.lower() == "softmax":
             w = E[bound_mask]/E[bound_mask].min()
+            if T == "adaptative":
+                T = np.abs(kin[bound_mask].mean()/E[bound_mask].min())
+                
             new_cm = np.average(pos[bound_mask], axis=0, weights=softmax(w, T))
             new_vcm = np.average(vel[bound_mask], axis=0, weights=softmax(w, T))               
         else:
@@ -110,10 +127,37 @@ def bound_particlesBH(pos,
         
         delta_cm = np.sqrt(np.sum((new_cm - cm)**2, axis=0)) / np.linalg.norm(cm) < delta
         delta_vcm =  np.sqrt(np.sum((new_vcm - vcm)**2, axis=0)) / np.linalg.norm(vcm) < delta        
-        
-        if not refine or (delta_cm and delta_vcm):
-            return E, kin, pot
 
+
+        if verbose:
+            print(f"\n\n### {i}-th iteration ###\n")
+            if weighting=="softmax":
+                print(f"Softmax parameters:")
+                print(f"-------------------")
+                print(f"   Temperature of softmax: {T}")
+                print(f"   Max/Min softmax weight ratio: {w.max()/w.min()}")
+            else:
+                print(f"N-bound parameters:")
+                print(f"-------------------")
+                print(f"   Max number of particles: {nbound}")
+                print(f"   Particle-fraction f: {f}")
+                print(f"   Number of particles used: {N}")
+
+            print(f"\nInfo:")
+            print(f"-----")
+            print(f"   Center-of-mass position: {new_cm}")
+            print(f"   Center-of-mass velocity: {new_vcm}")
+            print(f"   Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
+            print(f"   Number of bound particles: {len(mass[bound_mask])}")
+
+        
+        if not refine or (delta_cm and delta_vcm) or np.all(E >= 0):
+            if return_cm:
+                return E, kin, pot, new_cm, new_vcm
+            else:
+                return E, kin, pot
+
+        
         cm, vcm = copy(new_cm), copy(new_vcm)
 
 
@@ -127,8 +171,10 @@ def bound_particlesAPROX(pos,
                          weighting="softmax",
                          refine = False,
                          delta = 1E-5,
+                         f=0.1,
                          nbound=32,
-                         T=0.25
+                         T=0.25,
+                         return_cm=False
                         ):
     """Computes the bound particles by approximating the ensemble as a point source for ease of potential calculation. 
     The bound particles are defined as those with E= pot + kin < 0. The center of mass position is required, as the potential 
@@ -183,6 +229,13 @@ def bound_particlesAPROX(pos,
     vcm = np.average(vel, axis=0, weights=mass) if vcm is None else vcm
     G = -unyt_quantity(4.300917270038e-06, "kpc/Msun * km**2/s**2").in_units(pos.units/mass.units * (vel.units)**2)
 
+
+    if verbose:
+        print(f"Initial center-of-mass position: {cm}")
+        print(f"Initial center-of-mass velocity: {vcm}")
+        print(f"Initial total mass: {mass.sum().to('Msun')}")
+        print(f"Number of particles: {len(mass)}")
+    
     for i in range(100):
         radii = np.sqrt( (pos[:,0]-cm[0])**2 +
                          (pos[:,1]-cm[1])**2 + 
@@ -200,7 +253,7 @@ def bound_particlesAPROX(pos,
         
         
         if weighting.lower() == "most-bound":
-            N = int(np.rint(np.minimum(0.1 * np.count_nonzero(bound_mask), nbound)))
+            N = int(np.rint(np.minimum(f * np.count_nonzero(bound_mask), nbound)))
             most_bound_ids = np.argsort(E)[:N]
             most_bound_mask = np.zeros(len(E), dtype=bool)
             most_bound_mask[most_bound_ids] = True
@@ -209,6 +262,9 @@ def bound_particlesAPROX(pos,
             new_vcm = np.average(vel[most_bound_mask], axis=0, weights=mass[most_bound_mask])  
         elif weighting.lower() == "softmax":
             w = E[bound_mask]/E[bound_mask].min()
+            if T == "adaptative":
+                T = np.abs(kin[bound_mask].mean()/E[bound_mask].min())
+                
             new_cm = np.average(pos[bound_mask], axis=0, weights=softmax(w, T))
             new_vcm = np.average(vel[bound_mask], axis=0, weights=softmax(w, T))               
         else:
@@ -217,9 +273,34 @@ def bound_particlesAPROX(pos,
      
         delta_cm = np.sqrt(np.sum((new_cm - cm)**2, axis=0)) / np.linalg.norm(cm) < delta
         delta_vcm =  np.sqrt(np.sum((new_vcm - vcm)**2, axis=0)) / np.linalg.norm(vcm) < delta        
+
+        if verbose:
+            print(f"\n\n### {i}-th iteration ###\n")
+            if weighting=="softmax":
+                print(f"Softmax parameters:")
+                print(f"-------------------")
+                print(f"   Temperature of softmax: {T}")
+                print(f"   Max/Min softmax weight ratio: {w.max()/w.min()}")
+            else:
+                print(f"N-bound parameters:")
+                print(f"-------------------")
+                print(f"   Max number of particles: {nbound}")
+                print(f"   Particle-fraction f: {f}")
+                print(f"   Number of particles used: {N}")
+
+            
+            print(f"\nInfo:")
+            print(f"-----")
+            print(f"   Center-of-mass position: {new_cm}")
+            print(f"   Center-of-mass velocity: {new_vcm}")
+            print(f"   Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
+            print(f"   Number of bound particles: {len(mass[bound_mask])}")
         
-        if not refine or (delta_cm and delta_vcm):
-            return E, kin, pot
+        if not refine or (delta_cm and delta_vcm) or np.all(E >= 0):
+            if return_cm:
+                return E, kin, pot, new_cm, new_vcm
+            else:
+                return E, kin, pot
 
         cm, vcm = copy(new_cm), copy(new_vcm)
 

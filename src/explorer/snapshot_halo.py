@@ -435,7 +435,7 @@ class SnapshotHalo(BaseSimulationObject):
         
 
         if method.lower() == "bh":
-            E, kin, pot = bound_particlesBH(
+            E, kin, pot, cm, vcm = bound_particlesBH(
                 coords,
                 vels,
                 masses,
@@ -446,11 +446,13 @@ class SnapshotHalo(BaseSimulationObject):
                 weighting=weighting,
                 refine=True if "refine" not in kwargs.keys() else kwargs["refine"],
                 delta=1E-5 if "delta" not in kwargs.keys() else kwargs["delta"],
+                f=0.1 if "f" not in kwargs.keys() else kwargs["f"],
                 nbound=32 if "nbound" not in kwargs.keys() else kwargs["nbound"],
-                T=0.22 if "T" not in kwargs.keys() else kwargs["T"]
+                T=0.22 if "T" not in kwargs.keys() else kwargs["T"],
+                return_cm=True
             )
         elif method.lower() == "aprox":
-            E, kin, pot = bound_particlesAPROX(
+            E, kin, pot, cm, vcm = bound_particlesAPROX(
                 coords,
                 vels,
                 masses,
@@ -460,21 +462,17 @@ class SnapshotHalo(BaseSimulationObject):
                 weighting=weighting,
                 refine=True if "refine" not in kwargs.keys() else kwargs["refine"],
                 delta=1E-5 if "delta" not in kwargs.keys() else kwargs["delta"],
+                f=0.1 if "f" not in kwargs.keys() else kwargs["f"],
                 nbound=32 if "nbound" not in kwargs.keys() else kwargs["nbound"],
-                T=0.22 if "T" not in kwargs.keys() else kwargs["T"]
+                T=0.22 if "T" not in kwargs.keys() else kwargs["T"],
+                return_cm=True
             )
 
-
+        
+        self.cm = cm
+        self.vcm = vcm
+        
         for component in components:     
-            #del getattr(self, component)._bmask
-            
-            #getattr(self, component)._bmask = E[particle_types == component] < 0            
-            #getattr(self, component).E = E[particle_types == component]            
-            #getattr(self, component).kin = kin[particle_types == component]            
-            #getattr(self, component).pot = pot[particle_types == component]            
-
-
-            #setattr(getattr(self, component), '_bmask', E[particle_types == component] < 0)
             setattr(getattr(self, component), 'E', E[particle_types == component].copy())
             setattr(getattr(self, component), 'kin', kin[particle_types == component].copy())
             setattr(getattr(self, component), 'pot', pot[particle_types == component].copy())
