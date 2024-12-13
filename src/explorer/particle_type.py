@@ -477,79 +477,7 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
             print("\n".join(output))
             return None
 
-    def compute_bound_particles(self, 
-                                method, 
-                                cm=None,
-                                vcm=None,
-                                refine=True, 
-                                delta=1E-5, 
-                                verbose=False
-                               ):
-        """Computes the bound particles of a halo/ensemble of particles using the Barnes-Hut algorithm implemented in PYTREEGRAV or 
-        approximating it as:
-
-                            pot = -G* Mtot * m_i / |x_i - x_cm|
-                            
-        The bound particles are defined as those with E= pot + kin < 0. The center of mass position is not required, as the potential 
-        calculation is done with relative distances between particles. To compute the kinetic energy of the particles the *v_cm*
-        is needed: you can provide one or the function make a crude estimates of it with all particles. 
     
-        You can ask the function to refine the unbinding by iterating until the *cm* and *v_cm* vectors converge to within a user specified
-        delta (default is 1E-5, relative). This is recomended if you dont specify the *v_cm*, as the initial estimation using all particles
-        may be biased for anisotropic particle distributions. If you provide your own *v_cm*, taken from somewhere reliable e.g. Rockstar halo
-        catalogues, it will be good enough. Note that if you still want to refine, the *v_cm* you provided will be disregarded after the
-        first iteration.
-    
-        Typical run times are of 0.5-2s dependin if the result is refined or not. This is similar to the I/O overheads of yt.load, making it reasonable for
-        use with a few halos (where you dont care if the total runtime is twice as long because it will be fast enough).
-    
-        Unit handling is done with unyt. 
-        """
-        
-        if method == "APROX":
-            self.E, self.kin, self.pot = bound_particlesAPROX(
-                self.coords,
-                self.vels,
-                self.masses,
-                cm = cm,
-                vcm = vcm,
-                refine = refine,
-                delta = delta,
-                verbose = verbose
-            )
-
-
-        elif method == "BH":
-            try:
-                hsml = self.hsml
-            except:
-                hsml = None
-    
-            self.E, self.kin, self.pot = bound_particlesBH(
-                self.coords,
-                self.vels,
-                self.masses,
-                soft = hsml,
-                cm=cm,
-                vcm=vcm,
-                refine = refine,
-                delta = delta,
-                verbose = verbose                                  
-            )
-            
-        self._bmask = self.E < 0
-        self.bound_method = f"grav-{method}".lower()
-        
-        for key in list(self._fields_loaded.keys()):  
-            if key.startswith("b"):
-                del self._fields_loaded[key]
-                
-        return None
-
-
-
-
-
 
 
 

@@ -17,7 +17,8 @@ from .class_methods import (
                             center_of_mass_vel, 
                             refine_6Dcenter, 
                             half_mass_radius, 
-                            easy_los_velocity
+                            easy_los_velocity,
+                            softmax
                             )
 
 
@@ -388,17 +389,42 @@ class BaseComponent:
         cm : array
             Refined Center of mass and various quantities.
         """
+        if method.lower() == "pot-most-bound":
+            bound_mask = self.E < 0
+            f = 0.1 if "f" not in kwargs.keys() else kwargs["f"]
+            nbound = 32 if "nbound" not in kwargs.keys() else kwargs["nbound"]
+            
+            N = int(np.rint(np.minimum(f * np.count_nonzero(bound_mask), nbound)))
+            most_bound_ids = np.argsort(self.E)[:N]
+            most_bound_mask = np.zeros(len(self.E), dtype=bool)
+            most_bound_mask[most_bound_ids] = True
+            
+            self.cm = np.average(self.coords[most_bound_mask], axis=0, weights=self.masses[most_bound_mask])
+            self.vcm = np.average(self.vels[most_bound_mask], axis=0, weights=self.masses[most_bound_mask]) 
+            
+        elif method.lower() == "pot-softmax":
+            bound_mask = self.E < 0
+            T = "adaptative" if "T" not in kwargs.keys() else kwargs["T"]
+            
+            w = self.E[bound_mask]/self.E[bound_mask].min()
+            if T == "adaptative":
+                T = np.abs(self.kin[bound_mask].mean()/self.E[bound_mask].min())
+                
+            self.cm = np.average(self.coords[bound_mask], axis=0, weights=softmax(w, T))
+            self.vcm = np.average(self.vels[bound_mask], axis=0, weights=softmax(w, T))               
 
-        self._centering_results = refine_6Dcenter(
-            self.bcoords,
-            self.bmasses,
-            self.bvels,
-            method=method,
-            **kwargs
-        )
 
-        self.cm = self._centering_results['center']
-        self.vcm = self._centering_results['velocity']
+        else:
+            self._centering_results = refine_6Dcenter(
+                self.bcoords,
+                self.bmasses,
+                self.bvels,
+                method=method,
+                **kwargs
+            )
+    
+            self.cm = self._centering_results['center']
+            self.vcm = self._centering_results['velocity']
         return self.cm, self.vcm
     
     def half_mass_radius(self, mfrac=0.5, project=False):

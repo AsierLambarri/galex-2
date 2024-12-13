@@ -106,6 +106,10 @@ def bound_particlesBH(pos,
         E = kin + pot
         bound_mask = E < 0
         
+        if np.all(E >= 0):
+            return E, kin, pot, unyt_array([np.nan, np.nan, np.nan], pos.units), unyt_array([np.nan, np.nan, np.nan], vel.units)
+
+        
         if weighting.lower() == "most-bound":
             N = int(np.rint(np.minimum(f * np.count_nonzero(bound_mask), nbound)))
             most_bound_ids = np.argsort(E)[:N]
@@ -151,7 +155,14 @@ def bound_particlesBH(pos,
             print(f"   Number of bound particles: {len(mass[bound_mask])}")
 
         
-        if not refine or (delta_cm and delta_vcm) or np.all(E >= 0):
+        if not refine or (delta_cm and delta_vcm):
+            print(f"\nFinal Values:")
+            print(f"-------------")
+            print(f"   Center-of-mass position: {new_cm}")
+            print(f"   Center-of-mass velocity: {new_vcm}")
+            print(f"   Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
+            print(f"   Number of bound particles: {len(mass[bound_mask])}")
+        
             if return_cm:
                 return E, kin, pot, new_cm, new_vcm
             else:
@@ -250,7 +261,9 @@ def bound_particlesAPROX(pos,
         pot = G * mass * mass.sum() / radii
         E = kin + pot
         bound_mask = E < 0
-        
+
+        if np.all(E >= 0):
+            return E, kin, pot, unyt_array([np.nan, np.nan, np.nan], pos.units), unyt_array([np.nan, np.nan, np.nan], vel.units)
         
         if weighting.lower() == "most-bound":
             N = int(np.rint(np.minimum(f * np.count_nonzero(bound_mask), nbound)))
@@ -296,7 +309,14 @@ def bound_particlesAPROX(pos,
             print(f"   Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
             print(f"   Number of bound particles: {len(mass[bound_mask])}")
         
-        if not refine or (delta_cm and delta_vcm) or np.all(E >= 0):
+        if not refine or (delta_cm and delta_vcm):
+            print(f"\nFinal Values:")
+            print(f"-------------")
+            print(f"   Center-of-mass position: {new_cm}")
+            print(f"   Center-of-mass velocity: {new_vcm}")
+            print(f"   Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
+            print(f"   Number of bound particles: {len(mass[bound_mask])}")
+            
             if return_cm:
                 return E, kin, pot, new_cm, new_vcm
             else:
