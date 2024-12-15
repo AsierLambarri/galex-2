@@ -431,8 +431,8 @@ class SnapshotHalo(BaseSimulationObject):
             ))
 
         
+            
 
-        
 
         if method.lower() == "bh":
             E, kin, pot, cm, vcm = bound_particlesBH(
@@ -440,8 +440,8 @@ class SnapshotHalo(BaseSimulationObject):
                 vels,
                 masses,
                 soft=softenings,
-                cm=None if "cm" not in kwargs.keys() else unyt_array(*kwargs["cm"]),
-                vcm=None if "vcm" not in kwargs.keys() else unyt_array(*kwargs["vcm"]),
+                cm=None if "cm" not in kwargs else unyt_array(*kwargs['cm']) if isinstance(kwargs['cm'], tuple) and len(kwargs['cm']) == 2 else kwargs['cm'],
+                vcm=None if "vcm" not in kwargs else unyt_array(*kwargs['vcm']) if isinstance(kwargs['vcm'], tuple) and len(kwargs['vcm']) == 2 else kwargs['vcm'],
                 verbose=verbose,
                 weighting=weighting,
                 refine=True if "refine" not in kwargs.keys() else kwargs["refine"],
@@ -456,8 +456,8 @@ class SnapshotHalo(BaseSimulationObject):
                 coords,
                 vels,
                 masses,
-                cm=None if "cm" not in kwargs.keys() else unyt_array(*kwargs["cm"]),
-                vcm=None if "vcm" not in kwargs.keys() else unyt_array(*kwargs["vcm"]),
+                cm=None if "cm" not in kwargs else unyt_array(*kwargs['cm']) if isinstance(kwargs['cm'], tuple) and len(kwargs['cm']) == 2 else kwargs['cm'],
+                vcm=None if "vcm" not in kwargs else unyt_array(*kwargs['vcm']) if isinstance(kwargs['vcm'], tuple) and len(kwargs['vcm']) == 2 else kwargs['vcm'],
                 verbose=verbose,
                 weighting=weighting,
                 refine=True if "refine" not in kwargs.keys() else kwargs["refine"],
@@ -468,6 +468,7 @@ class SnapshotHalo(BaseSimulationObject):
                 return_cm=True
             )
 
+        
         
         self.cm = cm
         self.vcm = vcm

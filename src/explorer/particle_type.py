@@ -111,6 +111,8 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
 
     @property
     def _bmask(self):
+        if self.bound_method == "starry-halo":
+            return self._starry_mask
         if hasattr(self, "E"):
             return self.E < 0
         else:
@@ -259,7 +261,7 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
             verbose=verbose
         )
         
-        self._bmask = mask
+        self._starry_mask = mask
         self.delta_rel = delta_rel
         self.bound_method = "starry-halo"
         
