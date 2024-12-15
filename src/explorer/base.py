@@ -427,7 +427,7 @@ class BaseComponent:
             self.vcm = self._centering_results['velocity']
         return self.cm, self.vcm
     
-    def half_mass_radius(self, mfrac=0.5, project=False):
+    def half_mass_radius(self, mfrac=0.5, project=False, only_bound=False):
         """By default, it computes 3D half mass radius of a given particle ensemble. If the center of the particles 
         is not provided, it is estimated by first finding the median of positions and then computing a refined CoM using
         only the particles inside r < 0.5*rmax.
@@ -447,15 +447,23 @@ class BaseComponent:
         MFRAC_mass_radius : float
             Desired mfrac mass fraction radius estimation. Provided in same units as pos, if any.
         """
-
-        rh = half_mass_radius(
-            self.bcoords, 
-            self.bmasses, 
-            self.cm, 
-            mfrac, 
-            project=project
-        )
-
+        if only_bound:
+            rh = half_mass_radius(
+                self.bcoords, 
+                self.bmasses, 
+                self.cm, 
+                mfrac, 
+                project=project
+            )
+        else:
+            rh = half_mass_radius(
+                self.coords, 
+                self.masses, 
+                self.cm, 
+                mfrac, 
+                project=project
+            )
+        
         if project:
             self.rh = rh
         else:
@@ -491,7 +499,7 @@ class BaseComponent:
         else:
             return losvel
 
-    def enclosed_mass(self, r0, center):
+    def enclosed_mass(self, r0, center, only_bound=True):
         """Computes the enclosed mass on a sphere centered on center, and with radius r0.
 
         Parameters
@@ -505,9 +513,12 @@ class BaseComponent:
         -------
         encmass : unyt_quantity
         """
-        mask = np.linalg.norm(self.bcoords - center, axis=1) <= r0
-        return self.bmasses[mask].sum()
-
+        if only_bound:
+            mask = np.linalg.norm(self.coords - center, axis=1) <= r0
+            return self.bmasses[mask].sum()
+        else:
+            mask = np.linalg.norm(self.coords - center, axis=1) <= r0
+            return self.masses[mask].sum()
     
 
     

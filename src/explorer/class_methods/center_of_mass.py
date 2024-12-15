@@ -181,7 +181,7 @@ def refine_6Dcenter(pos,
     if method == "adaptative":
         n = len(mass)
         if n < 2*nmin:
-            centering_results = radial_cut_center(pos, cass, rc_scale=rc_scale)
+            centering_results = radial_cut_center(pos, mass, rc_scale=rc_scale)
         else:
             centering_results = shrink_sphere_center(pos, mass, rsphere=rsphere, alpha=alpha, nmin=nmin)   
             
