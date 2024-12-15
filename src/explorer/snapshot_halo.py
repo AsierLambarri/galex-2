@@ -477,6 +477,8 @@ class SnapshotHalo(BaseSimulationObject):
             setattr(getattr(self, component), 'E', E[particle_types == component].copy())
             setattr(getattr(self, component), 'kin', kin[particle_types == component].copy())
             setattr(getattr(self, component), 'pot', pot[particle_types == component].copy())
+            setattr(getattr(self, component), 'bound_method', f"grav-{method}".lower())
+
 
         return None
 

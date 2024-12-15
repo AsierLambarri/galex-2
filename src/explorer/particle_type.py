@@ -47,7 +47,6 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         self._fields_loaded = {}
         self._data = data
         
-        #self._bmask = np.ones_like(self.masses.value, dtype=bool)
 
         missing_fields = [f for f in ['coords', 'vels', 'masses', 'IDs'] if f not in config.fields["stars"]]
         if missing_fields:
