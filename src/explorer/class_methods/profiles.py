@@ -4,10 +4,7 @@ from scipy.stats import binned_statistic
 def density_profile(pos, 
                     mass, 
                     center = None, 
-                    bins = None, 
-                    b_to_a=1, 
-                    c_to_a=1, 
-                    A=[1,0,0]
+                    bins = None
                    ):
     """Computes the radial density profile of a set of particles with geometry given by an
     ellipsoid with {a,b,c} axes and the major axis in the direction of A_vec. The binning is
@@ -63,6 +60,7 @@ def density_profile(pos,
     
     rcoords = (redges[1:] + redges[:-1])/2
     dens = mi / volumes
+    npbin[npbin == 0] = 1E20
     error = dens / np.sqrt(npbin)
     
     return_dict = {'r': rcoords,
@@ -123,7 +121,7 @@ def velocity_profile(pos,
     if v_center is not None:
         pass
     else:
-        v_center = np.average(pos[np.linalg.norm(pos - center, axis=1) < 0.7], axis=0, weights=[np.linalg.norm(pos - center, axis=1) < 0.7])
+        v_center = np.average(vel[np.linalg.norm(pos - center, axis=1) < 0.7], axis=0, weights=mass[np.linalg.norm(pos - center, axis=1) < 0.7])
 
 
     coords = pos - center
@@ -140,13 +138,15 @@ def velocity_profile(pos,
     
     redges = redges * coords.units
     vmean = vmean * vel.units
+    npart[npart == 0] = 1E20
+
     e_vmean = vmean / np.sqrt(npart)
     
     rcoords = (redges[1:] + redges[:-1])/2
 
     return_dict = {'r': rcoords,
-                   'vmean': vmean,
-                   'e_vmean': e_vmean,
+                   'vrms': vmean,
+                   'e_vrms': e_vmean,
                    'center': center,
                    'v_center': v_center
                   }

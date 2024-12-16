@@ -7,7 +7,7 @@ from unyt import unyt_array, unyt_quantity
 from .config import config
 from .base import BaseSimulationObject
 from .particle_type import StellarComponent, DarkComponent, GasComponent
-from .class_methods import bound_particlesBH, bound_particlesAPROX
+from .class_methods import bound_particlesBH, bound_particlesAPROX, density_profile, velocity_profile
 
 class SnapshotHalo(BaseSimulationObject):
     """zHalo class that implements a variety of functions to analyze the internal structure of a halo at a certain redshift, and the galaxy that
@@ -276,6 +276,10 @@ class SnapshotHalo(BaseSimulationObject):
         self.stars = StellarComponent(hashable_data, **self._kwargs)
         self.darkmatter = DarkComponent(hashable_data, **self._kwargs)
         self.gas = GasComponent(hashable_data, **self._kwargs)
+
+        self.stars._sp_center, self.stars._sp_radius = self.sp_center, self.sp_radius
+        self.darkmatter._sp_center, self.darkmatter._sp_radius = self.sp_center, self.sp_radius
+        self.gas._sp_center, self.gas._sp_radius = self.sp_center, self.sp_radius
         return None
         
         
@@ -402,6 +406,8 @@ class SnapshotHalo(BaseSimulationObject):
         
         if components == "particles":
             components = ["stars", "darkmatter"]
+        elif components == "all":
+            components = ["stars", "darkmatter", "gas"]
             
         masses = unyt_array(np.empty((0,)), "Msun")
         coords = unyt_array(np.empty((0,3)), "kpc")
@@ -479,11 +485,27 @@ class SnapshotHalo(BaseSimulationObject):
             setattr(getattr(self, component), 'pot', pot[particle_types == component].copy())
             setattr(getattr(self, component), 'bound_method', f"grav-{method}".lower())
 
-
         return None
 
 
 
+#    def profiles(self,
+#                 components="particles",
+#                 **kwargs
+#                 ):
+#        """Makes a fancy plot of density and velocity profiles.
+#        """
+#        import matplotlib.pyplot as plt
+#        import smplotlib
+#        
+#        if components == "particles":
+#            components = ["stars", "darkmatter"]
+#        elif components == "all":
+#            components = ["stars", "darkmatter", "gas"]
+#
+#        sp = self._data.ds.sphere(self.sp_center, (300,'kpc'))
+
+        
 
 
 

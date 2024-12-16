@@ -247,7 +247,6 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         for key in halo_params.keys():
             halo_params[key] = halo_params[key] if key not in kwargs.keys() else kwargs[key]
         
-        print(halo_params)
         
         _, mask, delta_rel = compute_stars_in_halo(
             self.coords,

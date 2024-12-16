@@ -18,7 +18,9 @@ from .class_methods import (
                             refine_6Dcenter, 
                             half_mass_radius, 
                             easy_los_velocity,
-                            softmax
+                            softmax,
+                            density_profile,
+                            velocity_profile
                             )
 
 
@@ -519,9 +521,202 @@ class BaseComponent:
         else:
             mask = np.linalg.norm(self.coords - center, axis=1) <= r0
             return self.masses[mask].sum()
-    
 
     
+    def density_profile(self, 
+                        pc="bound",
+                        center=None,
+                        bins=None,
+                        projected=False,
+                        return_bins=False,
+                        **kwargs
+                        ):
+        """Computes the average density profile of the particles. Returns r_i (R_i), rho_i and e_rho_i (Sigma_i, e_Sigma_i) for each bin. Center
+        and bins are automatically computed but can also be used specified. Profiles can be for all or bound particles. The smallest two bins
+        can be combined into one to counteract lack of resolution. Density error is assumed to be poissonian.
+
+        OPTIONAL Parameters
+        ----------
+        pc : str
+            Particle-Component. Either bound or all.
+        center : array
+            Center of the particle distribution. Default: None.
+        bins : array
+            Array of bin edges. Default: None.
+        projected : bool
+            Whether to get the projected distribution at current LOS. Default: False.
+        return_bins : bool
+            Whether to return bin edges. Default: False
+        
+        Returns
+        -------
+        r, dens, e_dens : arrays of bin centers,
+        """
+        if "new_data_params" in kwargs.keys():
+            sp = self._data.ds.sphere(
+                self._sp_center if "center" not in kwargs["new_data_params"].keys() else kwargs["new_data_params"]["center"], 
+                kwargs["new_data_params"]["radius"]
+            )
+            pos = vectorized_base_change(
+                np.linalg.inv(self.basis), 
+                sp[self._base_ptype, self._dynamic_fields["coords"]].in_units(self.coords.units)
+            )
+            mass = sp[self._base_ptype, self._dynamic_fields["masses"]].in_units(self.masses.units)
+            
+        else:
+            if pc == "bound":
+                pos = self.bcoords
+                mass = self.bmasses
+            elif pc == "all":
+                pos = self.coords
+                mass = self.masses
+                
+        
+        if center is None:
+            center = self.refined_center6d(**kwargs["kw_center"])[0].to(pos.units)
+
+            
+        else:
+            if isinstance(center, tuple):
+                center = unyt_array(*center).to(pos.units)
+    
+
+        
+        if projected:
+            pos = pos[:, :2]
+            center = center[:2]
+
+        
+        if bins is None:
+            radii = np.linalg.norm(pos - center, axis=1)
+            rmin, rmax, thicken = radii.min(), radii.max(), False
+            if "bins_params" in kwargs.keys():
+                rmin = rmin if "rmin" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["rmin"]
+                rmax = rmax if "rmax" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["rmax"]
+                thicken = False if "thicken" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["thicken"]
+
+            bins = np.histogram_bin_edges(
+                np.log10(radii),
+                range=np.log10([rmin, rmax]) 
+            )
+            bins = 10 ** bins
+
+            if thicken:
+                binindex = [i for i in range(len(bins)) if i!=1]
+                bins = bins[binindex]
+
+        result = density_profile(
+            pos,
+            mass,
+            center=center,
+            bins=bins
+        )
+
+        if projected and (result["dims"] != 2):
+            raise Exception("you fucked up dimensions, bud")
+
+        if return_bins:
+            return result["r"], result["rho"], result["e_rho"], bins
+        else:
+            return result["r"], result["rho"], result["e_rho"]
+
+    
+    def velocity_profile(self, 
+                         pc="bound",
+                         center=None,
+                         v_center=None,
+                         bins=None,
+                         thick=True,
+                         return_bins=False,
+                         **kwargs
+                         ):
+        """Computes the average disperion velocity profile of the particles. Returns r_i (R_i), vrms_i and e_vrms_i for each bin. Center
+        and bins are automatically computed but can also be used specified. Profiles can be for all or bound particles. The smallest two bins
+        can be combined into one to counteract lack of resolution. Density error is assumed to be poissonian.
+        
+        OPTIONAL Parameters
+        ----------
+        pc : str
+            Particle-Component. Either bound or all.
+        center : array
+            Center of the particle distribution. Default: None.
+        bins : array
+            Array of bin edges. Default: None.
+        thick : bool
+            Whether to combine the two smalles bins into a bigger one, to counteract lack of resolution.
+            Defualt: True
+        return_bins : bool
+            Whether to return bin edges. Default: False
+        
+        Returns
+        -------
+        r, dens, e_dens : arrays of bin centers,
+        """
+        if "new_data_params" in kwargs.keys():
+            sp = self._data.ds.sphere(
+                self._sp_center if "center" not in kwargs["new_data_params"].keys() else kwargs["new_data_params"]["center"], 
+                kwargs["new_data_params"]["radius"]
+            )
+            pos = vectorized_base_change(
+                np.linalg.inv(self.basis), 
+                sp[self._base_ptype, self._dynamic_fields["coords"]].in_units(self.coords.units)
+            )
+            vels = vectorized_base_change(
+                np.linalg.inv(self.basis), 
+                sp[self._base_ptype, self._dynamic_fields["vels"]].in_units(self.vels.units)
+            )
+        else:
+            if pc == "bound":
+                pos = self.bcoords
+                vels = self.bvels
+            elif pc == "all":
+                pos = self.coords
+                vels = self.vels
+        
+        
+        
+        if center is None:
+            center, v_center = self.refined_center6d(**kwargs["kw_center"])
+            center, v_center = center.to(pos.units), v_center.to(vels.units)
+        else:
+            if isinstance(center, tuple):
+                center = unyt_array(*center).to(pos.units)
+            if isinstance(v_center, tuple):
+                v_center = unyt_array(*v_center).to(vels.units)
+        
+         
+        if bins is None:
+            radii = np.linalg.norm(pos - center, axis=1)
+            rmin, rmax, thicken = radii.min(), radii.max(), False
+            if "bins_params" in kwargs.keys():
+                rmin = rmin if "rmin" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["rmin"]
+                rmax = rmax if "rmax" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["rmax"]
+                thicken = False if "thicken" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["thicken"]
+
+            bins = np.histogram_bin_edges(
+                np.log10(radii),
+                range=np.log10([radii.min() if "rmin" not in kwargs.keys() else kwargs["rmin"],
+                       radii.max() if "rmin" not in kwargs.keys() else kwargs["rmax"]
+                      ]) 
+            )
+            bins = 10 ** bins
+            if thick:
+                binindex = [i for i in range(len(bins)) if i!=1]
+                bins = bins[binindex]
+        
+        result = velocity_profile(
+            pos,
+            vels,
+            center=center,
+            v_center=v_center,
+            bins=bins
+        )
+        
+        if return_bins:
+            return result["r"], result["vrms"], result["e_vrms"], bins
+        else:
+            return result["r"], result["vrms"], result["e_vrms"]
+        
 
 
 
