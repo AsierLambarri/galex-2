@@ -156,20 +156,21 @@ def bound_particlesBH(pos,
 
         
         if not refine or (delta_cm and delta_vcm):
-            if not refine:
-                print(f"\nFinal Values:")
-                print(f"-------------")
-                print(f"   FINAL Center-of-mass position: {cm}")
-                print(f"   FINAL Center-of-mass velocity: {vcm}")
-                print(f"   FINAL Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
-                print(f"   FINAL Number of bound particles: {len(mass[bound_mask])}")
-            else:
-                print(f"\nFinal Values:")
-                print(f"-------------")
-                print(f"   FINAL Center-of-mass position: {new_cm}")
-                print(f"   FINAL Center-of-mass velocity: {new_vcm}")
-                print(f"   FINAL Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
-                print(f"   FINAL Number of bound particles: {len(mass[bound_mask])}")
+            if verbose:
+                if not refine:
+                    print(f"\nFinal Values:")
+                    print(f"-------------")
+                    print(f"   FINAL Center-of-mass position: {cm}")
+                    print(f"   FINAL Center-of-mass velocity: {vcm}")
+                    print(f"   FINAL Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
+                    print(f"   FINAL Number of bound particles: {len(mass[bound_mask])}")
+                else:
+                    print(f"\nFinal Values:")
+                    print(f"-------------")
+                    print(f"   FINAL Center-of-mass position: {new_cm}")
+                    print(f"   FINAL Center-of-mass velocity: {new_vcm}")
+                    print(f"   FINAL Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
+                    print(f"   FINAL Number of bound particles: {len(mass[bound_mask])}")
         
             if return_cm:
                 return E, kin, pot, new_cm, new_vcm
@@ -319,20 +320,21 @@ def bound_particlesAPROX(pos,
 
         
         if not refine or (delta_cm and delta_vcm):
-            if not refine:
-                print(f"\nFinal Values:")
-                print(f"-------------")
-                print(f"   FINAL Center-of-mass position: {cm}")
-                print(f"   FINAL Center-of-mass velocity: {vcm}")
-                print(f"   FINAL Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
-                print(f"   FINAL Number of bound particles: {len(mass[bound_mask])}")
-            else:
-                print(f"\nFinal Values:")
-                print(f"-------------")
-                print(f"   FINAL Center-of-mass position: {new_cm}")
-                print(f"   FINAL Center-of-mass velocity: {new_vcm}")
-                print(f"   FINAL Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
-                print(f"   FINAL Number of bound particles: {len(mass[bound_mask])}")
+            if verbose:
+                if not refine:
+                    print(f"\nFinal Values:")
+                    print(f"-------------")
+                    print(f"   FINAL Center-of-mass position: {cm}")
+                    print(f"   FINAL Center-of-mass velocity: {vcm}")
+                    print(f"   FINAL Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
+                    print(f"   FINAL Number of bound particles: {len(mass[bound_mask])}")
+                else:
+                    print(f"\nFinal Values:")
+                    print(f"-------------")
+                    print(f"   FINAL Center-of-mass position: {new_cm}")
+                    print(f"   FINAL Center-of-mass velocity: {new_vcm}")
+                    print(f"   FINAL Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
+                    print(f"   FINAL Number of bound particles: {len(mass[bound_mask])}")
             
             if return_cm:
                 return E, kin, pot, new_cm, new_vcm
