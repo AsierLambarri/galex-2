@@ -20,7 +20,8 @@ from .class_methods import (
                             easy_los_velocity,
                             softmax,
                             density_profile,
-                            velocity_profile
+                            velocity_profile,
+                            random_vector_spherical
                             )
 
 
@@ -527,10 +528,10 @@ class BaseComponent:
                         pc="bound",
                         center=None,
                         bins=None,
-                        projected=False,
+                        projected=False,                      
                         return_bins=False,
                         **kwargs
-                        ):
+                       ):
         """Computes the average density profile of the particles. Returns r_i (R_i), rho_i and e_rho_i (Sigma_i, e_Sigma_i) for each bin. Center
         and bins are automatically computed but can also be used specified. Profiles can be for all or bound particles. The smallest two bins
         can be combined into one to counteract lack of resolution. Density error is assumed to be poissonian.
@@ -550,7 +551,8 @@ class BaseComponent:
         
         Returns
         -------
-        r, dens, e_dens : arrays of bin centers,
+        r, dens, e_dens, (bins, optional) : arrays of bin centers, density and errors (and bin edges)
+        
         """
         if "new_data_params" in kwargs.keys():
             sp = self._data.ds.sphere(
@@ -626,31 +628,30 @@ class BaseComponent:
                          center=None,
                          v_center=None,
                          bins=None,
-                         thick=True,
+                         projected=False,
                          return_bins=False,
                          **kwargs
-                         ):
+                        ):
         """Computes the average disperion velocity profile of the particles. Returns r_i (R_i), vrms_i and e_vrms_i for each bin. Center
         and bins are automatically computed but can also be used specified. Profiles can be for all or bound particles. The smallest two bins
         can be combined into one to counteract lack of resolution. Density error is assumed to be poissonian.
-        
+
         OPTIONAL Parameters
         ----------
         pc : str
             Particle-Component. Either bound or all.
-        center : array
+        center, v_center : array
             Center of the particle distribution. Default: None.
         bins : array
             Array of bin edges. Default: None.
-        thick : bool
-            Whether to combine the two smalles bins into a bigger one, to counteract lack of resolution.
-            Defualt: True
+        projected : bool
+            Whether to get the projected distribution at current LOS. Default: False.
         return_bins : bool
             Whether to return bin edges. Default: False
         
         Returns
         -------
-        r, dens, e_dens : arrays of bin centers,
+        r, vrms, e_vrms, (bins, optional) : arrays of bin centers, density and errors (and bin edges)
         """
         if "new_data_params" in kwargs.keys():
             sp = self._data.ds.sphere(
@@ -672,7 +673,7 @@ class BaseComponent:
             elif pc == "all":
                 pos = self.coords
                 vels = self.vels
-        
+
         
         
         if center is None:
@@ -684,7 +685,16 @@ class BaseComponent:
             if isinstance(v_center, tuple):
                 v_center = unyt_array(*v_center).to(vels.units)
         
-         
+
+        if projected:
+            pos = pos[:, :2]
+            vels = easy_los_velocity(vels, self.los)
+            center = center[:2]
+            v_center = v_center[:2]
+
+
+
+        
         if bins is None:
             radii = np.linalg.norm(pos - center, axis=1)
             rmin, rmax, thicken = radii.min(), radii.max(), False
@@ -716,6 +726,10 @@ class BaseComponent:
             return result["r"], result["vrms"], result["e_vrms"], bins
         else:
             return result["r"], result["vrms"], result["e_vrms"]
+
+
+
+   
         
 
 
