@@ -555,10 +555,14 @@ class BaseComponent:
         
         """
         if "new_data_params" in kwargs.keys():
-            sp = self._data.ds.sphere(
-                self._sp_center if "center" not in kwargs["new_data_params"].keys() else kwargs["new_data_params"]["center"], 
-                kwargs["new_data_params"]["radius"]
-            )
+            if "sp" in kwargs["new_data_params"].keys():
+                sp = kwargs["new_data_params"]["sp"]
+            else:
+                sp = self._data.ds.sphere(
+                    self._sp_center if "center" not in kwargs["new_data_params"].keys() else kwargs["new_data_params"]["center"], 
+                    kwargs["new_data_params"]["radius"]
+                )
+
             pos = vectorized_base_change(
                 np.linalg.inv(self.basis), 
                 sp[self._base_ptype, self._dynamic_fields["coords"]].in_units(self.coords.units)
@@ -654,10 +658,14 @@ class BaseComponent:
         r, vrms, e_vrms, (bins, optional) : arrays of bin centers, density and errors (and bin edges)
         """
         if "new_data_params" in kwargs.keys():
-            sp = self._data.ds.sphere(
-                self._sp_center if "center" not in kwargs["new_data_params"].keys() else kwargs["new_data_params"]["center"], 
-                kwargs["new_data_params"]["radius"]
-            )
+            if "sp" in kwargs["new_data_params"].keys():
+                sp = kwargs["new_data_params"]["sp"]
+            else:
+                sp = self._data.ds.sphere(
+                    self._sp_center if "center" not in kwargs["new_data_params"].keys() else kwargs["new_data_params"]["center"], 
+                    kwargs["new_data_params"]["radius"]
+                )
+                
             pos = vectorized_base_change(
                 np.linalg.inv(self.basis), 
                 sp[self._base_ptype, self._dynamic_fields["coords"]].in_units(self.coords.units)
@@ -688,9 +696,13 @@ class BaseComponent:
 
         if projected:
             pos = pos[:, :2]
-            vels = easy_los_velocity(vels, self.los)
+            vels = easy_los_velocity(vels - v_center, self.los)
+            vels = np.column_stack((
+                vels, 
+                np.zeros_like(vels)
+            ))
             center = center[:2]
-            v_center = v_center[:2]
+            v_center = np.array([0,0])
 
 
 

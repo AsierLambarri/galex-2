@@ -517,8 +517,9 @@ class GasComponent(BaseSimulationObject, BaseComponent):
 
         self.clean_shared_attrs(self.ptype)
         self.set_shared_attrs(self.ptype, kwargs)
-        self._default_center_of_mass()
 
+        self.cm = self._shared_attrs["darkmatter"]["cm"]
+        self.vcm = self._shared_attrs["darkmatter"]["vcm"]
         
         del self.loader
         del self.parser
