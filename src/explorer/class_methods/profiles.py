@@ -1,19 +1,21 @@
 import numpy  as np
 from scipy.stats import binned_statistic
 
+from .utils import easy_los_velocity
+
 def density_profile(pos, 
                     mass, 
                     center = None, 
                     bins = None
                    ):
-    """Computes the radial density profile of a set of particles with geometry given by an
-    ellipsoid with {a,b,c} axes and the major axis in the direction of A_vec. The binning is
-    performed over 
-
-                    m = sqrt{ (x/a)^2 + (y/b)^2 + (z/c)^2 }
+    """Computes the average radial density profile of a set of particles over a number of
+    bins. The radii are the centers of the bins. 
 
     Returns errors on each bin based on the assumption that the statistics are poissonian.
-
+    
+    The routine works seamlessly for 3D and 2D projected data, as the particle mass is scalar,
+    the only difference radicates in the meaning of "pos" (3D-->r vs 2D-->R_los).
+    
     Parameters
     ----------
     pos : array
@@ -84,9 +86,13 @@ def velocity_profile(pos,
                      mass=None,
                      center = None,
                      v_center = None,
-                     bins = None
+                     bins = None,
+                     average="bins",
                     ):
-    """Computes the velocity dispersion profile for different radii. The radii are the centers of the bins.
+    """Computes the velocity dispersion profile for different radii. The radii are the centers of the bins. 
+    
+    As the projection of a vectorial quantity is not as straightforward as that of mass profiles, the projection
+    is done inside the function and is controlled by the los argument
 
     Parameters
     ----------
@@ -102,14 +108,14 @@ def velocity_profile(pos,
         Center of particle distribution.
     v_center : array
         Center of mass velocity. If none is provided, it is estimated with all the particles inside X kpc of center.
-        
+    average : str
+        "bins" to average over bins in pos, "apertures" to average over filled apertures.
+    
     Returns
     -------
     return_dict : dict
         Dictionary with radii, rho, e_rho, m_enclosed and center.
     """
-
-
     if center is not None:
         pass
     else:
@@ -127,22 +133,50 @@ def velocity_profile(pos,
     coords = pos - center
     radii = np.linalg.norm(coords, axis=1)
     magvel = np.linalg.norm(vel - v_center, axis=1)
-    
-    if bins is not None:
-        vmean, redges, bn = binned_statistic(radii, magvel, statistic="mean", bins=bins)
-        npart, _, _ = binned_statistic(radii, magvel, statistic="count", bins=bins)
 
-    else:
-        vmean, redges, bn = binned_statistic(radii, magvel, statistic="mean", bins=np.histogram_bin_edges(radii))
-        npart, _, _ = binned_statistic(radii, magvel, statistic="count", bins=np.histogram_bin_edges(radii))
+    if average == "bins":
+        if bins is not None:
+            vmean, redges, bn = binned_statistic(radii, magvel, statistic="mean", bins=bins)
+            npart, _, _ = binned_statistic(radii, magvel, statistic="count", bins=bins)
     
-    redges = redges * coords.units
+        else:
+            vmean, redges, bn = binned_statistic(radii, magvel, statistic="mean", bins=np.histogram_bin_edges(radii))
+            npart, _, _ = binned_statistic(radii, magvel, statistic="count", bins=np.histogram_bin_edges(radii))
+        
+        redges = redges * coords.units
+        rcoords = (redges[1:] + redges[:-1])/2
+        
+    elif average == "apertures":
+        if bins is None:
+            bins = np.histogram_bin_edges(radii)
+        
+        R_aperture = 0.5 * (np.array(bins[:-1]) + np.array(bins[1:]))
+                
+        cumulative_means = []
+        particle_counts = []
+        for i in range(len(R_aperture)):
+            r_ap = R_aperture[i]
+            mask = radii <= r_ap
+            mask_bin = (bins[i] <= radii ) & (radii <= bins[i+1])
+            
+            cumulative_mean = np.mean(magvel[mask]) if np.any(mask_bin) else np.nan
+            cumulative_means.append(cumulative_mean)
+            
+            particle_count = np.sum(mask)
+            particle_counts.append(particle_count)
+
+
+        rcoords = R_aperture * coords.units
+        vmean = np.array(cumulative_means)
+        npart = np.array(particle_counts)
+    
+    
     vmean = vmean * vel.units
-    npart[npart == 0] = 1E20
-
+    if 0 in npart:
+        npart[npart == 0] = np.inf
+        
     e_vmean = vmean / np.sqrt(npart)
     
-    rcoords = (redges[1:] + redges[:-1])/2
 
     return_dict = {'r': rcoords,
                    'vrms': vmean,

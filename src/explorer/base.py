@@ -632,7 +632,7 @@ class BaseComponent:
                          center=None,
                          v_center=None,
                          bins=None,
-                         projected=False,
+                         projected="none",
                          return_bins=False,
                          **kwargs
                         ):
@@ -694,7 +694,7 @@ class BaseComponent:
                 v_center = unyt_array(*v_center).to(vels.units)
         
 
-        if projected:
+        if projected != "none":
             pos = pos[:, :2]
             vels = easy_los_velocity(vels - v_center, self.los)
             vels = np.column_stack((
@@ -702,7 +702,7 @@ class BaseComponent:
                 np.zeros_like(vels)
             ))
             center = center[:2]
-            v_center = np.array([0,0])
+            v_center = np.array([0])
 
 
 
@@ -717,22 +717,33 @@ class BaseComponent:
 
             bins = np.histogram_bin_edges(
                 np.log10(radii),
-                range=np.log10([radii.min() if "rmin" not in kwargs.keys() else kwargs["rmin"],
-                       radii.max() if "rmin" not in kwargs.keys() else kwargs["rmax"]
-                      ]) 
+                range=np.log10([rmin, rmax]) 
             )
             bins = 10 ** bins
-            if thick:
+            
+            if thicken:
                 binindex = [i for i in range(len(bins)) if i!=1]
                 bins = bins[binindex]
-        
-        result = velocity_profile(
-            pos,
-            vels,
-            center=center,
-            v_center=v_center,
-            bins=bins
-        )
+
+        if projected == "radial-bins" or projected == "bins" or projected == "none":
+            result = velocity_profile(
+                pos,
+                vels,
+                center=center,
+                v_center=v_center,
+                bins=bins,
+                average="bins"
+            )
+        elif projected == "apertures":
+            result = velocity_profile(
+                pos,
+                vels,
+                center=center,
+                v_center=v_center,
+                bins=bins,
+                average="apertures"
+            )
+
         
         if return_bins:
             return result["r"], result["vrms"], result["e_vrms"], bins
