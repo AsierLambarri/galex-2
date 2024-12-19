@@ -69,7 +69,7 @@ class SnapshotHalo(BaseSimulationObject):
         }
         
         self.parse_dataset(dataset)
-
+        self._cm, self._vcm = None, None
 
     
     
@@ -117,6 +117,29 @@ class SnapshotHalo(BaseSimulationObject):
         """
         return self._omega
     
+
+    @property
+    def cm(self):
+        return self._cm.in_units(self.units['length'])
+    @cm.setter
+    def cm(self, value):
+        if not isinstance(value, unyt_array):
+            raise ValueError("vcm must be a number unyt_array.")
+        if str(value.units.dimensions) != '(length)':
+            raise ValueError(f"Your units are not correct: {str(value.units.dimensions)} != length")
+        
+        self._cm = value
+    @property
+    def vcm(self):
+        return self._vcm.in_units(self.units['velocity'])
+    @vcm.setter
+    def vcm(self, value):
+        if not isinstance(value, unyt_array):
+            raise ValueError("vcm must be a number unyt_array.")
+        if str(value.units.dimensions) != '(length)/(time)':
+            raise ValueError(f"Your units are not correct: {str(value.units.dimensions)} != velocity")
+        
+        self._vcm = value
 
 
     
@@ -317,6 +340,12 @@ class SnapshotHalo(BaseSimulationObject):
         self.stars.set_line_of_sight(los)
         self.darkmatter.set_line_of_sight(los)
         self.gas.set_line_of_sight(los)
+
+        if self._cm is not None:
+            self._cm = self._old_to_new_base @ self._cm
+        if self._vcm is not None:
+            self._vcm = self._old_to_new_base @ self._vcm
+            
         return None
 
     def Mdyn(self, components=["stars", "gas", "darkmatter"]):
@@ -346,6 +375,7 @@ class SnapshotHalo(BaseSimulationObject):
     def compute_bound_particles(self,
                                 method="BH",
                                 components=["stars","gas","darkmatter"],
+                                cm_subset=["darkmatter"],
                                 weighting="softmax",
                                 verbose=False,
                                 **kwargs
@@ -408,6 +438,11 @@ class SnapshotHalo(BaseSimulationObject):
             components = ["stars", "darkmatter"]
         elif components == "all":
             components = ["stars", "darkmatter", "gas"]
+
+        if cm_subset == "particles":
+            cm_subset = ["stars", "darkmatter"]
+        elif cm_subset == "all":
+            cm_subset = ["stars", "darkmatter", "gas"]
             
         masses = unyt_array(np.empty((0,)), "Msun")
         coords = unyt_array(np.empty((0,3)), "kpc")
@@ -436,8 +471,9 @@ class SnapshotHalo(BaseSimulationObject):
                 particle_types, np.full(N, component)
             ))
 
-        
-            
+        particle_subset = np.zeros_like(particle_types, dtype=bool)
+        for sub in cm_subset:
+            particle_subset = particle_subset | (particle_types == sub)
 
 
         if method.lower() == "bh":
@@ -445,17 +481,19 @@ class SnapshotHalo(BaseSimulationObject):
                 coords,
                 vels,
                 masses,
-                soft=softenings,
+                softs=softenings,
                 cm=None if "cm" not in kwargs else unyt_array(*kwargs['cm']) if isinstance(kwargs['cm'], tuple) and len(kwargs['cm']) == 2 else kwargs['cm'],
                 vcm=None if "vcm" not in kwargs else unyt_array(*kwargs['vcm']) if isinstance(kwargs['vcm'], tuple) and len(kwargs['vcm']) == 2 else kwargs['vcm'],
-                verbose=verbose,
+                cm_subset=particle_subset,
                 weighting=weighting,
                 refine=True if "refine" not in kwargs.keys() else kwargs["refine"],
                 delta=1E-5 if "delta" not in kwargs.keys() else kwargs["delta"],
                 f=0.1 if "f" not in kwargs.keys() else kwargs["f"],
                 nbound=32 if "nbound" not in kwargs.keys() else kwargs["nbound"],
                 T=0.22 if "T" not in kwargs.keys() else kwargs["T"],
-                return_cm=True
+                return_cm=True,
+                verbose=verbose,
+
             )
         elif method.lower() == "aprox":
             E, kin, pot, cm, vcm = bound_particlesAPROX(
@@ -464,14 +502,16 @@ class SnapshotHalo(BaseSimulationObject):
                 masses,
                 cm=None if "cm" not in kwargs else unyt_array(*kwargs['cm']) if isinstance(kwargs['cm'], tuple) and len(kwargs['cm']) == 2 else kwargs['cm'],
                 vcm=None if "vcm" not in kwargs else unyt_array(*kwargs['vcm']) if isinstance(kwargs['vcm'], tuple) and len(kwargs['vcm']) == 2 else kwargs['vcm'],
-                verbose=verbose,
+                cm_subset=particle_subset,
                 weighting=weighting,
                 refine=True if "refine" not in kwargs.keys() else kwargs["refine"],
                 delta=1E-5 if "delta" not in kwargs.keys() else kwargs["delta"],
                 f=0.1 if "f" not in kwargs.keys() else kwargs["f"],
                 nbound=32 if "nbound" not in kwargs.keys() else kwargs["nbound"],
                 T=0.22 if "T" not in kwargs.keys() else kwargs["T"],
-                return_cm=True
+                return_cm=True,
+                verbose=verbose,
+
             )
 
         
@@ -489,23 +529,7 @@ class SnapshotHalo(BaseSimulationObject):
 
 
 
-#    def profiles(self,
-#                 components="particles",
-#                 **kwargs
-#                 ):
-#        """Makes a fancy plot of density and velocity profiles.
-#        """
-#        import matplotlib.pyplot as plt
-#        import smplotlib
-#        
-#        if components == "particles":
-#            components = ["stars", "darkmatter"]
-#        elif components == "all":
-#            components = ["stars", "darkmatter", "gas"]
-#
-#        sp = self._data.ds.sphere(self.sp_center, (300,'kpc'))
 
-        
 
 
 

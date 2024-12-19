@@ -8,22 +8,58 @@ from .utils import softmax
 import pprint
 pp = pprint.PrettyPrinter(depth=4)
 
+def create_subset_mask(E, subset, N):
+    """Takes an array of energies E, and finds the N most bound particles that are inside the subset.
+    The returned array has the same length as E. Usefull for selecting the most bound particles of a 
+    certain type, when performing potential calculations with dm/stars/gas.
+
+    Parameters
+    ----------
+    E : array
+        Array with which to perform the selection.
+    subset : array, bool
+        Subset of elements that will be taken into account on selection.
+    N : int
+        Number of selected elements. If N==-1 all bound subset particles are selected.
+
+    Returns
+    -------
+    mask : array, bool, shape=E.shape
+    """
+    if N == -1:
+        mask = (E < 0) & subset
+    else:
+        E_flat = E[subset]
+        if N > len(E_flat):  
+            raise Exception(f"More particles to select than are available! You want {N} but only {len(E_flat)} are on the subset")
+        if N > np.count_nonzero(E_flat < 0):  
+            raise Exception(f"More particles to select than are bound! You want {N} but only {np.count_nonzero(E_flat < 0)} are bound inside the subset")
+
+        smallest_indices = np.argpartition(E_flat, N)[:N]  
+        original_indices = np.where(subset)[0][smallest_indices]    
+        mask = np.zeros_like(E, dtype=bool)
+        mask[original_indices] = True
+    return mask
+
+
+
 
 def bound_particlesBH(pos, 
                       vel, 
                       mass, 
-                      soft = None,
+                      softs = None,
                       cm = None,
                       vcm = None,
-                      verbose = False,
-                      weighting="softmax",
-                      theta = 0.7,
                       refine = True,
                       delta = 1E-5,
+                      cm_subset=None,
+                      weighting="softmax",
+                      T=0.20,
                       f=0.1,
                       nbound=32,
-                      T=0.25,
-                      return_cm=False
+                      theta = 0.5,
+                      return_cm=False,
+                      verbose = False
                      ):
     """Computes the bound particles of a halo/ensemble of particles using the Barnes-Hut algorithm implemented in PYTREEGRAV.
     The bound particles are defined as those with E= pot + kin < 0. The center of mass position is not required, as the potential 
@@ -49,7 +85,7 @@ def bound_particlesBH(pos,
         Velocity of the particles in pysical km/s.
     mass : array
         Masses of particles, with units. When calculatig, they are converted to Msun.
-    soft : array, optional
+    softs : array, optional
         Softening of particles. Not required, results do not differ a lot.
     cm : array, optional
         Placeholder. Doesnt do anything if provided.
@@ -69,19 +105,22 @@ def bound_particlesBH(pos,
         Controls how many particles are used when estimating CoM properties through MOST-BOUND.
     T : int
         Controls how many particles are used when estimating CoM properties through SOFTMAX.
+    cm_subset : array, bool
+        Boolean array determining which particles are to be used for the center-of-mass determination.
     """
+    particle_subset = np.ones_like(mass, dtype=bool) if cm_subset is None else cm_subset
 
-    cm = np.average(pos, axis=0, weights=mass) if cm is None else cm
-    vcm = np.average(vel, axis=0, weights=mass) if vcm is None else vcm
+    cm = np.average(pos[particle_subset], axis=0, weights=mass[particle_subset]) if cm is None else cm
+    vcm = np.average(vel[particle_subset], axis=0, weights=mass[particle_subset]) if vcm is None else vcm
 
-    softenings = soft.in_units(pos.units) if soft is not None else None
+    softenings = softs.in_units(pos.units) if softs is not None else None
 
-    
     if verbose:
-        print(f"Initial center-of-mass position: {cm}")
-        print(f"Initial center-of-mass velocity: {vcm}")
         print(f"Initial total mass: {mass.sum().to('Msun')}")
         print(f"Number of particles: {len(mass)}")
+        print(f"Number of subset particles: {np.count_nonzero(particle_subset)}")
+        print(f"Initial (subset) center-of-mass position: {cm}")
+        print(f"Initial (subset) center-of-mass velocity: {vcm}")
 
     
     potential = Potential(
@@ -105,28 +144,47 @@ def bound_particlesBH(pos,
         pot = mass * unyt_array(potential, vel.units**2)
         E = kin + pot
         bound_mask = E < 0
+        bound_subset_mask = E[particle_subset] < 0
         
         if np.all(E >= 0):
             return E, kin, pot, unyt_array([np.nan, np.nan, np.nan], pos.units), unyt_array([np.nan, np.nan, np.nan], vel.units)
-
+        if np.all(E[particle_subset] >= 0):
+            raise Exception(f"All the subset particles used for center-of-mass computations are unbound!!")
         
         if weighting.lower() == "most-bound":
-            N = int(np.rint(np.minimum(f * np.count_nonzero(bound_mask), nbound)))
-            most_bound_ids = np.argsort(E)[:N]
-            most_bound_mask = np.zeros(len(E), dtype=bool)
-            most_bound_mask[most_bound_ids] = True
+            N = int(np.rint(np.minimum(f * np.count_nonzero(bound_subset_mask), nbound)))
+            most_bound_mask = create_subset_mask(E, particle_subset, N)
             
-            new_cm = np.average(pos[most_bound_mask], axis=0, weights=mass[most_bound_mask])
-            new_vcm = np.average(vel[most_bound_mask], axis=0, weights=mass[most_bound_mask])  
+            new_cm = np.average(
+                pos[most_bound_mask], 
+                axis=0, 
+                weights=mass[most_bound_mask]
+            )
+            new_vcm = np.average(
+                vel[most_bound_mask], 
+                axis=0, 
+                weights=mass[most_bound_mask]
+            )  
         elif weighting.lower() == "softmax":
-            w = E[bound_mask]/E[bound_mask].min()
+            subset_bound_mask = create_subset_mask(E, particle_subset, -1)
+            
+            w = E[subset_bound_mask]/E[subset_bound_mask].min()
+            
             if T == "adaptative":
-                T = np.abs(kin[bound_mask].mean()/E[bound_mask].min())
+                T = np.abs(kin[subset_bound_mask].mean()/E[subset_bound_mask].min())
                 
-            new_cm = np.average(pos[bound_mask], axis=0, weights=softmax(w, T))
-            new_vcm = np.average(vel[bound_mask], axis=0, weights=softmax(w, T))               
+            new_cm = np.average(
+                pos[subset_bound_mask], 
+                axis=0, 
+                weights=softmax(w, T)
+            )
+            new_vcm = np.average(
+                vel[subset_bound_mask], 
+                axis=0, 
+                weights=softmax(w, T)
+            )               
         else:
-            raise Exception("Weighting mode doesnt exist!")
+            raise ValueError("Weighting mode doesnt exist!")
 
         
         delta_cm = np.sqrt(np.sum((new_cm - cm)**2, axis=0)) / np.linalg.norm(cm) < delta
@@ -153,6 +211,7 @@ def bound_particlesBH(pos,
             print(f"   NEW Center-of-mass velocity: {new_vcm}")
             print(f"   NEW Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
             print(f"   NEW Number of bound particles: {len(mass[bound_mask])}")
+            print(f"   NEW Number of bound subset particles: {np.count_nonzero(bound_subset_mask)}")
 
         
         if not refine or (delta_cm and delta_vcm):
@@ -164,6 +223,7 @@ def bound_particlesBH(pos,
                     print(f"   FINAL Center-of-mass velocity: {vcm}")
                     print(f"   FINAL Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
                     print(f"   FINAL Number of bound particles: {len(mass[bound_mask])}")
+                    print(f"   FINAL Number of bound subset particles: {bound_subset_mask}")
                 else:
                     print(f"\nFinal Values:")
                     print(f"-------------")
@@ -171,14 +231,16 @@ def bound_particlesBH(pos,
                     print(f"   FINAL Center-of-mass velocity: {new_vcm}")
                     print(f"   FINAL Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
                     print(f"   FINAL Number of bound particles: {len(mass[bound_mask])}")
+                    print(f"   FINAL Number of bound subset particles: {np.count_nonzero(bound_subset_mask)}")
         
             if return_cm:
                 return E, kin, pot, new_cm, new_vcm
             else:
                 return E, kin, pot
 
-        
         cm, vcm = copy(new_cm), copy(new_vcm)
+
+
 
 
 
@@ -187,14 +249,15 @@ def bound_particlesAPROX(pos,
                          mass, 
                          cm = None,
                          vcm = None,
-                         verbose = False,
-                         weighting="softmax",
-                         refine = False,
+                         refine = True,
                          delta = 1E-5,
+                         cm_subset=None,
+                         weighting="softmax",
+                         T=0.20,
                          f=0.1,
                          nbound=32,
-                         T=0.25,
-                         return_cm=False
+                         return_cm=False,
+                         verbose = False
                         ):
     """Computes the bound particles by approximating the ensemble as a point source for ease of potential calculation. 
     The bound particles are defined as those with E= pot + kin < 0. The center of mass position is required, as the potential 
@@ -244,17 +307,19 @@ def bound_particlesAPROX(pos,
     T : int
         Controls how many particles are used when estimating CoM properties through MOST-BOUND.
     """
+    particle_subset = np.ones_like(mass, dtype=bool) if cm_subset is None else cm_subset
 
-    cm = np.average(pos, axis=0, weights=mass) if cm is None else cm
-    vcm = np.average(vel, axis=0, weights=mass) if vcm is None else vcm
-    G = -unyt_quantity(4.300917270038e-06, "kpc/Msun * km**2/s**2").in_units(pos.units/mass.units * (vel.units)**2)
-
+    cm = np.average(pos[particle_subset], axis=0, weights=mass[particle_subset]) if cm is None else cm
+    vcm = np.average(vel[particle_subset], axis=0, weights=mass[particle_subset]) if vcm is None else vcm
 
     if verbose:
-        print(f"Initial center-of-mass position: {cm}")
-        print(f"Initial center-of-mass velocity: {vcm}")
         print(f"Initial total mass: {mass.sum().to('Msun')}")
         print(f"Number of particles: {len(mass)}")
+        print(f"Number of subset particles: {np.count_nonzero(particle_subset)}")
+        print(f"Initial (subset) center-of-mass position: {cm}")
+        print(f"Initial (subset) center-of-mass velocity: {vcm}")
+
+    G = -unyt_quantity(4.300917270038e-06, "kpc/Msun * km**2/s**2").in_units(pos.units/mass.units * (vel.units)**2)
     
     for i in range(100):
         radii = np.sqrt( (pos[:,0]-cm[0])**2 +
@@ -270,27 +335,47 @@ def bound_particlesAPROX(pos,
         pot = G * mass * mass.sum() / radii
         E = kin + pot
         bound_mask = E < 0
+        bound_subset_mask = E[particle_subset] < 0
 
         if np.all(E >= 0):
             return E, kin, pot, unyt_array([np.nan, np.nan, np.nan], pos.units), unyt_array([np.nan, np.nan, np.nan], vel.units)
+        if np.all(E[particle_subset] >= 0):
+            raise Exception(f"All the subset particles used for center-of-mass computations are unbound!!")
         
         if weighting.lower() == "most-bound":
-            N = int(np.rint(np.minimum(f * np.count_nonzero(bound_mask), nbound)))
-            most_bound_ids = np.argsort(E)[:N]
-            most_bound_mask = np.zeros(len(E), dtype=bool)
-            most_bound_mask[most_bound_ids] = True
+            N = int(np.rint(np.minimum(f * np.count_nonzero(bound_subset_mask), nbound)))
+            most_bound_mask = create_subset_mask(E, particle_subset, N)
             
-            new_cm = np.average(pos[most_bound_mask], axis=0, weights=mass[most_bound_mask])
-            new_vcm = np.average(vel[most_bound_mask], axis=0, weights=mass[most_bound_mask])  
+            new_cm = np.average(
+                pos[most_bound_mask], 
+                axis=0, 
+                weights=mass[most_bound_mask]
+            )
+            new_vcm = np.average(
+                vel[most_bound_mask], 
+                axis=0, 
+                weights=mass[most_bound_mask]
+            )  
         elif weighting.lower() == "softmax":
-            w = E[bound_mask]/E[bound_mask].min()
+            subset_bound_mask = create_subset_mask(E, particle_subset, -1)
+            
+            w = E[subset_bound_mask]/E[subset_bound_mask].min()
+            
             if T == "adaptative":
-                T = np.abs(kin[bound_mask].mean()/E[bound_mask].min())
+                T = np.abs(kin[subset_bound_mask].mean()/E[subset_bound_mask].min())
                 
-            new_cm = np.average(pos[bound_mask], axis=0, weights=softmax(w, T))
-            new_vcm = np.average(vel[bound_mask], axis=0, weights=softmax(w, T))               
+            new_cm = np.average(
+                pos[subset_bound_mask], 
+                axis=0, 
+                weights=softmax(w, T)
+            )
+            new_vcm = np.average(
+                vel[subset_bound_mask], 
+                axis=0, 
+                weights=softmax(w, T)
+            )               
         else:
-            raise Exception("Weighting mode doesnt exist!")
+            raise ValueError("Weighting mode doesnt exist!")
      
      
         delta_cm = np.sqrt(np.sum((new_cm - cm)**2, axis=0)) / np.linalg.norm(cm) < delta
@@ -310,13 +395,13 @@ def bound_particlesAPROX(pos,
                 print(f"   Particle-fraction f: {f}")
                 print(f"   Number of particles used: {N}")
 
-            
             print(f"\nInfo:")
             print(f"-----")
             print(f"   NEW Center-of-mass position: {new_cm}")
             print(f"   NEW Center-of-mass velocity: {new_vcm}")
             print(f"   NEW Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
             print(f"   NEW Number of bound particles: {len(mass[bound_mask])}")
+            print(f"   NEW Number of bound subset particles: {np.count_nonzero(bound_subset_mask)}")
 
         
         if not refine or (delta_cm and delta_vcm):
@@ -328,6 +413,7 @@ def bound_particlesAPROX(pos,
                     print(f"   FINAL Center-of-mass velocity: {vcm}")
                     print(f"   FINAL Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
                     print(f"   FINAL Number of bound particles: {len(mass[bound_mask])}")
+                    print(f"   FINAL Number of bound subset particles: {bound_subset_mask}")
                 else:
                     print(f"\nFinal Values:")
                     print(f"-------------")
@@ -335,7 +421,8 @@ def bound_particlesAPROX(pos,
                     print(f"   FINAL Center-of-mass velocity: {new_vcm}")
                     print(f"   FINAL Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
                     print(f"   FINAL Number of bound particles: {len(mass[bound_mask])}")
-            
+                    print(f"   FINAL Number of bound subset particles: {np.count_nonzero(bound_subset_mask)}")
+        
             if return_cm:
                 return E, kin, pot, new_cm, new_vcm
             else:

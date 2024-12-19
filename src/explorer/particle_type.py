@@ -509,8 +509,6 @@ class GasComponent(BaseSimulationObject, BaseComponent):
         self._fields_loaded = {}
         self._data = data
         
-        #self._bmask = np.ones_like(self.masses.value, dtype=bool)
-
         missing_fields = [f for f in ['coords', 'vels', 'masses'] if f not in config.fields["gas"]]
         if missing_fields:
             raise ValueError(f"Missing mandatory fields {missing_fields} for particle type stars")
