@@ -48,7 +48,13 @@ def ARTI_loader(fn):
         units='auto',
         dimensions=dimensions.velocity
     )
-
+    ds.add_field(
+        ("gas", "cell_thermal_energy"),
+        function=lambda field, data: data["gas", "cell_volume"] *  data["gas", "thermal_energy_density"],
+        sampling_type="cell",
+        units='auto',
+        dimensions=dimensions.mass * dimensions.velocity**2,
+    )
 
     ds.add_field(
         ("gas", "correct_metal_mass_fraction"),
@@ -101,7 +107,29 @@ def ARTI_loader(fn):
         units='auto',
         dimensions=dimensions.mass,
     )
+
     
+    ds.add_field(
+        ("stars", "particle_softening"),
+        function=lambda field, data: unyt_array(0.08 * np.ones_like(data["stars", "particle_mass"].value, dtype=float), 'kpc'),
+        sampling_type="local",
+        units='kpc',
+        dimensions=dimensions.length,
+    )
+    ds.add_field(
+        ("darkmatter", "particle_softening"),
+        function=lambda field, data: unyt_array(0.08 * np.ones_like(data["darkmatter", "particle_mass"].value, dtype=float), 'kpc'),
+        sampling_type="local",
+        units='kpc',
+        dimensions=dimensions.length,
+    )
+    ds.add_field(
+        ("gas", "cell_length"),
+        function=lambda field, data: data["gas", "cell_volume"]**(1/3),
+        sampling_type="cell",
+        units='auto',
+        dimensions=dimensions.length,
+    )
     return ds
 
 
@@ -189,6 +217,35 @@ def GEAR_loader(fn):
         units='auto',
         dimensions=dimensions.dimensionless,
     )    
-    
+    ds.add_field(
+        ("PartType0", "thermal_energy"),
+        function=lambda field, data: data["PartType0", "InternalEnergy"] * data["PartType0", "Masses"],
+        sampling_type="local",
+        units='auto',
+        dimensions=dimensions.mass * dimensions.velocity**2,
+    )
+
+
+    ds.add_field(
+        ("PartType1", "particle_softening"),
+        function=lambda field, data: unyt_array(0.08 * np.ones_like(data["PartType1", "particle_mass"].value, dtype=float), 'kpc'),
+        sampling_type="local",
+        units='kpc',
+        dimensions=dimensions.length,
+    )
+    ds.add_field(
+        ("PartType2", "particle_softening"),
+        function=lambda field, data: unyt_array(0.08 * np.ones_like(data["PartType2", "particle_mass"].value, dtype=float), 'kpc'),
+        sampling_type="local",
+        units='kpc',
+        dimensions=dimensions.length,
+    )
+    ds.add_field(
+        ("PartType0", "particle_softening"),
+        function=lambda field, data: unyt_array(0.08 * np.ones_like(data["PartType0", "particle_mass"].value, dtype=float), 'kpc'),
+        sampling_type="cell",
+        units='auto',
+        dimensions=dimensions.length,
+    )
     return ds
 

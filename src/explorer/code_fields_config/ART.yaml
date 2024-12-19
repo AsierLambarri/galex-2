@@ -15,6 +15,7 @@ stars:
         masses: particle_mass
         masses_ini: particle_mass_initial
         metallicities: particle_metallicity_Zsun
+        softs: particle_softening
         
     
 darkmatter:
@@ -24,6 +25,7 @@ darkmatter:
         coords: particle_position
         vels: particle_velocity
         masses: particle_mass
+        softs: particle_softening
 
     
 gas:
@@ -32,10 +34,12 @@ gas:
     fields: 
         volume: cell_volume
         coords: cell_position
+        softs: cell_length
         vels: cell_velocity
         masses: cell_mass
         dens: density
         temperatures: temperature
+        thermal_energy: cell_thermal_energy
         metallicities: correct_metallicity_Zsun
         XH: H_mass_fraction
         XHe: He_mass_fraction

@@ -465,8 +465,8 @@ class SnapshotHalo(BaseSimulationObject):
                 vels, getattr(self, component).vels.to("km/s")
             ))
             softenings = np.concatenate((
-                softenings, unyt_array(np.full(N, psoft.to("kpc")), 'kpc')
-            ))
+                softenings, getattr(self, component).softs.to("kpc")
+            ))              #unyt_array(np.full(N, psoft.to("kpc")), 'kpc')
             particle_types = np.concatenate((
                 particle_types, np.full(N, component)
             ))
