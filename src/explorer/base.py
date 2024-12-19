@@ -203,13 +203,15 @@ class BaseComponent:
         funits = {
             'coords': self.units['length'],
             'hsml': self.units['length'],
+            'softs': self.units['length'],
             'masses': self.units['mass'],
             'masses_ini': self.units['mass'],
             'vels': self.units['velocity'],
             'ages': self.units['time'],
-            'metallicities': self.units['dimensionless']
+            'metallicities': self.units['dimensionless'],
+            'thermal_energy': f"{self.units['mass']}*({self.units['velocity']})**2"
         }
-        vec_fields = ['coords', 'vels', 'bcoords', 'bvels', 'cyl_coords', 'cyl_vels', 'sp_coords', 'sp_vels', 'box_coords', 'box_vels']
+        vec_fields = ['coords', 'vels', 'bcoords', 'bvels']
         if field_name  in self._dynamic_fields.keys():
             if field_name in self._fields_loaded:
                 return self._fields_loaded[field_name].in_units(funits[field_name]) if field_name in funits else self._fields_loaded[field_name]

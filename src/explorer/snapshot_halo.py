@@ -450,10 +450,8 @@ class SnapshotHalo(BaseSimulationObject):
         softenings = unyt_array(np.empty((0,)), "kpc")
         
         particle_types = np.empty((0,))
-        softs = [0,0,0] if "softenings" not in kwargs.keys() else kwargs["softenings"]
-        psofts = unyt_array([unyt_quantity(*s).to('kpc') for s in softs]) if isinstance(softs[0], tuple) else unyt_array(softs, 'kpc')
 
-        for component, psoft in zip(components, psofts):
+        for component in components:
             N = len(getattr(self, component).masses)
             masses = np.concatenate((
                 masses, getattr(self, component).masses.to("Msun")
@@ -471,10 +469,16 @@ class SnapshotHalo(BaseSimulationObject):
                 particle_types, np.full(N, component)
             ))
 
+        thermal_energy = unyt_array(np.zeros_like(masses).value, "Msun * km**2/s**2")
+        if "gas" in components:
+            thermal_energy[particle_types == "gas"] = getattr(self, "gas").thermal_energy.to("Msun * km**2/s**2")
+
+        print(thermal_energy)
+    
+        
         particle_subset = np.zeros_like(particle_types, dtype=bool)
         for sub in cm_subset:
             particle_subset = particle_subset | (particle_types == sub)
-
 
         if method.lower() == "bh":
             E, kin, pot, cm, vcm = bound_particlesBH(
@@ -482,6 +486,7 @@ class SnapshotHalo(BaseSimulationObject):
                 vels,
                 masses,
                 softs=softenings,
+                extra_kin=thermal_energy,
                 cm=None if "cm" not in kwargs else unyt_array(*kwargs['cm']) if isinstance(kwargs['cm'], tuple) and len(kwargs['cm']) == 2 else kwargs['cm'],
                 vcm=None if "vcm" not in kwargs else unyt_array(*kwargs['vcm']) if isinstance(kwargs['vcm'], tuple) and len(kwargs['vcm']) == 2 else kwargs['vcm'],
                 cm_subset=particle_subset,
@@ -500,6 +505,7 @@ class SnapshotHalo(BaseSimulationObject):
                 coords,
                 vels,
                 masses,
+                extra_kin=thermal_energy,
                 cm=None if "cm" not in kwargs else unyt_array(*kwargs['cm']) if isinstance(kwargs['cm'], tuple) and len(kwargs['cm']) == 2 else kwargs['cm'],
                 vcm=None if "vcm" not in kwargs else unyt_array(*kwargs['vcm']) if isinstance(kwargs['vcm'], tuple) and len(kwargs['vcm']) == 2 else kwargs['vcm'],
                 cm_subset=particle_subset,

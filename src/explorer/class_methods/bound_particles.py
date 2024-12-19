@@ -48,6 +48,7 @@ def bound_particlesBH(pos,
                       vel, 
                       mass, 
                       softs = None,
+                      extra_kin = None,
                       cm = None,
                       vcm = None,
                       refine = True,
@@ -140,9 +141,11 @@ def bound_particlesBH(pos,
                        )
     
         kin = 0.5 * mass * abs_vel**2
+        kin += extra_kin.to(kin.units)
         
         pot = mass * unyt_array(potential, vel.units**2)
         E = kin + pot
+        
         bound_mask = E < 0
         bound_subset_mask = E[particle_subset] < 0
         
@@ -247,6 +250,7 @@ def bound_particlesBH(pos,
 def bound_particlesAPROX(pos, 
                          vel, 
                          mass, 
+                         extra_kin = None,
                          cm = None,
                          vcm = None,
                          refine = True,
@@ -319,7 +323,7 @@ def bound_particlesAPROX(pos,
         print(f"Initial (subset) center-of-mass position: {cm}")
         print(f"Initial (subset) center-of-mass velocity: {vcm}")
 
-    G = -unyt_quantity(4.300917270038e-06, "kpc/Msun * km**2/s**2").in_units(pos.units/mass.units * (vel.units)**2)
+    G = unyt_quantity(4.300917270038e-06, "kpc/Msun * km**2/s**2").in_units(pos.units/mass.units * (vel.units)**2)
     
     for i in range(100):
         radii = np.sqrt( (pos[:,0]-cm[0])**2 +
@@ -332,8 +336,11 @@ def bound_particlesAPROX(pos,
                        )
     
         kin = 0.5 * mass * abs_vel**2
-        pot = G * mass * mass.sum() / radii
+        kin += extra_kin
+        
+        pot = -G * mass * mass.sum() / radii
         E = kin + pot
+        
         bound_mask = E < 0
         bound_subset_mask = E[particle_subset] < 0
 
