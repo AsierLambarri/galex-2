@@ -1,3 +1,4 @@
+import os
 import yt
 import argparse
 import numpy as np
@@ -8,7 +9,31 @@ import matplotlib.pyplot as plt
 import src.explorer as dge
 from src.explorer.class_methods import load_ftable
 
+from lmfit import Model, Parameters, fit_report
+from limepy import limepy
 
+from scipy.interpolate import PchipInterpolator, Akima1DInterpolator
+def KingProfileIterp(r, W0, g, M, rh):
+    """Produces a sample of a Lowered isothermal model with parameters W0, g, M and rh using LIMEPY 
+    and interpolates the result for a specified r.
+    """
+    k = limepy(phi0=W0, g=g, M=M, rh=rh, G=4.300917270038e-06)
+    evals = np.interp(r, xp=k.r, fp=k.rho)
+    return evals #in Msun/kpc**3
+
+def KingProfileIterp_surf(r, W0, g, M, rh):
+    """Produces a sample of a Lowered isothermal model with parameters W0, g, M and rh using LIMEPY 
+    and interpolates the result for a specified r.
+    """
+    k = limepy(phi0=W0, g=g, M=M, rh=rh, G=4.300917270038e-06, project=True)
+    evals = np.interp(r, xp=k.r, fp=k.Sigma)
+    return evals #in Msun/kpc**3
+
+def plummer(r, M, a):
+    """Plummer model
+    """
+    return 3 * M / ( 4 * np.pi * a ** 3 ) * ( 1 + (r/a)**2 ) ** (-5/2)
+    
 
 
 def parse_args():
@@ -20,6 +45,7 @@ def parse_args():
 
     required.add_argument(
         "-i", "--input_file",
+        type=str,
         help="Merger Tree file path. Must be csv.",
         required=True
     )
@@ -32,29 +58,48 @@ def parse_args():
     required.add_argument(
         "-sn", "--snapshot_numbers",
         nargs="*",
+        type=int,
         help="List of snapshot numbers to plot. Maximum 4.",
         required=True
     )
-
-
-
+    required.add_argument(
+        "-st", "--sub_tree_id",
+        type=int,
+        help="Sub Tree ID of the halo.",
+        required=True
+    )
+    required.add_argument(
+        "-c", "--code",
+        type=str,
+        help="Code of the simulation. Required for GALEX^2.",
+        required=True
+    )
+    required.add_argument(
+        "-pd", "--particle_data_folder",
+        type=str,
+        help="Location of particle data.",
+        required=True
+    )
 
 
     opt.add_argument(
         "-v", "--volumetric",
         nargs="*",
+        type=str,
         default=["stars", "darkmatter", "gas"],
         help='Enable volumetric profiles with a list of components (default: ["stars", "darkmatter", "gas"]).'
     )
     opt.add_argument(
         "-s", "--surface",
         nargs="*",
+        type=str,
         default=["stars", "darkmatter"],
         help='Enable surface profiles with a list of components (default: ["stars", "darkmatter"]).'
     )
     opt.add_argument(
         "-er", "--extra_radius",
-        nargs="*",
+        nargs=2,
+        type=str,
         default=None,
         help="Extra radius as list of [float, str] (Default: halo virial radius extracted from data)."
     )
@@ -92,13 +137,392 @@ def parse_args():
     )
     opt.add_argument(
         "-rr", "--radii_range",
-        nargs="*"
+        nargs="*",
         type=float,
-        default=[0.08, 50, ],
+        default=[0.08, 50],
         help="Wether to use the same fit for Volumetric and Surface, or produce two different ones. (Default: Uses Volumetric throguhout)."
     )
 
     return parser.parse_args()
+
+def plot_voldens(ax, halo, components):
+    """Adds averaged surface density (both 'all' and 'bound') to plot over multiple lines of sight.
+    """
+    global extra_radius
+    global gas_cm
+    
+    bins_params_all = {
+        "stars": {"rmin": 0.08, "rmax": 50, "thicken": True},
+        "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
+        "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
+    }
+    kw_center_all = {
+        "stars": {"method": "adaptative", "nmin": 50},
+        "darkmatter": {"method": "adaptative", "nmin": 300},
+        "gas": {"method": "rcc", "rc_scale": 0.5}
+    }
+    
+    results = {}
+    
+    if components == "particles":
+        components = ["stars", "darkmatter"]
+    elif components == "all":
+        components = ["stars", "darkmatter", "gas"]
+        
+    sp = halo._data.ds.sphere(
+        halo.sp_center, 
+        extra_radius
+    )
+    for component in components: 
+        component_object = getattr(halo, component)
+
+        if component == "gas":
+            dm_object = getattr(halo, gas_cm)
+            center = dm_object.refined_center6d(method="adaptative", nmin=300)[0]
+        else:
+            center = None
+                
+            
+        r_bound, rho_bound, e_rho_bound, bins = component_object.density_profile(
+            pc="bound",
+            center=center,
+            return_bins=True,
+            bins_params=bins_params_all[component],
+            kw_center=kw_center_all[component]
+        )
+        r_all, rho_all, e_rho_all = component_object.density_profile(
+            pc="all",
+            center=center,
+            bins=bins,
+            new_data_params={"sp": sp, "radius": extra_radius},
+            kw_center=kw_center_all[component]
+        )
+
+
+
+        
+        color = {"stars": "red", "darkmatter": "black", "gas": "green"}[component]
+        marker = {"stars": "*", "darkmatter": ".", "gas": "s"}[component]
+        label = {"stars": "stars (-bound, --all)", "darkmatter": "dark matter", "gas" : "gas"}[component]
+        markersize = {"stars": 11, "darkmatter": 11, "gas": 7}[component]
+        
+        ax.errorbar(r_bound, rho_bound, yerr=e_rho_bound, fmt=marker, ls="-", color=color, markersize=markersize, lw=1.2, label=label)
+        ax.errorbar(r_all, rho_all, yerr=e_rho_all, fmt=marker, ls="--", color=color, markersize=markersize, lw=1.2)
+
+
+
+        
+        results[component] = {
+            "bins": bins,
+            "r_bound": r_bound,
+            "rho_bound": rho_bound,
+            "e_rho_bound": e_rho_bound,
+            "r_all": r_all,
+            "rho_all": rho_all,
+            "e_rho_all": e_rho_all,
+        }
+
+    return results
+
+
+
+def plot_dispvel(ax, halo, components, bins):
+    """Adds average 3D velocity dispersion to plot.
+    """
+    global extra_radius
+    global gas_cm
+
+    bins_params_all = {
+        "stars": {"rmin": 0.08, "rmax": 50, "thicken": True},
+        "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
+        "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
+    }
+    kw_center_all = {
+        "stars": {"method": "adaptative", "nmin": 50},
+        "darkmatter": {"method": "adaptative", "nmin": 300},
+        "gas": {"method": "rcc", "rc_scale": 0.5}
+    }
+    
+    results = {}
+    
+    if components == "particles":
+        components = ["stars", "darkmatter"]
+    elif components == "all":
+        components = ["stars", "darkmatter", "gas"]
+
+    sp = halo._data.ds.sphere(
+        halo.sp_center, 
+        extra_radius
+    )
+    for component in components: 
+        component_object = getattr(halo, component)
+
+        if component == "gas":
+            dm_object = getattr(halo, gas_cm)
+            center, v_center = dm_object.refined_center6d(method="adaptative", nmin=300)
+        else:
+            center, v_center = None, None
+                   
+
+        r_bound, vrms_bound, e_vrms_bound = component_object.velocity_profile(
+            pc="bound",
+            center=center,
+            v_center=v_center,
+            bins=bins[component],
+            kw_center=kw_center_all[component]
+        )
+        r_all, vrms_all, e_vrms_all = component_object.velocity_profile(
+            pc="all", 
+            center=center,
+            v_center=v_center,
+            bins=bins[component],
+            new_data_params={"sp": sp,"radius": extra_radius},
+            kw_center=kw_center_all[component]
+        
+        )
+
+        
+        color = {"stars": "red", "darkmatter": "black", "gas": "green"}[component]
+        marker = {"stars": "*", "darkmatter": ".", "gas": "s"}[component]
+        label = {"stars": "stars (-bound, --all)", "darkmatter": "dark matter", "gas" : "gas"}[component]
+        markersize = {"stars": 11, "darkmatter": 11, "gas": 7}[component]
+        
+        ax.errorbar(r_bound, vrms_bound, yerr=e_vrms_bound, fmt=marker, ls="-", color=color, markersize=markersize, lw=1.2)
+        ax.errorbar(r_all, vrms_all, yerr=e_vrms_all, fmt=marker, ls="--", color=color, markersize=markersize, lw=1.2)    
+
+
+        
+        results[component] = {
+            "bins": bins[component],
+            "r_bound": r_bound,
+            "vrms_bound": vrms_bound,
+            "e_vrms_bound": e_vrms_bound,
+            "r_all": r_all,
+            "vrms_all": vrms_all,
+            "e_vrms_all": e_vrms_all,
+        }
+
+    return results
+
+def plot_surfdens(ax, halo, lines_of_sight, components):
+    """Adds averaged surface density (both 'all' and 'bound') to plot over multiple lines of sight.
+    """
+    from tqdm import tqdm
+    
+    global extra_radius
+    global gas_cm
+
+    bins_params_all = {
+        "stars": {"rmin": 0.08, "rmax": 50, "thicken": True},
+        "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
+        "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
+    }
+    kw_center_all = {
+        "stars": {"method": "adaptative", "nmin": 50},
+        "darkmatter": {"method": "adaptative", "nmin": 300},
+        "gas": {"method": "rcc", "rc_scale": 0.5}
+    }
+    
+    results = {}
+    
+    if components == "particles":
+        components = ["stars", "darkmatter"]
+    elif components == "all":
+        components = ["stars", "darkmatter", "gas"]
+
+    sp = halo._data.ds.sphere(
+        halo.sp_center, 
+        extra_radius
+    )
+    for component in components:
+        rhos_bound_all = []
+        rhos_all_all = []
+        
+        bins = None  
+        component_object = getattr(halo, component)
+
+        if component == "gas":
+            dm_object = getattr(halo, gas_cm)
+            center = dm_object.refined_center6d(method="adaptative", nmin=300)[0]
+        else:
+            center = None
+               
+                
+        for i in tqdm(range(len(lines_of_sight)), desc=f"Projecting {component} for density"):
+            los = lines_of_sight[i]
+            halo.set_line_of_sight(los.tolist())
+            
+            r_bound, rho_bound, e_rho_bound, bins_bound = component_object.density_profile(
+                pc="bound",
+                center=center,
+                bins=bins,
+                projected=True,
+                return_bins=True,
+                bins_params=bins_params_all[component],
+                kw_center=kw_center_all[component]
+            )
+            rhos_bound_all.append(rho_bound)
+            
+            if bins is None:
+                bins = bins_bound
+
+            r_all, rho_all, e_rho_all = component_object.density_profile(
+                pc="all",
+                center=center,
+                bins=bins,
+                projected=True,
+                new_data_params={"sp": sp, "radius": extra_radius},
+                kw_center=kw_center_all[component]
+            )
+            rhos_all_all.append(rho_all)
+        
+        # Convert to numpy arrays for averaging
+        rhos_bound_all = np.array(rhos_bound_all)
+        rhos_all_all = np.array(rhos_all_all)
+
+        # Compute averages
+        rho_bound_avg = np.mean(rhos_bound_all, axis=0)
+        rho_all_avg = np.mean(rhos_all_all, axis=0)
+
+        # Compute uncertainties (standard deviations)
+        rho_bound_std = np.std(rhos_bound_all, axis=0)
+        rho_all_std = np.std(rhos_all_all, axis=0)
+
+        color = {"stars": "red", "darkmatter": "black", "gas": "green"}[component]
+        marker = {"stars": "*", "darkmatter": ".", "gas": "s"}[component]
+        label = {"stars": "stars (-bound, --all)", "darkmatter": "dark matter", "gas" : "gas"}[component]
+        markersize = {"stars": 11, "darkmatter": 11, "gas": 7}[component]
+        
+        ax.errorbar(r_bound, rho_bound_avg, yerr=rho_bound_std, fmt=marker, ls="-", color=color, markersize=markersize, lw=1.2, label=label)
+        ax.errorbar(r_all, rho_all_avg, yerr=rho_all_std, fmt=marker, ls="--", color=color, markersize=markersize, lw=1.2)
+
+        results[component] = {
+            "bins": bins,
+            "r_bound": r_bound,
+            "rho_bound": rho_bound_avg,
+            "rho_bound_std": rho_bound_std,
+            "r_all": r_all,
+            "rho_all": rho_all_avg,
+            "rho_all_std": rho_all_std,
+        }
+
+    return results
+
+
+def plot_losvel(ax, halo, lines_of_sight, components, bins, velocity_projection):
+    """Adds averaged surface density (both 'all' and 'bound') to plot over multiple lines of sight.
+    """
+    from tqdm import tqdm
+
+    global extra_radius
+    global gas_cm
+
+    bins_params_all = {
+        "stars": {"rmin": 0.08, "rmax": 50, "thicken": True},
+        "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
+        "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
+    }
+    kw_center_all = {
+        "stars": {"method": "adaptative", "nmin": 50},
+        "darkmatter": {"method": "adaptative", "nmin": 300},
+        "gas": {"method": "rcc", "rc_scale": 0.5}
+    }
+    
+    results = {}
+    
+    if components == "particles":
+        components = ["stars", "darkmatter"]
+    elif components == "all":
+        components = ["stars", "darkmatter", "gas"]
+
+    sp = halo._data.ds.sphere(
+        halo.sp_center, 
+        extra_radius
+    )
+    for component in components:
+        vlos_bound_all = []
+        vlos_all_all = []
+        
+        component_object = getattr(halo, component)
+
+        if component == "gas":
+            dm_object = getattr(halo, gas_cm)
+            center, v_center = dm_object.refined_center6d(method="adaptative", nmin=300)
+        else:
+            center, v_center = None, None
+               
+        
+        for i in tqdm(range(len(lines_of_sight)), desc=f"Projecting {component} for los-vel"):
+            los = lines_of_sight[i]
+            halo.set_line_of_sight(los.tolist())
+            
+            r_bound, vlos_bound, _ = component_object.velocity_profile(
+                pc="bound",
+                center=center,
+                v_center=v_center,
+                bins=bins[component],
+                projected=velocity_projection,
+                bins_params=bins_params_all[component],
+                kw_center=kw_center_all[component]
+            )
+            vlos_bound_all.append(vlos_bound)
+            
+
+
+            r_all, vlos_all, _ = component_object.velocity_profile(
+                pc="all",
+                center=center,
+                v_center=v_center,
+                bins=bins[component],
+                projected=velocity_projection,
+                new_data_params={"sp": sp, "radius": extra_radius},
+                kw_center=kw_center_all[component]
+            )
+            vlos_all_all.append(vlos_all)
+        
+        # Convert to numpy arrays for averaging
+        vlos_bound_all = np.array(vlos_bound_all)
+        vlos_all_all = np.array(vlos_all_all)
+
+        # Compute averages
+        vlos_bound_avg = np.mean(vlos_bound_all, axis=0)
+        vlos_all_avg = np.mean(vlos_all_all, axis=0)
+
+        # Compute uncertainties (standard deviations)
+        vlos_bound_std = np.std(vlos_bound_all, axis=0)
+        vlos_all_std = np.std(vlos_all_all, axis=0)
+
+        color = {"stars": "red", "darkmatter": "black", "gas": "green"}[component]
+        marker = {"stars": "*", "darkmatter": ".", "gas": "s"}[component]
+        label = {"stars": "stars (-bound, --all)", "darkmatter": "dark matter", "gas" : "gas"}[component]
+        markersize = {"stars": 11, "darkmatter": 11, "gas": 7}[component]
+        
+        ax.errorbar(r_bound, vlos_bound_avg, yerr=vlos_bound_std, fmt=marker, ls="-", color=color, markersize=markersize, lw=1.2)
+        ax.errorbar(r_all, vlos_all_avg, yerr=vlos_all_std, fmt=marker, ls="--", color=color, markersize=markersize, lw=1.2)
+
+        results[component] = {
+            "bins": bins[component],
+            "r_bound": r_bound,
+            "vlos_bound": vlos_bound_avg,
+            "vlos_bound_std": vlos_bound_std,
+            "r_all": r_all,
+            "vlos_all": vlos_all_avg,
+            "vlos_all_std": vlos_all_std,
+        }
+
+    return results
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -106,13 +530,44 @@ def parse_args():
 args = parse_args()
 
 
-print(f"Volumetric Components: {args.volumetric}")
-print(f"Surface Components: {args.surface}")
-print(f"Extra Radius: {args.extra_radius}")
-print(f"Nproj: {args.Nproj}")
-print(f"Gas CM: {args.gas_cm}")
-print(f"Input: {args.input_file}")
-print(f"Output: {args.output}")
+try:
+    equivalence_table = load_ftable(args.equivalence_table)
+except:
+    equivalence_table = pd.read_csv(args.equivalence_table)
+
+merger_table = pd.read_csv(args.input_file).sort_values("Snapshot")
+snap_list = args.snapshot_numbers
+sub_tree = args.sub_tree_id
+
+
+subtree_table = merger_table[(merger_table["Sub_tree_id"] == sub_tree) & (np.isin(merger_table["Snapshot"].values, snap_list))].sort_values("R/Rvir")
+print(f"\nThe following ROWS where FOUND in the file you provided:")
+print(f"--------------------------------------------------------")
+print(subtree_table)
+
+fns = []
+for snapshot in subtree_table["Snapshot"].values:
+    fn = equivalence_table[equivalence_table['snapshot'] == snapshot]['snapname'].values[0]
+    fns.append(fn)
+
+subtree_table["fn"] = fns
+print(f"\nFiles corresponding to SELECTED ROWS: {fns}\n")
+
+
+
+
+dge.config.code = args.code
+
+densModel = Model(KingProfileIterp, independent_vars=['r'])
+surfModel = Model(KingProfileIterp_surf, independent_vars=['r'])
+plummerModel = Model(plummer, independent_vars=['r'])
+
+
+
+try:
+    os.mkdir(args.output + f"subtree_{sub_tree}/")
+except:
+    pass
 
 
 
@@ -132,7 +587,255 @@ print(f"Output: {args.output}")
 
 
 
+import smplotlib
+from src.explorer.class_methods import NFWc
 
+plt.rcParams['axes.linewidth'] = 1.1
+plt.rcParams['xtick.major.width'] = 1.1
+plt.rcParams['xtick.minor.width'] = 1.1
+plt.rcParams['ytick.major.width'] = 1.1
+plt.rcParams['ytick.minor.width'] = 1.1
+
+plt.rcParams['xtick.major.size'] = 7 * 1.5
+plt.rcParams['ytick.major.size'] = 7 * 1.5
+
+plt.rcParams['xtick.minor.size'] = 5 
+plt.rcParams['ytick.minor.size'] = 5 
+
+
+from src.explorer.class_methods import random_vector_spherical
+
+double_fit = args.double_fit
+N = args.Nproj
+vol_components = args.volumetric
+proj_components = args.surface
+velocity_projection = args.projection_mode
+gas_cm = args.gas_cm
+
+
+    
+fig, axes = plt.subplots(nrows=2, ncols=4, figsize=(len(fns)/2*12,12), sharex=True, sharey="row")
+plt.subplots_adjust(hspace=0.05, wspace=0.05)
+fig.suptitle(f"Averaged volumemetric density and velocity profiles, for sub_tree: {sub_tree}, at different host distances:", y=0.95, fontsize=29, ha="center")
+
+
+fig2, axes2 = plt.subplots(nrows=2, ncols=4, figsize=(len(fns)/2*12,12), sharex=True, sharey="row")
+plt.subplots_adjust(hspace=0.05, wspace=0.05)
+fig2.suptitle(f"Averaged surface density and velocity profiles, for sub_tree: {sub_tree}, at different host distances:", y=0.95, fontsize=29, ha="center")
+
+
+i = 0
+for _, row in subtree_table.iterrows():
+    halo_params = row
+
+    redshift = halo_params['Redshift']
+    center = (halo_params[['position_x', 'position_y', 'position_z']].values.astype(float) / (1 + redshift), 'kpc')
+    center_vel = (halo_params[['velocity_x', 'velocity_y', 'velocity_z']].values.astype(float), 'km/s')
+    rvir = (halo_params['virial_radius'] / (1 + redshift), 'kpc')
+    rs = (halo_params['scale_radius'] / (1 + redshift), 'kpc')
+    mass = (halo_params['mass'], 'Msun')
+
+    try:
+        rh3d_stars = (halo_params['rh3D_physical_stars'], 'kpc')
+    except:
+        rh3d_stars = (1, 'kpc')
+
+    if args.extra_radius is None:
+        extra_radius = rvir
+    else:
+        extra_radius = float(args.extra_radius[0]), str(args.extra_radius[1])
+    
+    axes[0, i].set_title(f"R/Rvir={halo_params['R/Rvir']:.2f}, z={redshift:.2f}")
+  
+    halo = dge.SnapshotHalo(args.particle_data_folder + halo_params["fn"], center=center, radius=rvir)
+
+    halo.compute_bound_particles(
+        components=["stars", "darkmatter", "gas"], 
+        method="bh", 
+        weighting="softmax", 
+        T="adaptative", 
+        verbose=False,  
+        cm=unyt_array(*center), 
+        vcm=unyt_array(*center_vel)
+    )
+
+
+
+    
+    result_dens = plot_voldens(axes[0, i], halo, vol_components)
+    bins = {c : result_dens[c]["bins"] for c in vol_components}
+    result_vels = plot_dispvel(axes[1, i], halo, vol_components, bins)
+    
+    
+    axes[0, i].axvspan(0.0001, 2 * 0.08, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
+    axes[1, i].axvspan(0.0001, 2 * 0.08, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
+
+    axes[0, i].axvline(2 * 0.08, color="darkviolet", ls="--", lw=2.5)
+    axes[1, i].axvline(2 * 0.08, color="darkviolet", ls="--", lw=2.5)
+
+    axes[0, i].text(0.08, 2E2, r"$\varepsilon=80$ pc" ,ha="left", va="bottom", color="darkviolet", rotation="vertical", fontsize=20)
+    axes[1, i].text(0.08, 11.5, r"$\varepsilon=80$ pc" ,ha="left", va="bottom", color="darkviolet", rotation="vertical", fontsize=20)
+    axes[1, i].text(0.18, 350, r"$M_*$="+f"{halo.stars.bmasses.sum().value:.3e}"+r" $M_\odot$"+"\n"+r"$M_{dm}$="+f"{halo.darkmatter.bmasses.sum().value:.3e}"+r" $M_\odot$" ,ha="left", va="top", color="black", rotation="horizontal", fontsize=14)
+
+    axes[1, i].set_xlabel(f"r [kpc]", fontsize=20)
+
+    if i==0:
+        axes[0, i].set_ylabel(r"$\rho \ [M_\odot / kpc^3]$", fontsize=20)
+        axes[1, i].set_ylabel(r"$v_{rms}$ [km/s]", fontsize=20)
+
+    axes[0, i].loglog()
+    axes[1, i].set_yscale("log")
+
+    axes[0, i].set_xlim(0.05, 300)
+    axes[0, i].set_ylim(1E2, 8E9)
+    axes[1, i].set_ylim(10, 400)
+
+
+
+    fit_params = densModel.make_params(
+        W0={'value': 5.5,'min': 0.1,'max': np.inf,'vary': True},
+        g={'value': 1, 'vary': False},
+        M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
+        rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True}
+    )
+    result_stars = densModel.fit(r=result_dens["stars"]["r_bound"], data=result_dens["stars"]["rho_bound"], params=fit_params, nan_policy="omit") 
+    k_stars = limepy(phi0=result_stars.params['W0'].value, 
+            g=result_stars.params['g'].value, 
+            M=result_stars.params['M'].value, 
+            rh=result_stars.params['rh'].value, 
+            G=4.300917270038e-06,
+            project=True
+            )
+    axes[0, i].plot(
+        k_stars.r, 
+        k_stars.rho, 
+        color="darkblue", 
+        zorder=10, 
+        label=f"Fit to King: W0={result_stars.params['W0'].value:.2f}±{result_stars.params['W0'].stderr:.0e},  rh={result_stars.params['rh'].value:.2f}±{result_stars.params['rh'].stderr:.0e} kpc"
+    )
+    axes[1, i].plot(
+        k_stars.r, 
+        np.sqrt(k_stars.v2), 
+        color="darkblue", 
+        zorder=10
+    )
+    rho_h = unyt_quantity(*mass) / (4*np.pi/3 * unyt_quantity(*rvir).to("kpc")**3)
+    c = (unyt_quantity(*rvir).to("kpc")/unyt_quantity(*rs).to("kpc")).value
+    r = np.logspace(np.log10(0.05), np.log10(300), 200)
+    rho_nfw = NFWc(r, rho_h, c, unyt_quantity(*rvir).to("kpc").value)
+    
+    axes[0, i].plot(r, rho_nfw, color="darkorange", label=f'NFW Rockstar Fit: c={c:.2f}, rvir={unyt_quantity(*rvir).to("kpc").value:.2f} kpc', zorder=9)
+
+
+
+    
+    axes[0, i].legend(loc="upper right", fontsize=12, markerfirst=False, reverse=False)
+
+
+
+
+
+
+    
+
+    
+
+
+
+    axes2[0, i].set_title(f"R/Rvir={halo_params['R/Rvir']:.2f}, z={redshift:.2f}")
+
+    lines_of_sight = random_vector_spherical(N, half_sphere=True)
+
+    result_surf = plot_surfdens(axes2[0, i], halo, lines_of_sight, proj_components)
+    bins = {c : result_surf[c]["bins"] for c in proj_components}
+    plot_losvel(axes2[1, i], halo, lines_of_sight, proj_components, bins, velocity_projection)
+
+
+
+    axes2[0, i].axvspan(0.0001, 2 * 0.08, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
+    axes2[0, i].axvline(2 * 0.08, color="darkviolet", ls="--", lw=2.5)
+    axes2[1, i].axvspan(0.0001, 2 * 0.08, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
+    axes2[1, i].axvline(2 * 0.08, color="darkviolet", ls="--", lw=2.5)
+
+
+
+    axes2[0, i].text(0.08, 2E2, r"$\varepsilon=80$ pc" ,ha="left", va="bottom", color="darkviolet", rotation="vertical", fontsize=20)
+    axes2[1, i].text(0.08, 1.15, r"$\varepsilon=80$ pc" ,ha="left", va="bottom", color="darkviolet", rotation="vertical", fontsize=20)
+    axes2[1, i].text(0.18, 150, r"$M_*$="+f"{halo.stars.bmasses.sum().value:.3e}"+r" $M_\odot$"+"\n"+r"$M_{dm}$="+f"{halo.darkmatter.bmasses.sum().value:.3e}"+r" $M_\odot$" ,ha="left", va="top", color="black", rotation="horizontal", fontsize=14)
+
+    axes2[1, i].set_xlabel(f"R [kpc]", fontsize=20)
+
+    if i==0:
+        axes2[0, i].set_ylabel(r"$\Sigma \ [M_\odot / kpc^2]$", fontsize=20)
+        axes2[1, i].set_ylabel(r"$v_{los}$ [km/s]", fontsize=20)
+
+    axes2[0, i].loglog()
+    axes2[1, i].set_yscale("log")
+
+    axes2[0, i].set_xlim(0.05, 300)
+    axes2[0, i].set_ylim(1E2, 8E9)
+    axes2[1, i].set_ylim(1, 200)
+
+
+
+    
+
+    if double_fit:
+        fit_params = surfModel.make_params(
+            W0={'value': 5.5,'min': 0.1,'max': np.inf,'vary': True},
+            g={'value': 1, 'vary': False},
+            M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
+            rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True}
+        )
+        result_stars = densModel.fit(r=result_surf["stars"]["r_bound"], data=result_surf["stars"]["rho_bound"], params=fit_params, nan_policy="omit") 
+        k_stars = limepy(phi0=result_stars.params['W0'].value, 
+                g=result_stars.params['g'].value, 
+                M=result_stars.params['M'].value, 
+                rh=result_stars.params['rh'].value, 
+                G=4.300917270038e-06,
+                project=True
+                )
+    
+        axes2[0, i].plot(
+            k_stars.r, 
+            k_stars.Sigma, 
+            color="darkblue", 
+            zorder=10, 
+            label=f"Fit to King: W0={result_stars.params['W0'].value:.2f}±{result_stars.params['W0'].stderr:.0e},  rh={result_stars.params['rh'].value:.2f}±{result_stars.params['rh'].stderr:.0e} kpc"
+        )
+
+    axes2[0, i].plot(
+        k_stars.r, 
+        k_stars.Sigma, 
+        color="darkblue", 
+        zorder=10, 
+        label=f"Fit to King: rhp={k_stars.rhp:.2f} kpc"
+    )
+
+    
+    axes2[0, i].legend(loc="upper right", fontsize=12, markerfirst=False, reverse=False)
+
+    i += 1
+
+
+
+fig.savefig(
+    args.output + f"subtree_{sub_tree}/" + "volumetric_profiles.png",
+    dpi=300, 
+    bbox_inches="tight"
+)
+fig2.savefig(
+    args.output + f"subtree_{sub_tree}/" + "projected_profiles.png",
+    dpi=300, 
+    bbox_inches="tight"
+)
+
+plt.close()
+    
+
+
+
+print(f"Finished. Bye!")
 
 
 

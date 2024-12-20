@@ -473,8 +473,7 @@ class SnapshotHalo(BaseSimulationObject):
         if "gas" in components:
             thermal_energy[particle_types == "gas"] = getattr(self, "gas").thermal_energy.to("Msun * km**2/s**2")
 
-        print(thermal_energy)
-    
+        
         
         particle_subset = np.zeros_like(particle_types, dtype=bool)
         for sub in cm_subset:
