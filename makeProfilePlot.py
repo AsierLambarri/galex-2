@@ -659,7 +659,11 @@ for _, row in subtree_table.iterrows():
         vcm=unyt_array(*center_vel)
     )
 
-
+    if halo.gas.bmasses.sum() == 0:
+        bound_vol_components = ['darkmatter', 'stars']
+        bound_proj_components = ['darkmatter', 'stars']
+        print(f"There are no bound gas particles!!")
+       
 
     
     result_dens = plot_voldens(axes[0, i], halo, vol_components)
