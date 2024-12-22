@@ -130,10 +130,34 @@ def parse_args():
         help="Output folder (Default: ./)."
     )
     opt.add_argument(
+        "-kf", "--king_fit",
+        type=bool,
+        default=True,
+        help="Wether to fit a King profile to the density profiles. (Default: True)."
+    )
+    opt.add_argument(
+        "-pf", "--plummer_fit",
+        type=bool,
+        default=False,
+        help="Wether to fit a plummer profile to the density profiles. (Default: False)."
+    )
+    opt.add_argument(
+        "-wf", "--wooley_fit",
+        type=bool,
+        default=False,
+        help="Wether to fit a Woolley profile to the density profile. Similar to plummer profile (Default: False)."
+    )
+    opt.add_argument(
         "-dbf", "--double_fit",
         type=bool,
         default=False,
-        help="Wether to use the same fit for Volumetric and Surface, or produce two different ones. (Default: Uses Volumetric throguhout)."
+        help="Wether to perform King and Woolley fit to Volumetric and Surface profiles. By default, only Volumetric profiles are fitter. (Default: False)."
+    )
+    opt.add_argument(
+        "-fg", "--free_g",
+        type=bool,
+        default=False,
+        help="Wether to vary 'g' parameter when performing profile fits. Incompatible with Woolley fit. (Default: False)."
     )
     opt.add_argument(
         "-rr", "--radii_range",
@@ -157,7 +181,7 @@ def plot_voldens(ax, halo, components):
         "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
     }
     kw_center_all = {
-        "stars": {"method": "adaptative", "nmin": 50},
+        "stars": {"method": "adaptative", "nmin": 30},
         "darkmatter": {"method": "adaptative", "nmin": 300},
         "gas": {"method": "rcc", "rc_scale": 0.5}
     }
@@ -175,6 +199,7 @@ def plot_voldens(ax, halo, components):
     )
     for component in components: 
         component_object = getattr(halo, component)
+        bins = None
 
         if component == "gas":
             dm_object = getattr(halo, gas_cm)
@@ -182,14 +207,17 @@ def plot_voldens(ax, halo, components):
         else:
             center = None
                 
-            
-        r_bound, rho_bound, e_rho_bound, bins = component_object.density_profile(
-            pc="bound",
-            center=center,
-            return_bins=True,
-            bins_params=bins_params_all[component],
-            kw_center=kw_center_all[component]
-        )
+        if component_object.bmasses.sum() != 0:
+            r_bound, rho_bound, e_rho_bound, bins = component_object.density_profile(
+                pc="bound",
+                center=center,
+                bins=bins,
+                return_bins=True,
+                bins_params=bins_params_all[component],
+                kw_center=kw_center_all[component]
+            )
+
+
         r_all, rho_all, e_rho_all = component_object.density_profile(
             pc="all",
             center=center,
@@ -238,7 +266,7 @@ def plot_dispvel(ax, halo, components, bins):
         "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
     }
     kw_center_all = {
-        "stars": {"method": "adaptative", "nmin": 50},
+        "stars": {"method": "adaptative", "nmin": 30},
         "darkmatter": {"method": "adaptative", "nmin": 300},
         "gas": {"method": "rcc", "rc_scale": 0.5}
     }
@@ -263,14 +291,16 @@ def plot_dispvel(ax, halo, components, bins):
         else:
             center, v_center = None, None
                    
+        if component_object.bmasses.sum() != 0:
+            r_bound, vrms_bound, e_vrms_bound = component_object.velocity_profile(
+                pc="bound",
+                center=center,
+                v_center=v_center,
+                bins=bins[component],
+                kw_center=kw_center_all[component]
+            )
 
-        r_bound, vrms_bound, e_vrms_bound = component_object.velocity_profile(
-            pc="bound",
-            center=center,
-            v_center=v_center,
-            bins=bins[component],
-            kw_center=kw_center_all[component]
-        )
+
         r_all, vrms_all, e_vrms_all = component_object.velocity_profile(
             pc="all", 
             center=center,
@@ -318,7 +348,7 @@ def plot_surfdens(ax, halo, lines_of_sight, components):
         "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
     }
     kw_center_all = {
-        "stars": {"method": "adaptative", "nmin": 50},
+        "stars": {"method": "adaptative", "nmin": 30},
         "darkmatter": {"method": "adaptative", "nmin": 300},
         "gas": {"method": "rcc", "rc_scale": 0.5}
     }
@@ -352,19 +382,20 @@ def plot_surfdens(ax, halo, lines_of_sight, components):
             los = lines_of_sight[i]
             halo.set_line_of_sight(los.tolist())
             
-            r_bound, rho_bound, e_rho_bound, bins_bound = component_object.density_profile(
-                pc="bound",
-                center=center,
-                bins=bins,
-                projected=True,
-                return_bins=True,
-                bins_params=bins_params_all[component],
-                kw_center=kw_center_all[component]
-            )
-            rhos_bound_all.append(rho_bound)
+            if component_object.bmasses.sum() != 0:
+                r_bound, rho_bound, e_rho_bound, bins = component_object.density_profile(
+                    pc="bound",
+                    center=center,
+                    bins=bins,
+                    projected=True,
+                    return_bins=True,
+                    bins_params=bins_params_all[component],
+                    kw_center=kw_center_all[component]
+                )
+                rhos_bound_all.append(rho_bound)
             
-            if bins is None:
-                bins = bins_bound
+            #if bins is None:
+            #    bins = bins_bound
 
             r_all, rho_all, e_rho_all = component_object.density_profile(
                 pc="all",
@@ -423,7 +454,7 @@ def plot_losvel(ax, halo, lines_of_sight, components, bins, velocity_projection)
         "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
     }
     kw_center_all = {
-        "stars": {"method": "adaptative", "nmin": 50},
+        "stars": {"method": "adaptative", "nmin": 30},
         "darkmatter": {"method": "adaptative", "nmin": 300},
         "gas": {"method": "rcc", "rc_scale": 0.5}
     }
@@ -456,16 +487,18 @@ def plot_losvel(ax, halo, lines_of_sight, components, bins, velocity_projection)
             los = lines_of_sight[i]
             halo.set_line_of_sight(los.tolist())
             
-            r_bound, vlos_bound, _ = component_object.velocity_profile(
-                pc="bound",
-                center=center,
-                v_center=v_center,
-                bins=bins[component],
-                projected=velocity_projection,
-                bins_params=bins_params_all[component],
-                kw_center=kw_center_all[component]
-            )
-            vlos_bound_all.append(vlos_bound)
+            if component_object.bmasses.sum() != 0:
+
+                r_bound, vlos_bound, _ = component_object.velocity_profile(
+                    pc="bound",
+                    center=center,
+                    v_center=v_center,
+                    bins=bins[component],
+                    projected=velocity_projection,
+                    bins_params=bins_params_all[component],
+                    kw_center=kw_center_all[component]
+                )
+                vlos_bound_all.append(vlos_bound)
             
 
 
@@ -659,11 +692,6 @@ for _, row in subtree_table.iterrows():
         vcm=unyt_array(*center_vel)
     )
 
-    if halo.gas.bmasses.sum() == 0:
-        bound_vol_components = ['darkmatter', 'stars']
-        bound_proj_components = ['darkmatter', 'stars']
-        print(f"There are no bound gas particles!!")
-       
 
     
     result_dens = plot_voldens(axes[0, i], halo, vol_components)
