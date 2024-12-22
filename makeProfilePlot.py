@@ -34,10 +34,20 @@ def plummer(r, M, a):
     """
     return 3 * M / ( 4 * np.pi * a ** 3 ) * ( 1 + (r/a)**2 ) ** (-5/2)
     
+def surface_plummer(R, M, a):
+    """Surface density plummer
+    """
+    return ( M * a ** 2 ) / np.pi * 1 / ( a**2 + R**2 ) ** 2
+
+#kw_center_all = {
+#    "stars": {"method": "adaptative", "nmin": 30},
+#    "darkmatter": {"method": "adaptative", "nmin": 300},
+#    "gas": {"method": "rcc", "rc_scale": 0.5}
+#}
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Process various input parameters for making profile plots of a given halo. You MUST provide the halo sub_tree_id and a list of snapshot numbers.\n The binning of the profiles is performed logarithmically over the (projected) radii from rmin to rmax")
+    parser = argparse.ArgumentParser(description="Process various input parameters for making profile plots of a given halo. You MUST provide the halo sub_tree_id and a list of snapshot numbers.\n The binning of the profiles is performed logarithmically over the (projected) radii from rmin to rmax. DM density profile is fit to a NFW (taken from Rockstar or any other) and Stellar density profiles can be fitted to a variety of Lowered Isothermal Models using limepy, and to a simple plummer profile.")
     
     required = parser.add_argument_group('REQUIRED arguments')
     opt = parser.add_argument_group('OPTIONAL arguments')
@@ -53,13 +63,6 @@ def parse_args():
         "-eq", "--equivalence_table",
         type=str,
         help="Equivalence table path. Must have correct formatting.",
-        required=True
-    )
-    required.add_argument(
-        "-sn", "--snapshot_numbers",
-        nargs="*",
-        type=int,
-        help="List of snapshot numbers to plot. Maximum 4.",
         required=True
     )
     required.add_argument(
@@ -82,6 +85,14 @@ def parse_args():
     )
 
 
+
+    opt.add_argument(
+        "-sn", "--snapshot_numbers",
+        nargs="*",
+        type=int,
+        default=None,
+        help="List of snapshot numbers to plot. Maximum 4."
+    )
     opt.add_argument(
         "-v", "--volumetric",
         nargs="*",
@@ -131,34 +142,40 @@ def parse_args():
     )
     opt.add_argument(
         "-kf", "--king_fit",
-        type=bool,
-        default=True,
-        help="Wether to fit a King profile to the density profiles. (Default: True)."
+        default=False,
+        action="store_true",
+        help="Wether to fit a King profile to the density profiles. (Default: False)."
     )
     opt.add_argument(
         "-pf", "--plummer_fit",
-        type=bool,
         default=False,
+        action="store_true",
         help="Wether to fit a plummer profile to the density profiles. (Default: False)."
     )
     opt.add_argument(
-        "-wf", "--wooley_fit",
-        type=bool,
+        "-wf", "--woolley_fit",
         default=False,
+        action="store_true",
         help="Wether to fit a Woolley profile to the density profile. Similar to plummer profile (Default: False)."
     )
     opt.add_argument(
         "-dbf", "--double_fit",
-        type=bool,
         default=False,
+        action="store_true",
         help="Wether to perform King and Woolley fit to Volumetric and Surface profiles. By default, only Volumetric profiles are fitter. (Default: False)."
     )
     opt.add_argument(
-        "-fg", "--free_g",
-        type=bool,
-        default=False,
+        "-sg", "--set_g",
+        default=None,
         help="Wether to vary 'g' parameter when performing profile fits. Incompatible with Woolley fit. (Default: False)."
     )
+    opt.add_argument(
+        "-fww", "--fit_with_weights",
+        action="store_true",
+        default=False,
+        help="Perform fit with errorbars. (Default: False)."
+    )
+
     opt.add_argument(
         "-rr", "--radii_range",
         nargs="*",
@@ -180,12 +197,6 @@ def plot_voldens(ax, halo, components):
         "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
         "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
     }
-    kw_center_all = {
-        "stars": {"method": "adaptative", "nmin": 30},
-        "darkmatter": {"method": "adaptative", "nmin": 300},
-        "gas": {"method": "rcc", "rc_scale": 0.5}
-    }
-    
     results = {}
     
     if components == "particles":
@@ -201,29 +212,23 @@ def plot_voldens(ax, halo, components):
         component_object = getattr(halo, component)
         bins = None
 
-        if component == "gas":
-            dm_object = getattr(halo, gas_cm)
-            center = dm_object.refined_center6d(method="adaptative", nmin=300)[0]
-        else:
-            center = None
-                
         if component_object.bmasses.sum() != 0:
             r_bound, rho_bound, e_rho_bound, bins = component_object.density_profile(
                 pc="bound",
-                center=center,
+                center=component_object.cm,
                 bins=bins,
                 return_bins=True,
-                bins_params=bins_params_all[component],
-                kw_center=kw_center_all[component]
+                bins_params=bins_params_all[component]
             )
+        else:
+           r_bound, rho_bound, e_rho_bound = np.array([np.nan, np.nan]), np.array([np.nan, np.nan]), np.array([np.nan, np.nan])
 
 
         r_all, rho_all, e_rho_all = component_object.density_profile(
             pc="all",
-            center=center,
+            center=component_object.cm,
             bins=bins,
-            new_data_params={"sp": sp, "radius": extra_radius},
-            kw_center=kw_center_all[component]
+            new_data_params={"sp": sp}
         )
 
 
@@ -265,11 +270,6 @@ def plot_dispvel(ax, halo, components, bins):
         "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
         "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
     }
-    kw_center_all = {
-        "stars": {"method": "adaptative", "nmin": 30},
-        "darkmatter": {"method": "adaptative", "nmin": 300},
-        "gas": {"method": "rcc", "rc_scale": 0.5}
-    }
     
     results = {}
     
@@ -285,30 +285,24 @@ def plot_dispvel(ax, halo, components, bins):
     for component in components: 
         component_object = getattr(halo, component)
 
-        if component == "gas":
-            dm_object = getattr(halo, gas_cm)
-            center, v_center = dm_object.refined_center6d(method="adaptative", nmin=300)
-        else:
-            center, v_center = None, None
                    
         if component_object.bmasses.sum() != 0:
             r_bound, vrms_bound, e_vrms_bound = component_object.velocity_profile(
                 pc="bound",
-                center=center,
-                v_center=v_center,
-                bins=bins[component],
-                kw_center=kw_center_all[component]
+                center=component_object.cm,
+                v_center=component_object.vcm,
+                bins=bins[component]
             )
-
+       
+        else:
+            r_bound, vrms_bound, e_vrms_bound = np.array([np.nan, np.nan]), np.array([np.nan, np.nan]), np.array([np.nan, np.nan])
 
         r_all, vrms_all, e_vrms_all = component_object.velocity_profile(
             pc="all", 
-            center=center,
-            v_center=v_center,
+            center=component_object.cm,
+            v_center=component_object.vcm,
             bins=bins[component],
-            new_data_params={"sp": sp,"radius": extra_radius},
-            kw_center=kw_center_all[component]
-        
+            new_data_params={"sp": sp}
         )
 
         
@@ -347,11 +341,6 @@ def plot_surfdens(ax, halo, lines_of_sight, components):
         "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
         "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
     }
-    kw_center_all = {
-        "stars": {"method": "adaptative", "nmin": 30},
-        "darkmatter": {"method": "adaptative", "nmin": 300},
-        "gas": {"method": "rcc", "rc_scale": 0.5}
-    }
     
     results = {}
     
@@ -371,13 +360,6 @@ def plot_surfdens(ax, halo, lines_of_sight, components):
         bins = None  
         component_object = getattr(halo, component)
 
-        if component == "gas":
-            dm_object = getattr(halo, gas_cm)
-            center = dm_object.refined_center6d(method="adaptative", nmin=300)[0]
-        else:
-            center = None
-               
-                
         for i in tqdm(range(len(lines_of_sight)), desc=f"Projecting {component} for density"):
             los = lines_of_sight[i]
             halo.set_line_of_sight(los.tolist())
@@ -385,25 +367,25 @@ def plot_surfdens(ax, halo, lines_of_sight, components):
             if component_object.bmasses.sum() != 0:
                 r_bound, rho_bound, e_rho_bound, bins = component_object.density_profile(
                     pc="bound",
-                    center=center,
+                    center=component_object.cm,
                     bins=bins,
                     projected=True,
                     return_bins=True,
-                    bins_params=bins_params_all[component],
-                    kw_center=kw_center_all[component]
+                    bins_params=bins_params_all[component]
                 )
-                rhos_bound_all.append(rho_bound)
+            else:
+               r_bound, rho_bound, e_rho_bound = np.array([np.nan, np.nan]), np.array([np.nan, np.nan]), np.array([np.nan, np.nan])
             
-            #if bins is None:
-            #    bins = bins_bound
+
+            rhos_bound_all.append(rho_bound)
 
             r_all, rho_all, e_rho_all = component_object.density_profile(
                 pc="all",
-                center=center,
+                center=component_object.cm,
                 bins=bins,
                 projected=True,
-                new_data_params={"sp": sp, "radius": extra_radius},
-                kw_center=kw_center_all[component]
+                bins_params=bins_params_all[component],
+                new_data_params={"sp": sp}
             )
             rhos_all_all.append(rho_all)
         
@@ -453,11 +435,6 @@ def plot_losvel(ax, halo, lines_of_sight, components, bins, velocity_projection)
         "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
         "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
     }
-    kw_center_all = {
-        "stars": {"method": "adaptative", "nmin": 30},
-        "darkmatter": {"method": "adaptative", "nmin": 300},
-        "gas": {"method": "rcc", "rc_scale": 0.5}
-    }
     
     results = {}
     
@@ -475,41 +452,32 @@ def plot_losvel(ax, halo, lines_of_sight, components, bins, velocity_projection)
         vlos_all_all = []
         
         component_object = getattr(halo, component)
-
-        if component == "gas":
-            dm_object = getattr(halo, gas_cm)
-            center, v_center = dm_object.refined_center6d(method="adaptative", nmin=300)
-        else:
-            center, v_center = None, None
-               
         
         for i in tqdm(range(len(lines_of_sight)), desc=f"Projecting {component} for los-vel"):
             los = lines_of_sight[i]
             halo.set_line_of_sight(los.tolist())
             
             if component_object.bmasses.sum() != 0:
-
                 r_bound, vlos_bound, _ = component_object.velocity_profile(
                     pc="bound",
-                    center=center,
-                    v_center=v_center,
+                    center=component_object.cm,
+                    v_center=component_object.vcm,
                     bins=bins[component],
-                    projected=velocity_projection,
-                    bins_params=bins_params_all[component],
-                    kw_center=kw_center_all[component]
+                    projected=velocity_projection
                 )
-                vlos_bound_all.append(vlos_bound)
-            
+            else:
+                r_bound, vlos_bound = np.array([np.nan, np.nan]), np.array([np.nan, np.nan])
 
+
+            vlos_bound_all.append(vlos_bound)
 
             r_all, vlos_all, _ = component_object.velocity_profile(
                 pc="all",
-                center=center,
-                v_center=v_center,
+                center=component_object.cm,
+                v_center=component_object.vcm,
                 bins=bins[component],
                 projected=velocity_projection,
-                new_data_params={"sp": sp, "radius": extra_radius},
-                kw_center=kw_center_all[component]
+                new_data_params={"sp": sp}
             )
             vlos_all_all.append(vlos_all)
         
@@ -546,13 +514,60 @@ def plot_losvel(ax, halo, lines_of_sight, components, bins, velocity_projection)
     return results
 
 
+def limepy_fitAndPlot(model, fit_params, result_dens, mode):
+    """Fits result_dens data to model, given fit_params initial values and constraints.
+    """
+    global fit_with_weights
+
+    if fit_with_weights:
+        if mode == "volumetric":
+            w = 1 / result_dens["stars"]["e_rho_bound"]
+        if mode == "surface":
+            w = 1 / result_dens["stars"]["rho_bound_std"]
+    else:
+        w = np.ones_like(result_dens["stars"]["rho_bound"])
+
+    result = model.fit(
+            r=result_dens["stars"]["r_bound"], 
+            data=result_dens["stars"]["rho_bound"], 
+            params=fit_params, 
+            weights=w,
+            nan_policy="omit"
+    ) 
+    k = limepy(
+        phi0=result.params['W0'].value, 
+        g=result.params['g'].value, 
+        M=result.params['M'].value, 
+        rh=result.params['rh'].value, 
+        G=4.300917270038e-06,
+        project=True
+    )
 
 
+    return k, result
 
+def plummer_fitAndPlot(model, fit_params, result_dens, mode):
+    """Fits result_dens data to model, given fit_params initial values and constraints.
+    """
+    global fit_with_weights
 
+    if fit_with_weights:
+        if mode == "volumetric":
+            w = 1 / result_dens["stars"]["e_rho_bound"]
+        if mode == "surface":
+            w = 1 / result_dens["stars"]["rho_bound_std"]
+    else:
+        w = np.ones_like(result_dens["stars"]["rho_bound"])
 
+    result = model.fit(
+            r=result_dens["stars"]["r_bound"], 
+            data=result_dens["stars"]["rho_bound"], 
+            params=fit_params, 
+            weights=w,
+            nan_policy="omit"
+    ) 
 
-
+    return result
 
 
 
@@ -561,7 +576,6 @@ def plot_losvel(ax, halo, lines_of_sight, components, bins, velocity_projection)
 
 
 args = parse_args()
-
 
 try:
     equivalence_table = load_ftable(args.equivalence_table)
@@ -572,8 +586,16 @@ merger_table = pd.read_csv(args.input_file).sort_values("Snapshot")
 snap_list = args.snapshot_numbers
 sub_tree = args.sub_tree_id
 
+if snap_list is not None:
+    subtree_table = merger_table[(merger_table["Sub_tree_id"] == sub_tree) & (np.isin(merger_table["Snapshot"].values, snap_list))].sort_values("R/Rvir")
+else:
+    subtree_table = merger_table[(merger_table["Sub_tree_id"] == sub_tree)].sort_values("R/Rvir")
 
-subtree_table = merger_table[(merger_table["Sub_tree_id"] == sub_tree) & (np.isin(merger_table["Snapshot"].values, snap_list))].sort_values("R/Rvir")
+
+
+
+
+
 print(f"\nThe following ROWS where FOUND in the file you provided:")
 print(f"--------------------------------------------------------")
 print(subtree_table)
@@ -594,7 +616,7 @@ dge.config.code = args.code
 densModel = Model(KingProfileIterp, independent_vars=['r'])
 surfModel = Model(KingProfileIterp_surf, independent_vars=['r'])
 plummerModel = Model(plummer, independent_vars=['r'])
-
+surfplummerModel = Model(surface_plummer, independent_vars=['R'])
 
 
 try:
@@ -613,10 +635,9 @@ except:
 
 
 
-
-
-
-
+nmin_stars = 40
+nmin_dm = 300
+rc_gas = 0.5
 
 
 
@@ -644,7 +665,7 @@ vol_components = args.volumetric
 proj_components = args.surface
 velocity_projection = args.projection_mode
 gas_cm = args.gas_cm
-
+fit_with_weights = args.fit_with_weights
 
     
 fig, axes = plt.subplots(nrows=2, ncols=4, figsize=(len(fns)/2*12,12), sharex=True, sharey="row")
@@ -667,6 +688,9 @@ for _, row in subtree_table.iterrows():
     rvir = (halo_params['virial_radius'] / (1 + redshift), 'kpc')
     rs = (halo_params['scale_radius'] / (1 + redshift), 'kpc')
     mass = (halo_params['mass'], 'Msun')
+    vmax = (halo_params['vmax'], 'km/s')
+    vrms = (halo_params['vrms'], 'km/s')
+    
 
     try:
         rh3d_stars = (halo_params['rh3D_physical_stars'], 'kpc')
@@ -691,9 +715,18 @@ for _, row in subtree_table.iterrows():
         cm=unyt_array(*center), 
         vcm=unyt_array(*center_vel)
     )
+    halo.darkmatter.refined_center6d(method="adaptative", nmin=nmin_dm)
+    halo.stars.refined_center6d(method="adaptative", nmin=nmin_stars)
+    if args.gas_cm == "darkmatter":
+        halo.gas.cm = halo.darkmatter.cm
+        halo.gas.vcm = halo.darkmatter.vcm
+    elif args.gas_cm == "stars":
+        halo.gas.cm = halo.stars.cm
+        halo.gas.vcm = halo.stars.vcm
+    else:
+        halo.gas.refined_center6d(method="rcc", rc_scale=rc_gas)
 
 
-    
     result_dens = plot_voldens(axes[0, i], halo, vol_components)
     bins = {c : result_dens[c]["bins"] for c in vol_components}
     result_vels = plot_dispvel(axes[1, i], halo, vol_components, bins)
@@ -707,7 +740,7 @@ for _, row in subtree_table.iterrows():
 
     axes[0, i].text(0.08, 2E2, r"$\varepsilon=80$ pc" ,ha="left", va="bottom", color="darkviolet", rotation="vertical", fontsize=20)
     axes[1, i].text(0.08, 11.5, r"$\varepsilon=80$ pc" ,ha="left", va="bottom", color="darkviolet", rotation="vertical", fontsize=20)
-    axes[1, i].text(0.18, 350, r"$M_*$="+f"{halo.stars.bmasses.sum().value:.3e}"+r" $M_\odot$"+"\n"+r"$M_{dm}$="+f"{halo.darkmatter.bmasses.sum().value:.3e}"+r" $M_\odot$" ,ha="left", va="top", color="black", rotation="horizontal", fontsize=14)
+    axes[1, i].text(0.18, 350, r"$M_*$="+f"{halo.stars.bmasses.sum().value:.3e}"+r" $M_\odot$"+"\n"+r"$M_{dm}$="+f"{halo.darkmatter.bmasses.sum().value:.3e}"+r" $M_\odot$"+"\n"+r"$M_{gas}=$"+f"{halo.gas.bmasses.sum().value:.3e}"+r" $M_\odot$" ,ha="left", va="top", color="black", rotation="horizontal", fontsize=14)
 
     axes[1, i].set_xlabel(f"r [kpc]", fontsize=20)
 
@@ -722,41 +755,121 @@ for _, row in subtree_table.iterrows():
     axes[0, i].set_ylim(1E2, 8E9)
     axes[1, i].set_ylim(10, 400)
 
-
-
-    fit_params = densModel.make_params(
-        W0={'value': 5.5,'min': 0.1,'max': np.inf,'vary': True},
-        g={'value': 1, 'vary': False},
-        M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
-        rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True}
-    )
-    result_stars = densModel.fit(r=result_dens["stars"]["r_bound"], data=result_dens["stars"]["rho_bound"], params=fit_params, nan_policy="omit") 
-    k_stars = limepy(phi0=result_stars.params['W0'].value, 
-            g=result_stars.params['g'].value, 
-            M=result_stars.params['M'].value, 
-            rh=result_stars.params['rh'].value, 
-            G=4.300917270038e-06,
-            project=True
-            )
-    axes[0, i].plot(
-        k_stars.r, 
-        k_stars.rho, 
-        color="darkblue", 
-        zorder=10, 
-        label=f"Fit to King: W0={result_stars.params['W0'].value:.2f}±{result_stars.params['W0'].stderr:.0e},  rh={result_stars.params['rh'].value:.2f}±{result_stars.params['rh'].stderr:.0e} kpc"
-    )
-    axes[1, i].plot(
-        k_stars.r, 
-        np.sqrt(k_stars.v2), 
-        color="darkblue", 
-        zorder=10
-    )
     rho_h = unyt_quantity(*mass) / (4*np.pi/3 * unyt_quantity(*rvir).to("kpc")**3)
     c = (unyt_quantity(*rvir).to("kpc")/unyt_quantity(*rs).to("kpc")).value
     r = np.logspace(np.log10(0.05), np.log10(300), 200)
     rho_nfw = NFWc(r, rho_h, c, unyt_quantity(*rvir).to("kpc").value)
     
     axes[0, i].plot(r, rho_nfw, color="darkorange", label=f'NFW Rockstar Fit: c={c:.2f}, rvir={unyt_quantity(*rvir).to("kpc").value:.2f} kpc', zorder=9)
+
+
+    if args.king_fit:
+        fit_params_king = densModel.make_params(
+            W0={'value': 5.5,'min': 0.1,'max': np.inf,'vary': True},
+            g={'value': 1, 'vary': False},
+            M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
+            rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True}
+        )
+   
+        k_king, fit_king =  limepy_fitAndPlot(densModel, fit_params_king, result_dens, "volumetric")
+
+        axes[0, i].plot(
+            k_king.r, 
+            k_king.rho, 
+            color="darkblue", 
+            zorder=10, 
+            label=f"Fit to King: W0={fit_king.params['W0'].value:.2f}±{fit_king.params['W0'].stderr:.0e},  rh={fit_king.params['rh'].value:.2f}±{fit_king.params['rh'].stderr:.0e} kpc"
+        )
+        axes[1, i].plot(
+            k_king.r, 
+            np.sqrt(k_king.v2), 
+            color="darkblue", 
+            zorder=10
+        )
+
+    if args.woolley_fit:
+        fit_params_woolley = densModel.make_params(
+            W0={'value': 5.5,'min': 0.1,'max': np.inf,'vary': True},
+            g={'value': 0, 'vary': False},
+            M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
+            rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True}
+        )
+   
+        k_woolley, fit_woolley =  limepy_fitAndPlot(densModel, fit_params_woolley, result_dens, "volumetric")
+
+        axes[0, i].plot(
+            k_woolley.r, 
+            k_woolley.rho, 
+            color="brown", 
+            zorder=10, 
+            label=f"Fit to Woolley: W0={fit_woolley.params['W0'].value:.2f}±{fit_woolley.params['W0'].stderr:.0e},  rh={fit_woolley.params['rh'].value:.2f}±{fit_woolley.params['rh'].stderr:.0e} kpc"
+        )
+        axes[1, i].plot(
+            k_woolley.r, 
+            np.sqrt(k_woolley.v2), 
+            color="brown", 
+            zorder=10
+        )
+    
+    if args.plummer_fit:
+        fit_params_plummer = plummerModel.make_params(
+            M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
+            a={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True}
+        )
+    
+
+        r = np.linspace(1E-4, 50, 500)
+        fit_plummer =  plummer_fitAndPlot(plummerModel, fit_params_plummer, result_dens, "volumetric")
+        rho_plummer =  plummer(r, fit_plummer.params["M"].value, fit_plummer.params["a"].value)
+        sigma_plummer =  surface_plummer(r, fit_plummer.params["M"].value, fit_plummer.params["a"].value)
+
+        axes[0, i].plot(
+            r,
+            rho_plummer,
+            color="tomato", 
+            zorder=10, 
+            label=f"Fit to Plummer: a={fit_plummer.params['a'].value:.2f}±{fit_plummer.params['a'].stderr:.0e} kpc"
+        )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -813,36 +926,32 @@ for _, row in subtree_table.iterrows():
     
 
     if double_fit:
-        fit_params = surfModel.make_params(
-            W0={'value': 5.5,'min': 0.1,'max': np.inf,'vary': True},
-            g={'value': 1, 'vary': False},
-            M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
-            rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True}
-        )
-        result_stars = densModel.fit(r=result_surf["stars"]["r_bound"], data=result_surf["stars"]["rho_bound"], params=fit_params, nan_policy="omit") 
-        k_stars = limepy(phi0=result_stars.params['W0'].value, 
-                g=result_stars.params['g'].value, 
-                M=result_stars.params['M'].value, 
-                rh=result_stars.params['rh'].value, 
-                G=4.300917270038e-06,
-                project=True
-                )
-    
-        axes2[0, i].plot(
-            k_stars.r, 
-            k_stars.Sigma, 
-            color="darkblue", 
-            zorder=10, 
-            label=f"Fit to King: W0={result_stars.params['W0'].value:.2f}±{result_stars.params['W0'].stderr:.0e},  rh={result_stars.params['rh'].value:.2f}±{result_stars.params['rh'].stderr:.0e} kpc"
-        )
+        pass
+    else:
+        if args.plummer_fit:
+            axes2[0, i].plot(
+                r,
+                sigma_plummer,
+                color="tomato", 
+                zorder=10
+            )
 
-    axes2[0, i].plot(
-        k_stars.r, 
-        k_stars.Sigma, 
-        color="darkblue", 
-        zorder=10, 
-        label=f"Fit to King: rhp={k_stars.rhp:.2f} kpc"
-    )
+        if args.woolley_fit:
+            axes2[0, i].plot(
+                k_woolley.r, 
+                k_woolley.Sigma, 
+                color="brown", 
+                zorder=10, 
+                label=f"Fit to Woolley: rhp={k_woolley.rhp:.2f} kpc"
+            )
+        if args.king_fit:
+            axes2[0, i].plot(
+                k_king.r, 
+                k_king.Sigma, 
+                color="darkblue", 
+                zorder=10, 
+                label=f"Fit to King: rhp={k_king.rhp:.2f} kpc"
+            )
 
     
     axes2[0, i].legend(loc="upper right", fontsize=12, markerfirst=False, reverse=False)
