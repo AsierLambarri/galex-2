@@ -130,10 +130,10 @@ def velocity_profile(pos,
     radii = np.linalg.norm(coords, axis=1)
 
     if bins is None:
-        bins = np.histogram_bin_edges(np.log10(radii), bins="doane")
+        bins = np.histogram_bin_edges(np.log10(radii))
 
     if projected:
-        quant = "mean" if quantity is None else quantity
+        quant = "rms" if quantity is None else quantity
         return_dict = _projected_velocity_profile(
             pos,
             vel,
@@ -220,8 +220,10 @@ def _projected_velocity_profile(pos,
     if quantity == "mean":
         stat = "mean"
         magvel = np.abs(pvels - v_center)
-
-    elif quatity == "dispersion":
+    elif quantity == "rms":
+        stat = "mean"
+        magvel = np.abs(pvels - v_center) ** 2
+    elif quantity == "dispersion":
         stat = "std"
         magvel = pvels - v_center
     else:
@@ -268,8 +270,10 @@ def _projected_velocity_profile(pos,
     
     if 0 in npart:
         npart[npart == 0] = np.inf
-        
-    vstat = vstat * vel.units      
+
+    if quantity == "rms":
+        vstat = np.sqrt(vstat)
+    vstat = vstat * pvels.units      
     e_vstat = vstat / np.sqrt(npart)
     
     return {'r': rcoords,

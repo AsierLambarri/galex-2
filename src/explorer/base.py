@@ -535,7 +535,7 @@ class BaseComponent:
                         **kwargs
                        ):
         """Computes the average density profile of the particles. Returns r_i (R_i), rho_i and e_rho_i (Sigma_i, e_Sigma_i) for each bin. Center
-        and bins are automatically computed but can also be used specified. Profiles can be for all or bound particles. The smallest two bins
+        and bins are sturgesmatically computed but can also be used specified. Profiles can be for all or bound particles. The smallest two bins
         can be combined into one to counteract lack of resolution. Density error is assumed to be poissonian.
 
         OPTIONAL Parameters
@@ -635,11 +635,12 @@ class BaseComponent:
                          v_center=None,
                          bins=None,
                          projected="none",
+                         quantity="rms",
                          return_bins=False,
                          **kwargs
                         ):
         """Computes the average disperion velocity profile of the particles. Returns r_i (R_i), vrms_i and e_vrms_i for each bin. Center
-        and bins are automatically computed but can also be used specified. Profiles can be for all or bound particles. The smallest two bins
+        and bins are sturgesmatically computed but can also be used specified. Profiles can be for all or bound particles. The smallest two bins
         can be combined into one to counteract lack of resolution. Density error is assumed to be poissonian.
 
         OPTIONAL Parameters
@@ -699,10 +700,10 @@ class BaseComponent:
         if projected != "none":
             pos = pos[:, :2]
             vels = easy_los_velocity(vels - v_center, self.los)
-            vels = np.column_stack((
-                vels, 
-                np.zeros_like(vels)
-            ))
+            #vels = np.column_stack((
+            #    vels, 
+            #    np.zeros_like(vels)
+            #))
             center = center[:2]
             v_center = np.array([0])
 
@@ -718,7 +719,7 @@ class BaseComponent:
                 thicken = False if "thicken" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["thicken"]
 
             bins = np.histogram_bin_edges(
-                np.log10(radii),
+                np.log10(radii), 
                 range=np.log10([rmin, rmax]) 
             )
             bins = 10 ** bins
@@ -727,14 +728,26 @@ class BaseComponent:
                 binindex = [i for i in range(len(bins)) if i!=1]
                 bins = bins[binindex]
 
-        if projected == "radial-bins" or projected == "bins" or projected == "none":
+        if projected == "none":
             result = velocity_profile(
                 pos,
                 vels,
                 center=center,
                 v_center=v_center,
                 bins=bins,
+                projected=False,
                 average="bins"
+            )
+        if projected == "radial-bins" or projected == "bins" :
+            result = velocity_profile(
+                pos,
+                vels,
+                center=center,
+                v_center=v_center,
+                bins=bins,
+                projected=True,
+                average="bins",
+                quantity=quantity
             )
         elif projected == "apertures":
             result = velocity_profile(
@@ -743,14 +756,16 @@ class BaseComponent:
                 center=center,
                 v_center=v_center,
                 bins=bins,
-                average="apertures"
+                projected=True,
+                average="apertures",
+                quantity=quantity
             )
 
         
         if return_bins:
-            return result["r"], result["vrms"], result["e_vrms"], bins
+            return result["r"], result["v"], result["e_v"], bins
         else:
-            return result["r"], result["vrms"], result["e_vrms"]
+            return result["r"], result["v"], result["e_v"]
 
 
 

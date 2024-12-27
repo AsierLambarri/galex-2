@@ -127,6 +127,12 @@ def parse_args():
         help="Type of projection. Only affects projected velocity. 'bins' or 'apertures': 'bins' computes all quantities on radial bins while 'apertures does so in filled apertures' (Default: 'bins')."
     )
     opt.add_argument(
+        "-vm","--velocity_moment",
+        type=str,
+        default="rms",
+        help="How to compute projected velocity quantity both for 3D and projected profiles: 'mean'. 'rms' or 'dispersion'. (Default: 'rms')."
+    )
+    opt.add_argument(
         "-g", "--gas_cm",
         type=str,
         default="darkmatter",
@@ -153,21 +159,15 @@ def parse_args():
         help="Wether to fit a plummer profile to the density profiles. (Default: False)."
     )
     opt.add_argument(
-        "-wf", "--woolley_fit",
-        default=False,
-        action="store_true",
-        help="Wether to fit a Woolley profile to the density profile. Similar to plummer profile (Default: False)."
+        "-sg", "--set_g",
+        default=None,
+        help="Wether to vary 'g' parameter when performing profile fits. Incompatible with Woolley fit. (Default: False)."
     )
     opt.add_argument(
         "-dbf", "--double_fit",
         default=False,
         action="store_true",
         help="Wether to perform King and Woolley fit to Volumetric and Surface profiles. By default, only Volumetric profiles are fitter. (Default: False)."
-    )
-    opt.add_argument(
-        "-sg", "--set_g",
-        default=None,
-        help="Wether to vary 'g' parameter when performing profile fits. Incompatible with Woolley fit. (Default: False)."
     )
     opt.add_argument(
         "-fww", "--fit_with_weights",
@@ -178,10 +178,30 @@ def parse_args():
 
     opt.add_argument(
         "-rr", "--radii_range",
-        nargs="*",
+        nargs=2,
         type=float,
-        default=[0.08, 50],
-        help="Wether to use the same fit for Volumetric and Surface, or produce two different ones. (Default: Uses Volumetric throguhout)."
+        default=[0.05, 170],
+        help="Plot xlims. (Default: 0.05, 170)."
+    )
+    opt.add_argument(
+        "-dr", "--density_range",
+        nargs=2,
+        type=float,
+        default=[1E2, 8E9],
+        help="Density plot ylims. (Default: 1E2, 8E9 Msun/kpc**3 or /kpc**2)."
+    )
+    opt.add_argument(
+        "-vr", "--velocity_range",
+        nargs=2,
+        type=float,
+        default=[9, 400],
+        help="Velocity plot ylims. For projection, they are multiplied by 0.4 and 0.6 respectively. (Default: 5, 400 km/s)."
+    )
+    opt.add_argument(
+        "-sf", "--softening",
+        type=float,
+        default=0.08,
+        help="Softening of particles in kiloparsec. (Default: 0.08 kpc)."
     )
 
     return parser.parse_args()
@@ -191,7 +211,7 @@ def plot_voldens(ax, halo, components):
     """
     global extra_radius
     global gas_cm
-    
+  
     bins_params_all = {
         "stars": {"rmin": 0.08, "rmax": 50, "thicken": True},
         "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
@@ -264,6 +284,7 @@ def plot_dispvel(ax, halo, components, bins):
     """
     global extra_radius
     global gas_cm
+    global quant
 
     bins_params_all = {
         "stars": {"rmin": 0.08, "rmax": 50, "thicken": True},
@@ -291,7 +312,8 @@ def plot_dispvel(ax, halo, components, bins):
                 pc="bound",
                 center=component_object.cm,
                 v_center=component_object.vcm,
-                bins=bins[component]
+                bins=bins[component],
+                quantity=quant
             )
        
         else:
@@ -302,6 +324,7 @@ def plot_dispvel(ax, halo, components, bins):
             center=component_object.cm,
             v_center=component_object.vcm,
             bins=bins[component],
+            quantity=quant,
             new_data_params={"sp": sp}
         )
 
@@ -429,6 +452,7 @@ def plot_losvel(ax, halo, lines_of_sight, components, bins, velocity_projection)
 
     global extra_radius
     global gas_cm
+    global quant
 
     bins_params_all = {
         "stars": {"rmin": 0.08, "rmax": 50, "thicken": True},
@@ -463,6 +487,7 @@ def plot_losvel(ax, halo, lines_of_sight, components, bins, velocity_projection)
                     center=component_object.cm,
                     v_center=component_object.vcm,
                     bins=bins[component],
+                    quantity=quant,
                     projected=velocity_projection
                 )
             else:
@@ -476,6 +501,7 @@ def plot_losvel(ax, halo, lines_of_sight, components, bins, velocity_projection)
                 center=component_object.cm,
                 v_center=component_object.vcm,
                 bins=bins[component],
+                quantity=quant,
                 projected=velocity_projection,
                 new_data_params={"sp": sp}
             )
@@ -666,8 +692,14 @@ proj_components = args.surface
 velocity_projection = args.projection_mode
 gas_cm = args.gas_cm
 fit_with_weights = args.fit_with_weights
+quant = args.velocity_moment
 
-    
+rmin, rmax = args.radii_range
+densmin, densmax = args.density_range
+pvmin, pvmax = args.velocity_range
+soft = args.softening
+
+
 fig, axes = plt.subplots(nrows=2, ncols=4, figsize=(len(fns)/2*12,12), sharex=True, sharey="row")
 plt.subplots_adjust(hspace=0.05, wspace=0.05)
 fig.suptitle(f"Averaged volumemetric density and velocity profiles, for sub_tree: {sub_tree}, at different host distances:", y=0.95, fontsize=29, ha="center")
@@ -732,40 +764,79 @@ for _, row in subtree_table.iterrows():
     result_vels = plot_dispvel(axes[1, i], halo, vol_components, bins)
     
     
-    axes[0, i].axvspan(0.0001, 2 * 0.08, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
-    axes[1, i].axvspan(0.0001, 2 * 0.08, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
+    axes[0, i].axvspan(0.0001, 2 * soft, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
+    axes[1, i].axvspan(0.0001, 2 * soft, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
 
-    axes[0, i].axvline(2 * 0.08, color="darkviolet", ls="--", lw=2.5)
-    axes[1, i].axvline(2 * 0.08, color="darkviolet", ls="--", lw=2.5)
+    axes[0, i].axvline(2 * soft, color="darkviolet", ls="--", lw=2.5)
+    axes[1, i].axvline(2 * soft, color="darkviolet", ls="--", lw=2.5)
 
-    axes[0, i].text(0.08, 2E2, r"$\varepsilon=80$ pc" ,ha="left", va="bottom", color="darkviolet", rotation="vertical", fontsize=20)
-    axes[1, i].text(0.08, 11.5, r"$\varepsilon=80$ pc" ,ha="left", va="bottom", color="darkviolet", rotation="vertical", fontsize=20)
-    axes[1, i].text(0.18, 350, r"$M_*$="+f"{halo.stars.bmasses.sum().value:.3e}"+r" $M_\odot$"+"\n"+r"$M_{dm}$="+f"{halo.darkmatter.bmasses.sum().value:.3e}"+r" $M_\odot$"+"\n"+r"$M_{gas}=$"+f"{halo.gas.bmasses.sum().value:.3e}"+r" $M_\odot$" ,ha="left", va="top", color="black", rotation="horizontal", fontsize=14)
+    axes[0, i].text(soft, 3*densmin, r"$\varepsilon=80$ pc", ha="left", va="bottom", color="darkviolet", rotation="vertical", fontsize=20)
+    axes[1, i].text(soft, 0.9*pvmax, r"$\varepsilon=80$ pc", ha="left", va="top", color="darkviolet", rotation="vertical", fontsize=20)
+    axes[1, i].text(2.1*soft, 0.9*pvmax, r"$M_*$="+f"{halo.stars.bmasses.sum().value:.3e}"+r" $M_\odot$"+"\n"+r"$M_{dm}$="+f"{halo.darkmatter.bmasses.sum().value:.3e}"+r" $M_\odot$"+"\n"+r"$M_{gas}=$"+f"{halo.gas.bmasses.sum().value:.3e}"+r" $M_\odot$" ,ha="left", va="top", color="black", rotation="horizontal", fontsize=14)
 
     axes[1, i].set_xlabel(f"r [kpc]", fontsize=20)
 
     if i==0:
         axes[0, i].set_ylabel(r"$\rho \ [M_\odot / kpc^3]$", fontsize=20)
-        axes[1, i].set_ylabel(r"$v_{rms}$ [km/s]", fontsize=20)
+        if args.velocity_moment == "rms":
+            axes[1, i].set_ylabel(r"$\sqrt{ \langle v^2 \rangle }$ [km/s]", fontsize=20)
+        elif args.velocity_moment == "mean":
+            axes[1, i].set_ylabel(r"$\langle v \rangle$ [km/s]", fontsize=20)
+        elif args.velocity_moment == "dispersion":
+            axes[1, i].set_ylabel(r"$\sigma$ [km/s]", fontsize=20)
 
     axes[0, i].loglog()
     axes[1, i].set_yscale("log")
 
-    axes[0, i].set_xlim(0.05, 300)
-    axes[0, i].set_ylim(1E2, 8E9)
-    axes[1, i].set_ylim(10, 400)
-
-    rho_h = unyt_quantity(*mass) / (4*np.pi/3 * unyt_quantity(*rvir).to("kpc")**3)
-    c = (unyt_quantity(*rvir).to("kpc")/unyt_quantity(*rs).to("kpc")).value
-    r = np.logspace(np.log10(0.05), np.log10(300), 200)
-    rho_nfw = NFWc(r, rho_h, c, unyt_quantity(*rvir).to("kpc").value)
-    
-    axes[0, i].plot(r, rho_nfw, color="darkorange", label=f'NFW Rockstar Fit: c={c:.2f}, rvir={unyt_quantity(*rvir).to("kpc").value:.2f} kpc', zorder=9)
+    axes[0, i].set_xlim(rmin, rmax)
+    axes[0, i].set_ylim(densmin, densmax)
+    axes[1, i].set_ylim(pvmin, pvmax)
 
 
+    if args.set_g is not None:
+        if args.set_g == "vary":
+            gval = 1
+            gvary = True
+
+        else:
+            gval = args.set_g
+            gvary = False
+
+        fit_params_g = densModel.make_params(
+            W0={'value': 5.5,'min': 0.01,'max': np.inf,'vary': True},
+            g={'value': gval, 'min': 1E-4, 'max': 3.499, 'vary': gvary},
+            M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
+            rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True}
+        )
+   
+        k_g, fit_g =  limepy_fitAndPlot(densModel, fit_params_g, result_dens, "volumetric")
+
+        if gvary:
+            axes[0, i].plot(
+                k_g.r, 
+                k_g.rho, 
+                color="green", 
+                zorder=10, 
+                label=f"Fit to {fit_g.params['g'].value:.1f}±{fit_g.params['g'].stderr:.1f}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc"
+            )
+        else:
+            axes[0, i].plot(
+                k_g.r, 
+                k_g.rho, 
+                color="green", 
+                zorder=10, 
+                label=f"Fit to {gval}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc"
+            )
+
+        axes[1, i].plot(
+            k_g.r, 
+            np.sqrt(k_g.v2), 
+            color="green", 
+            zorder=10
+        )
     if args.king_fit:
         fit_params_king = densModel.make_params(
-            W0={'value': 5.5,'min': 0.1,'max': np.inf,'vary': True},
+            W0={'value': 5.5,'min': 0.01,'max': np.inf,'vary': True},
             g={'value': 1, 'vary': False},
             M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
             rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True}
@@ -786,88 +857,39 @@ for _, row in subtree_table.iterrows():
             color="darkblue", 
             zorder=10
         )
-
-    if args.woolley_fit:
-        fit_params_woolley = densModel.make_params(
-            W0={'value': 5.5,'min': 0.1,'max': np.inf,'vary': True},
-            g={'value': 0, 'vary': False},
+    if args.plummer_fit:
+        fit_params_plummer = densModel.make_params(
+            W0={'value': 0.01,'min': 0.01,'max': np.inf,'vary': False},
+            g={'value': 3.499, 'vary': False},
             M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
             rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True}
         )
    
-        k_woolley, fit_woolley =  limepy_fitAndPlot(densModel, fit_params_woolley, result_dens, "volumetric")
+        k_plummer, fit_plummer =  limepy_fitAndPlot(densModel, fit_params_plummer, result_dens, "volumetric")
 
         axes[0, i].plot(
-            k_woolley.r, 
-            k_woolley.rho, 
+            k_plummer.r, 
+            k_plummer.rho, 
             color="brown", 
             zorder=10, 
-            label=f"Fit to Woolley: W0={fit_woolley.params['W0'].value:.2f}±{fit_woolley.params['W0'].stderr:.0e},  rh={fit_woolley.params['rh'].value:.2f}±{fit_woolley.params['rh'].stderr:.0e} kpc"
+            label=f"Fit to Plummer: rh={fit_plummer.params['rh'].value:.2f}±{fit_plummer.params['rh'].stderr:.0e} kpc"
         )
         axes[1, i].plot(
-            k_woolley.r, 
-            np.sqrt(k_woolley.v2), 
+            k_plummer.r, 
+            np.sqrt(k_plummer.v2), 
             color="brown", 
             zorder=10
         )
     
-    if args.plummer_fit:
-        fit_params_plummer = plummerModel.make_params(
-            M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
-            a={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True}
-        )
+
+
+
+    rho_h = unyt_quantity(*mass) / (4*np.pi/3 * unyt_quantity(*rvir).to("kpc")**3)
+    c = (unyt_quantity(*rvir).to("kpc")/unyt_quantity(*rs).to("kpc")).value
+    r = np.logspace(np.log10(0.05), np.log10(300), 200)
+    rho_nfw = NFWc(r, rho_h, c, unyt_quantity(*rvir).to("kpc").value)
     
-
-        r = np.linspace(1E-4, 50, 500)
-        fit_plummer =  plummer_fitAndPlot(plummerModel, fit_params_plummer, result_dens, "volumetric")
-        rho_plummer =  plummer(r, fit_plummer.params["M"].value, fit_plummer.params["a"].value)
-        sigma_plummer =  surface_plummer(r, fit_plummer.params["M"].value, fit_plummer.params["a"].value)
-
-        axes[0, i].plot(
-            r,
-            rho_plummer,
-            color="tomato", 
-            zorder=10, 
-            label=f"Fit to Plummer: a={fit_plummer.params['a'].value:.2f}±{fit_plummer.params['a'].stderr:.0e} kpc"
-        )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    axes[0, i].plot(r, rho_nfw, color="darkorange", label=f'NFW Rockstar Fit: c={c:.2f}, rvir={unyt_quantity(*rvir).to("kpc").value:.2f} kpc', zorder=9)
 
 
 
@@ -883,8 +905,6 @@ for _, row in subtree_table.iterrows():
 
     
 
-    
-
 
 
     axes2[0, i].set_title(f"R/Rvir={halo_params['R/Rvir']:.2f}, z={redshift:.2f}")
@@ -897,30 +917,34 @@ for _, row in subtree_table.iterrows():
 
 
 
-    axes2[0, i].axvspan(0.0001, 2 * 0.08, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
-    axes2[0, i].axvline(2 * 0.08, color="darkviolet", ls="--", lw=2.5)
-    axes2[1, i].axvspan(0.0001, 2 * 0.08, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
-    axes2[1, i].axvline(2 * 0.08, color="darkviolet", ls="--", lw=2.5)
+    axes2[0, i].axvspan(0.0001, 2 * soft, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
+    axes2[0, i].axvline(2 * soft, color="darkviolet", ls="--", lw=2.5)
+    axes2[1, i].axvspan(0.0001, 2 * soft, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
+    axes2[1, i].axvline(2 * soft, color="darkviolet", ls="--", lw=2.5)
 
 
 
-    axes2[0, i].text(0.08, 2E2, r"$\varepsilon=80$ pc" ,ha="left", va="bottom", color="darkviolet", rotation="vertical", fontsize=20)
-    axes2[1, i].text(0.08, 1.15, r"$\varepsilon=80$ pc" ,ha="left", va="bottom", color="darkviolet", rotation="vertical", fontsize=20)
-    axes2[1, i].text(0.18, 150, r"$M_*$="+f"{halo.stars.bmasses.sum().value:.3e}"+r" $M_\odot$"+"\n"+r"$M_{dm}$="+f"{halo.darkmatter.bmasses.sum().value:.3e}"+r" $M_\odot$" ,ha="left", va="top", color="black", rotation="horizontal", fontsize=14)
+    axes2[0, i].text(soft, 3*densmin, r"$\varepsilon=80$ pc" ,ha="left", va="bottom", color="darkviolet", rotation="vertical", fontsize=20)
+    axes2[1, i].text(soft, 0.9*0.6*pvmax, r"$\varepsilon=80$ pc" ,ha="left", va="top", color="darkviolet", rotation="vertical", fontsize=20)
+    axes2[1, i].text(2.1*soft, 0.9*0.6*pvmax, r"$M_*$="+f"{halo.stars.bmasses.sum().value:.3e}"+r" $M_\odot$"+"\n"+r"$M_{dm}$="+f"{halo.darkmatter.bmasses.sum().value:.3e}"+r" $M_\odot$"+r" $M_\odot$"+"\n"+r"$M_{gas}$="+f"{halo.gas.bmasses.sum().value:.3e}"+r" $M_\odot$",ha="left", va="top", color="black", rotation="horizontal", fontsize=14)
 
     axes2[1, i].set_xlabel(f"R [kpc]", fontsize=20)
 
     if i==0:
         axes2[0, i].set_ylabel(r"$\Sigma \ [M_\odot / kpc^2]$", fontsize=20)
-        axes2[1, i].set_ylabel(r"$v_{los}$ [km/s]", fontsize=20)
+        if args.velocity_moment == "rms":
+            axes2[1, i].set_ylabel(r"$\sqrt{\langle v_{los}^2 \rangle}$ [km/s]", fontsize=20)
+        elif args.velocity_moment == "mean":
+            axes2[1, i].set_ylabel(r"$\langle v_{los} \rangle$ [km/s]", fontsize=20)
+        elif args.velocity_moment == "dispersion":
+            axes2[1, i].set_ylabel(r"$\sigma_{los}$ [km/s]", fontsize=20)
 
     axes2[0, i].loglog()
     axes2[1, i].set_yscale("log")
 
-    axes2[0, i].set_xlim(0.05, 300)
-    axes2[0, i].set_ylim(1E2, 8E9)
-    axes2[1, i].set_ylim(1, 200)
-
+    axes2[0, i].set_xlim(rmin, rmax)
+    axes2[0, i].set_ylim(densmin, densmax)
+    axes2[1, i].set_ylim(0.7*pvmin, 0.6*pvmax)
 
 
     
@@ -930,19 +954,41 @@ for _, row in subtree_table.iterrows():
     else:
         if args.plummer_fit:
             axes2[0, i].plot(
-                r,
-                sigma_plummer,
-                color="tomato", 
+                k_plummer.r,
+                k_plummer.Sigma,
+                color="brown", 
+                zorder=10,
+                label=f"Fit to Plummer: rhp={k_plummer.rhp:.2f} kpc"
+            )
+            axes2[1, i].plot(
+                k_plummer.r,
+                np.sqrt(k_plummer.v2p),
+                color="brown", 
                 zorder=10
             )
 
-        if args.woolley_fit:
-            axes2[0, i].plot(
-                k_woolley.r, 
-                k_woolley.Sigma, 
-                color="brown", 
-                zorder=10, 
-                label=f"Fit to Woolley: rhp={k_woolley.rhp:.2f} kpc"
+        if args.set_g is not None:
+            if gvary:
+                axes2[0, i].plot(
+                    k_g.r, 
+                    k_g.Sigma, 
+                    color="green", 
+                    zorder=10, 
+                    label=f"Fit to {fit_g.params['g'].value:.1f}: rhp={k_g.rhp:.2f}kpc"
+                )
+            else:
+                axes2[0, i].plot(
+                    k_g.r, 
+                    k_g.Sigma, 
+                    color="green", 
+                    zorder=10, 
+                    label=f"Fit to {gval}: rhp={k_g.rhp:.2f} kpc"
+                )
+            axes2[1, i].plot(
+                k_g.r,
+                np.sqrt(k_g.v2p),
+                color="green", 
+                zorder=10
             )
         if args.king_fit:
             axes2[0, i].plot(
@@ -952,7 +998,12 @@ for _, row in subtree_table.iterrows():
                 zorder=10, 
                 label=f"Fit to King: rhp={k_king.rhp:.2f} kpc"
             )
-
+            axes2[1, i].plot(
+                k_king.r,
+                np.sqrt(k_king.v2p),
+                color="darkblue", 
+                zorder=10
+            )
     
     axes2[0, i].legend(loc="upper right", fontsize=12, markerfirst=False, reverse=False)
 
