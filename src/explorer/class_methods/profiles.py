@@ -75,19 +75,15 @@ def density_profile(pos,
     return return_dict
 
 
-
-
-
-
-
-
 def velocity_profile(pos,
                      vel,
+                     quantity=None,
                      mass=None,
                      center = None,
                      v_center = None,
                      bins = None,
-                     average="bins",
+                     projected=False,
+                     average="bins"
                     ):
     """Computes the velocity dispersion profile for different radii. The radii are the centers of the bins. 
     
@@ -132,60 +128,187 @@ def velocity_profile(pos,
 
     coords = pos - center
     radii = np.linalg.norm(coords, axis=1)
-    magvel = np.linalg.norm(vel - v_center, axis=1)
 
-    if average == "bins":
-        if bins is not None:
-            vmean, redges, bn = binned_statistic(radii, magvel, statistic="mean", bins=bins)
-            npart, _, _ = binned_statistic(radii, magvel, statistic="count", bins=bins)
+    if bins is None:
+        bins = np.histogram_bin_edges(np.log10(radii), bins="doane")
+
+    if projected:
+        quant = "mean" if quantity is None else quantity
+        return_dict = _projected_velocity_profile(
+            pos,
+            vel,
+            center,
+            v_center,
+            bins,
+            quant,
+            average            
+        )
+    else:
+        quant = "rms" if quantity is None else quantity
+        return_dict = _full_velocity_profile(
+            pos,
+            vel,
+            center,
+            v_center,
+            bins,
+            quant
+        )
+                               
+    return return_dict
+
+
+def _full_velocity_profile(pos,
+                           vel,
+                           center,
+                           v_center,
+                           bins,
+                           quantity
+                          ):
+    """Computes the selected quantity: i.e. mean = mean(|v_i|), rms = sqrt(mean(v_i ** 2)) or dispersion at given radial bins
+    for full velocities (i.e. velocities that are not projected, regardless of dimensionality of the data).
+    """
+    coords = pos - center
+    radii = np.linalg.norm(coords, axis=1)
+    if quantity == "mean":
+        stat = "mean"
+        magvel = np.linalg.norm(vel - v_center, axis=1)
+    elif quantity == "rms":
+        stat = "mean"
+        magvel = np.linalg.norm(vel - v_center, axis=1) ** 2
+    elif quantity == "dispersion":
+        stat = "std"
+        magvel = np.linalg.norm(vel - v_center, axis=1)
+    else:
+        raise Exception(f"The quantity you provided is not available")
+
+
+    vstat, redges, bn = binned_statistic(radii, magvel, statistic=stat, bins=bins)
+    npart, _, _ = binned_statistic(radii, magvel, statistic="count", bins=bins)
+
+    redges = redges * coords.units
+    rcoords = (redges[1:] + redges[:-1])/2    
+
+    if quantity == "rms":
+        vstat = np.sqrt(vstat)
+    if 0 in npart:
+        npart[npart == 0] = np.inf
+
+    vstat = vstat * vel.units        
+    e_vstat = vstat / np.sqrt(npart)
     
-        else:
-            vmean, redges, bn = binned_statistic(radii, magvel, statistic="mean", bins=np.histogram_bin_edges(radii))
-            npart, _, _ = binned_statistic(radii, magvel, statistic="count", bins=np.histogram_bin_edges(radii))
+    return {'r': rcoords,
+            'v': vstat,
+            'e_v': e_vstat,
+            'center': center,
+            'v_center': v_center
+            }
+    
+def _projected_velocity_profile(pos,
+                                pvels,
+                                center,
+                                v_center,
+                                bins,
+                                quantity,
+                                average
+                               ):
+    """Computes the selected quantity: i.e. line-of-sight velocity mean or dispersion. The average can be computed for
+    radial bins or filled apertures.
+    """
+    coords = pos - center
+    radii = np.linalg.norm(coords, axis=1)
+
+    if quantity == "mean":
+        stat = "mean"
+        magvel = np.abs(pvels - v_center)
+
+    elif quatity == "dispersion":
+        stat = "std"
+        magvel = pvels - v_center
+    else:
+        raise Exception(f"The quantity you provided is not available")
+
+
+    
+    if average == "bins" :
+        vstat, redges, bn = binned_statistic(radii, magvel, statistic=stat, bins=bins)
+        npart, _, _ = binned_statistic(radii, magvel, statistic="count", bins=bins)
         
+
         redges = redges * coords.units
         rcoords = (redges[1:] + redges[:-1])/2
-        
+            
     elif average == "apertures":
-        if bins is None:
-            bins = np.histogram_bin_edges(radii)
-        
         R_aperture = 0.5 * (np.array(bins[:-1]) + np.array(bins[1:]))
                 
-        cumulative_means = []
+        cumulative_stats = []
         particle_counts = []
         for i in range(len(R_aperture)):
             r_ap = R_aperture[i]
             mask = radii <= r_ap
             mask_bin = (bins[i] <= radii ) & (radii <= bins[i+1])
-            
-            cumulative_mean = np.mean(magvel[mask]) if np.any(mask_bin) else np.nan
-            cumulative_means.append(cumulative_mean)
+
+            if stat == "mean":
+                stat_in_aperture = np.mean(magvel[mask]) if np.any(mask_bin) else np.nan
+            elif stat == "std":
+                stat_in_aperture = np.std(magvel[mask]) if np.any(mask_bin) else np.nan
+                
+            cumulative_stats.append(stat_in_aperture)
             
             particle_count = np.sum(mask)
             particle_counts.append(particle_count)
 
 
         rcoords = R_aperture * coords.units
-        vmean = np.array(cumulative_means)
+        vstat = np.array(cumulative_stats)
         npart = np.array(particle_counts)
+        
+    else:
+        raise Exception(f"The averaging mode you provided is not available")
+
     
-    
-    vmean = vmean * vel.units
     if 0 in npart:
         npart[npart == 0] = np.inf
         
-    e_vmean = vmean / np.sqrt(npart)
+    vstat = vstat * vel.units      
+    e_vstat = vstat / np.sqrt(npart)
     
+    return {'r': rcoords,
+            'v': vstat,
+            'e_v': e_vstat,
+            'center': center,
+            'v_center': v_center
+           }
 
-    return_dict = {'r': rcoords,
-                   'vrms': vmean,
-                   'e_vrms': e_vmean,
-                   'center': center,
-                   'v_center': v_center
-                  }
-    
-    return return_dict
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
