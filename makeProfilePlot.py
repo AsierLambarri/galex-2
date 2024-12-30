@@ -41,6 +41,15 @@ def surface_plummer(R, M, a):
     """
     return ( M * a ** 2 ) / np.pi * 1 / ( a**2 + R**2 ) ** 2
 
+def einasto(r, rs, mu, M):
+    """Einasto density profile
+    """
+    from scipy.special import gamma
+    numerator = pow(2*mu, 3*mu) * M 
+    denominator = 4 * np.pi * rs**3 * mu * np.exp(2*mu) * gamma(3*mu)
+    return numerator / denominator * np.exp( -2*mu * ( pow(r/rs,1/mu) - 1 ) )
+
+
 #kw_center_all = {
 #    "stars": {"method": "adaptative", "nmin": 30},
 #    "darkmatter": {"method": "adaptative", "nmin": 300},
@@ -665,10 +674,12 @@ densModel = Model(KingProfileIterp, independent_vars=['r'])
 surfModel = Model(KingProfileIterp_surf, independent_vars=['r'])
 plummerModel = Model(plummer, independent_vars=['r'])
 surfplummerModel = Model(surface_plummer, independent_vars=['R'])
-
+einastoModel = Model(einasto, independent_vars=['r'])
 
 try:
     os.mkdir(args.output + f"subtree_{sub_tree}/")
+    os.mkdir(args.output + f"subtree_{sub_tree}/fits/")
+
 except:
     pass
 
@@ -844,31 +855,38 @@ for _, row in subtree_table.iterrows():
         )
    
         k_g, fit_g =  limepy_fitAndPlot(densModel, fit_params_g, result_dens, "volumetric")
-        if fit_g.params['W0'].stderr<fit_g.params["W0"].value:
-            if gvary:
-                axes[0, i].plot(
+        if fit_g.errorbars:
+            if fit_g.params['W0'].stderr<fit_g.params["W0"].value:
+                plot_g = True
+                if gvary:
+                    axes[0, i].plot(
+                        k_g.r, 
+                        k_g.rho, 
+                        color="green", 
+                        zorder=10, 
+                        label=f"Fit to g={fit_g.params['g'].value:.1f}±{fit_g.params['g'].stderr:.1f}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
+                    )
+                else:
+                    axes[0, i].plot(
+                        k_g.r, 
+                        k_g.rho, 
+                        color="green", 
+                        zorder=10, 
+                        label=f"Fit to {gval}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
+                    )
+
+                axes[1, i].plot(
                     k_g.r, 
-                    k_g.rho, 
+                    np.sqrt(k_g.v2), 
                     color="green", 
-                    zorder=10, 
-                    label=f"Fit to g={fit_g.params['g'].value:.1f}±{fit_g.params['g'].stderr:.1f}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
+                    zorder=10
                 )
             else:
-                axes[0, i].plot(
-                    k_g.r, 
-                    k_g.rho, 
-                    color="green", 
-                    zorder=10, 
-                    label=f"Fit to {gval}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
-                )
+                plot_g = False
 
-            axes[1, i].plot(
-                k_g.r, 
-                np.sqrt(k_g.v2), 
-                color="green", 
-                zorder=10
-            )
         dump_fit(fit_g, args.output + f"subtree_{sub_tree}/fits/"+ f"fit_g_volume_Rvir{round(halo_params['R/Rvir'], 1)}.json")
+
+
     if args.king_fit:
         fit_params_king = densModel.make_params(
             W0={'value': 5.5,'min': 0.01,'max': np.inf,'vary': True},
@@ -879,21 +897,28 @@ for _, row in subtree_table.iterrows():
         )
    
         k_king, fit_king =  limepy_fitAndPlot(densModel, fit_params_king, result_dens, "volumetric")
-        if fit_king.params['W0'].stderr<fit_king.params["W0"].value:
-            axes[0, i].plot(
-                k_king.r, 
-                k_king.rho, 
-                color="darkblue", 
-                zorder=10, 
-                label=f"Fit to King: W0={fit_king.params['W0'].value:.2f}±{fit_king.params['W0'].stderr:.0e},  rh={fit_king.params['rh'].value:.2f}±{fit_king.params['rh'].stderr:.0e} kpc" if fit_king.success else f"King NOT CONVERGED"
-            )
-            axes[1, i].plot(
-                k_king.r, 
-                np.sqrt(k_king.v2), 
-                color="darkblue", 
-                zorder=10
-            )
+        if fit_king.errorbars:
+            if fit_king.params['W0'].stderr<fit_king.params["W0"].value:
+                plot_king = True
+                axes[0, i].plot(
+                    k_king.r, 
+                    k_king.rho, 
+                    color="darkblue", 
+                    zorder=10, 
+                    label=f"Fit to King: W0={fit_king.params['W0'].value:.2f}±{fit_king.params['W0'].stderr:.0e},  rh={fit_king.params['rh'].value:.2f}±{fit_king.params['rh'].stderr:.0e} kpc" if fit_king.success else f"King NOT CONVERGED"
+                )
+                axes[1, i].plot(
+                    k_king.r, 
+                    np.sqrt(k_king.v2), 
+                    color="darkblue", 
+                    zorder=10
+                )
+            else:
+                plot_king = False
+
         dump_fit(fit_king, args.output + f"subtree_{sub_tree}/fits/"+ f"fit_king_volume_Rvir{round(halo_params['R/Rvir'], 1)}.json")
+
+
     if args.plummer_fit:
         fit_params_plummer = densModel.make_params(
             W0={'value': 0.01,'min': 0.01,'max': np.inf,'vary': False},
@@ -904,20 +929,25 @@ for _, row in subtree_table.iterrows():
         )
    
         k_plummer, fit_plummer =  limepy_fitAndPlot(densModel, fit_params_plummer, result_dens, "volumetric")
-        if fit_plummer.params['W0'].stderr<fit_plummer.params["W0"].value:
-            axes[0, i].plot(
-                k_plummer.r, 
-                k_plummer.rho, 
-                color="brown", 
-                zorder=10, 
-                label=f"Fit to Plummer: rh={fit_plummer.params['rh'].value:.2f}±{fit_plummer.params['rh'].stderr:.0e} kpc" if fit_plummer.success else f"Plummer NOT CONVERGED"
-            )
-            axes[1, i].plot(
-                k_plummer.r, 
-                np.sqrt(k_plummer.v2), 
-                color="brown", 
-                zorder=10
-            )
+        if fit_plummer.errorbars:
+            if fit_plummer.params['W0'].stderr<fit_plummer.params["W0"].value:
+                plot_plummer = True
+                axes[0, i].plot(
+                    k_plummer.r, 
+                    k_plummer.rho, 
+                    color="brown", 
+                    zorder=10, 
+                    label=f"Fit to Plummer: rh={fit_plummer.params['rh'].value:.2f}±{fit_plummer.params['rh'].stderr:.0e} kpc" 
+                )
+                axes[1, i].plot(
+                    k_plummer.r, 
+                    np.sqrt(k_plummer.v2), 
+                    color="brown", 
+                    zorder=10
+                )
+            else:
+                plot_plummer = False
+
         dump_fit(fit_plummer, args.output + f"subtree_{sub_tree}/fits/"+ f"fit_plummer_volume_Rvir{round(halo_params['R/Rvir'], 1)}.json")
 
 
@@ -927,7 +957,35 @@ for _, row in subtree_table.iterrows():
     r = np.logspace(np.log10(0.05), np.log10(300), 200)
     rho_nfw = NFWc(r, rho_h, c, unyt_quantity(*rvir).to("kpc").value)
     
+
+    fit_params_einasto = einastoModel.make_params(
+        mu={'value': 2, 'min': 0.01, 'max': np.inf, 'vary': True},
+        M={'value': halo.darkmatter.bmasses.sum().to("Msun").value, 'vary' : False},
+        rs={'value': unyt_quantity(*rs).to("kpc").value, 'min': 1E-4, 'max': 50, 'vary': True}
+    )
+   
+    if fit_with_weights:
+        w = 1 / result_dens["darkmatter"]["e_rho_bound"]
+    else:
+        w = np.ones_like(result_dens["darkmatter"]["rho_bound"])
+
+
+    fit_einasto = einastoModel.fit(
+            r=result_dens["darkmatter"]["r_bound"], 
+            data=result_dens["darkmatter"]["rho_bound"], 
+            params=fit_params_einasto, 
+            weights=w,
+            nan_policy="omit"
+    )
+    rho_einasto = fit_einasto.eval(r=r)
+
+
+
     axes[0, i].plot(r, rho_nfw, color="darkorange", label=f'NFW Rockstar Fit: c={c:.2f}, rvir={unyt_quantity(*rvir).to("kpc").value:.2f} kpc', zorder=9)
+    axes[0, i].plot(r, rho_einasto, color="turquoise", label=f"Einasto Fit: rs={fit_einasto.params['rs'].value:.2f}±{fit_einasto.params['rs'].stderr:.2f}, " + r"$\mu=$" + f"{fit_einasto.params['mu'].value:.2f}±{fit_einasto.params['mu'].stderr:.2f} ", zorder=9)
+
+
+
 
 
 
@@ -991,7 +1049,6 @@ for _, row in subtree_table.iterrows():
         if args.radial_anisotropy:
             ra_value = 5
             ra_vary = True
-            print("radial_anisotropy")
         else:
             ra_value = 1E8
             ra_vary = False
@@ -1015,31 +1072,35 @@ for _, row in subtree_table.iterrows():
             )
        
             k_g, fit_g =  limepy_fitAndPlot(densModel, fit_params_g, result_surf, "surface")
-            if fit_g.params['W0'].stderr<fit_g.params["W0"].value:
-                if gvary:
-                    axes[0, i].plot(
+            if fit_g.errorbars:
+                if fit_g.params['W0'].stderr<fit_g.params["W0"].value:
+                    if gvary:
+                        axes2[0, i].plot(
+                            k_g.r, 
+                            k_g.Sigma, 
+                            color="green", 
+                            zorder=10, 
+                            label=f"Fit to g={fit_g.params['g'].value:.1f}±{fit_g.params['g'].stderr:.1f}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
+                        )
+                    else:
+                        axes2[0, i].plot(
+                            k_g.r, 
+                            k_g.Sigma, 
+                            color="green", 
+                            zorder=10, 
+                            label=f"Fit to {gval}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
+                        )
+
+                    axes2[1, i].plot(
                         k_g.r, 
-                        k_g.Sigma, 
+                        np.sqrt(k_g.v2p), 
                         color="green", 
-                        zorder=10, 
-                        label=f"Fit to g={fit_g.params['g'].value:.1f}±{fit_g.params['g'].stderr:.1f}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
-                    )
-                else:
-                    axes[0, i].plot(
-                        k_g.r, 
-                        k_g.Sigma, 
-                        color="green", 
-                        zorder=10, 
-                        label=f"Fit to {gval}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
+                        zorder=10
                     )
 
-                axes[1, i].plot(
-                    k_g.r, 
-                    np.sqrt(k_g.v2p), 
-                    color="green", 
-                    zorder=10
-                )
             dump_fit(fit_g, args.output + f"subtree_{sub_tree}/fits/"+ f"fit_g_surface_Rvir{round(halo_params['R/Rvir'], 1)}.json")
+
+
         if args.king_fit:
             fit_params_king = surfModel.make_params(
                 W0={'value': 5.5,'min': 0.01,'max': np.inf,'vary': True},
@@ -1050,21 +1111,25 @@ for _, row in subtree_table.iterrows():
             )
        
             k_king, fit_king =  limepy_fitAndPlot(densModel, fit_params_king, result_surf, "surface")
-            if fit_king.params['W0'].stderr<fit_king.params["W0"].value:
-                axes[0, i].plot(
-                    k_king.r, 
-                    k_king.Sigma, 
-                    color="darkblue", 
-                    zorder=10, 
-                    label=f"Fit to King: W0={fit_king.params['W0'].value:.2f}±{fit_king.params['W0'].stderr:.0e},  rh={fit_king.params['rh'].value:.2f}±{fit_king.params['rh'].stderr:.0e} kpc" if fit_king.success else f"King NOT CONVERGED"
-                )
-                axes[1, i].plot(
-                    k_king.r, 
-                    np.sqrt(k_king.v2p), 
-                    color="darkblue", 
-                    zorder=10
-                )
+            if fit_king.errorbars:
+                if fit_king.params['W0'].stderr<fit_king.params["W0"].value:
+                    axes2[0, i].plot(
+                        k_king.r, 
+                        k_king.Sigma, 
+                        color="darkblue", 
+                        zorder=10, 
+                        label=f"Fit to King: W0={fit_king.params['W0'].value:.2f}±{fit_king.params['W0'].stderr:.0e},  rh={fit_king.params['rh'].value:.2f}±{fit_king.params['rh'].stderr:.0e} kpc" if fit_king.success else f"King NOT CONVERGED"
+                    )
+                    axes2[1, i].plot(
+                        k_king.r, 
+                        np.sqrt(k_king.v2p), 
+                        color="darkblue", 
+                        zorder=10
+                    )
+
             dump_fit(fit_king, args.output + f"subtree_{sub_tree}/fits/"+ f"fit_king_surface_Rvir{round(halo_params['R/Rvir'], 1)}.json")
+
+
         if args.plummer_fit:
             fit_params_plummer = surfModel.make_params(
                 W0={'value': 0.01,'min': 0.01,'max': np.inf,'vary': False},
@@ -1075,26 +1140,28 @@ for _, row in subtree_table.iterrows():
             )
        
             k_plummer, fit_plummer =  limepy_fitAndPlot(densModel, fit_params_plummer, result_surf, "surface")
-            if fit_plummer.params['W0'].stderr<fit_plummer.params["W0"].value:
-                axes[0, i].plot(
-                    k_plummer.r, 
-                    k_plummer.Sigma, 
-                    color="brown", 
-                    zorder=10, 
-                    label=f"Fit to Plummer: rh={fit_plummer.params['rh'].value:.2f}±{fit_plummer.params['rh'].stderr:.0e} kpc" if fit_plummer.success else f"Plummer NOT CONVERGED"
-                )
-                axes[1, i].plot(
-                    k_plummer.r, 
-                    np.sqrt(k_plummer.v2p), 
-                    color="brown", 
-                    zorder=10
-                )
+            if fit_plummer.errorbars:
+                if fit_plummer.params['W0'].stderr<fit_plummer.params["W0"].value:
+                    axes2[0, i].plot(
+                        k_plummer.r, 
+                        k_plummer.Sigma, 
+                        color="brown", 
+                        zorder=10, 
+                        label=f"Fit to Plummer: rh={fit_plummer.params['rh'].value:.2f}±{fit_plummer.params['rh'].stderr:.0e} kpc" if fit_plummer.success else f"Plummer NOT CONVERGED"
+                    )
+                    axes2[1, i].plot(
+                        k_plummer.r, 
+                        np.sqrt(k_plummer.v2p), 
+                        color="brown", 
+                        zorder=10
+                    )
+
             dump_fit(fit_plummer, args.output + f"subtree_{sub_tree}/fits/"+ f"fit_plummer_surface_Rvir{round(halo_params['R/Rvir'], 1)}.json")
 
         
     else:
         if args.plummer_fit:
-            if fit_plummer.params['W0'].stderr<fit_plummer.params["W0"].value:
+            if plot_plummer:
                 axes2[0, i].plot(
                  k_plummer.r,
                  k_plummer.Sigma,
@@ -1110,23 +1177,14 @@ for _, row in subtree_table.iterrows():
                 )
 
         if args.set_g is not None:
-            if fit_g.params['W0'].stderr<fit_g.params["W0"].value:
-                if gvary:
-                    axes2[0, i].plot(
-                        k_g.r, 
-                        k_g.Sigma, 
-                        color="green", 
-                        zorder=10, 
-                        label=f"Fit to {fit_g.params['g'].value:.1f}: rhp={k_g.rhp:.2f}kpc"
-                    )
-                else:
-                    axes2[0, i].plot(
-                        k_g.r, 
-                        k_g.Sigma, 
-                        color="green", 
-                        zorder=10, 
-                        label=f"Fit to {gval}: rhp={k_g.rhp:.2f} kpc"
-                    )
+            if plot_g:
+                axes2[0, i].plot(
+                    k_g.r, 
+                    k_g.Sigma, 
+                    color="green", 
+                    zorder=10, 
+                    label=f"Fit to g={fit_g.params['g'].value:.1f}: rhp={k_g.rhp:.2f}kpc"
+                )
                 axes2[1, i].plot(
                     k_g.r,
                     np.sqrt(k_g.v2p),
@@ -1134,7 +1192,7 @@ for _, row in subtree_table.iterrows():
                     zorder=10
                 )
         if args.king_fit:
-            if fit_king.params['W0'].stderr<fit_king.params["W0"].value:
+            if plot_king:
                 axes2[0, i].plot(
                     k_king.r, 
                     k_king.Sigma, 
