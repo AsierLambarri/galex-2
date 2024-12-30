@@ -23,11 +23,11 @@ def KingProfileIterp(r, W0, g, M, rh, ra):
     evals = np.interp(r, xp=k.r, fp=k.rho)
     return evals #in Msun/kpc**3
 
-def KingProfileIterp_surf(r, W0, g, M, rh):
+def KingProfileIterp_surf(r, W0, g, M, rh, ra):
     """Produces a sample of a Lowered isothermal model with parameters W0, g, M and rh using LIMEPY 
     and interpolates the result for a specified r.
     """
-    k = limepy(phi0=W0, g=g, M=M, rh=rh, G=4.300917270038e-06, project=True)
+    k = limepy(phi0=W0, g=g, M=M, rh=rh, ra=ra, G=4.300917270038e-06, project=True)
     evals = np.interp(r, xp=k.r, fp=k.Sigma)
     return evals #in Msun/kpc**3
 
@@ -868,7 +868,7 @@ for _, row in subtree_table.iterrows():
                 color="green", 
                 zorder=10
             )
-        dump_fit(fit_g, args.output + f"subtree_{sub_tree}/"+ f"fit_g_volume_Rvir{round(halo_params['R/Rvir'], 1)}.json")
+        dump_fit(fit_g, args.output + f"subtree_{sub_tree}/fits/"+ f"fit_g_volume_Rvir{round(halo_params['R/Rvir'], 1)}.json")
     if args.king_fit:
         fit_params_king = densModel.make_params(
             W0={'value': 5.5,'min': 0.01,'max': np.inf,'vary': True},
@@ -893,7 +893,7 @@ for _, row in subtree_table.iterrows():
                 color="darkblue", 
                 zorder=10
             )
-        dump_fit(fit_king, args.output + f"subtree_{sub_tree}/"+ f"fit_king_volume_Rvir{round(halo_params['R/Rvir'], 1)}.json")
+        dump_fit(fit_king, args.output + f"subtree_{sub_tree}/fits/"+ f"fit_king_volume_Rvir{round(halo_params['R/Rvir'], 1)}.json")
     if args.plummer_fit:
         fit_params_plummer = densModel.make_params(
             W0={'value': 0.01,'min': 0.01,'max': np.inf,'vary': False},
@@ -918,7 +918,7 @@ for _, row in subtree_table.iterrows():
                 color="brown", 
                 zorder=10
             )
-        dump_fit(fit_plummer, args.output + f"subtree_{sub_tree}/"+ f"fit_plummer_volume_Rvir{round(halo_params['R/Rvir'], 1)}.json")
+        dump_fit(fit_plummer, args.output + f"subtree_{sub_tree}/fits/"+ f"fit_plummer_volume_Rvir{round(halo_params['R/Rvir'], 1)}.json")
 
 
 
@@ -988,7 +988,110 @@ for _, row in subtree_table.iterrows():
     
 
     if double_fit:
-        pass
+        if args.radial_anisotropy:
+            ra_value = 5
+            ra_vary = True
+            print("radial_anisotropy")
+        else:
+            ra_value = 1E8
+            ra_vary = False
+
+
+        if args.set_g is not None:
+            if args.set_g == "vary":
+                gval = 1
+                gvary = True
+
+            else:
+                gval = float(args.set_g)
+                gvary = False
+
+            fit_params_g = surfModel.make_params(
+                W0={'value': 5.5,'min': 0.01,'max': np.inf,'vary': True},
+                g={'value': gval, 'min': 1E-4, 'max': 3.499, 'vary': gvary},
+                M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
+                rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True},
+                ra={'value': ra_value, 'min': 0.1, 'max': 1E8, 'vary': ra_vary}
+            )
+       
+            k_g, fit_g =  limepy_fitAndPlot(densModel, fit_params_g, result_surf, "surface")
+            if fit_g.params['W0'].stderr<fit_g.params["W0"].value:
+                if gvary:
+                    axes[0, i].plot(
+                        k_g.r, 
+                        k_g.Sigma, 
+                        color="green", 
+                        zorder=10, 
+                        label=f"Fit to g={fit_g.params['g'].value:.1f}±{fit_g.params['g'].stderr:.1f}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
+                    )
+                else:
+                    axes[0, i].plot(
+                        k_g.r, 
+                        k_g.Sigma, 
+                        color="green", 
+                        zorder=10, 
+                        label=f"Fit to {gval}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
+                    )
+
+                axes[1, i].plot(
+                    k_g.r, 
+                    np.sqrt(k_g.v2p), 
+                    color="green", 
+                    zorder=10
+                )
+            dump_fit(fit_g, args.output + f"subtree_{sub_tree}/fits/"+ f"fit_g_surface_Rvir{round(halo_params['R/Rvir'], 1)}.json")
+        if args.king_fit:
+            fit_params_king = surfModel.make_params(
+                W0={'value': 5.5,'min': 0.01,'max': np.inf,'vary': True},
+                g={'value': 1, 'vary': False},
+                M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
+                rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True},
+                ra={'value': ra_value, 'min': 0.1, 'max': 1E8, 'vary': ra_vary}
+            )
+       
+            k_king, fit_king =  limepy_fitAndPlot(densModel, fit_params_king, result_surf, "surface")
+            if fit_king.params['W0'].stderr<fit_king.params["W0"].value:
+                axes[0, i].plot(
+                    k_king.r, 
+                    k_king.Sigma, 
+                    color="darkblue", 
+                    zorder=10, 
+                    label=f"Fit to King: W0={fit_king.params['W0'].value:.2f}±{fit_king.params['W0'].stderr:.0e},  rh={fit_king.params['rh'].value:.2f}±{fit_king.params['rh'].stderr:.0e} kpc" if fit_king.success else f"King NOT CONVERGED"
+                )
+                axes[1, i].plot(
+                    k_king.r, 
+                    np.sqrt(k_king.v2p), 
+                    color="darkblue", 
+                    zorder=10
+                )
+            dump_fit(fit_king, args.output + f"subtree_{sub_tree}/fits/"+ f"fit_king_surface_Rvir{round(halo_params['R/Rvir'], 1)}.json")
+        if args.plummer_fit:
+            fit_params_plummer = surfModel.make_params(
+                W0={'value': 0.01,'min': 0.01,'max': np.inf,'vary': False},
+                g={'value': 3.499, 'vary': False},
+                M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
+                rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True},
+                ra={'value': 1E8, 'min': 0.1, 'max': 1E8, 'vary': False}
+            )
+       
+            k_plummer, fit_plummer =  limepy_fitAndPlot(densModel, fit_params_plummer, result_surf, "surface")
+            if fit_plummer.params['W0'].stderr<fit_plummer.params["W0"].value:
+                axes[0, i].plot(
+                    k_plummer.r, 
+                    k_plummer.Sigma, 
+                    color="brown", 
+                    zorder=10, 
+                    label=f"Fit to Plummer: rh={fit_plummer.params['rh'].value:.2f}±{fit_plummer.params['rh'].stderr:.0e} kpc" if fit_plummer.success else f"Plummer NOT CONVERGED"
+                )
+                axes[1, i].plot(
+                    k_plummer.r, 
+                    np.sqrt(k_plummer.v2p), 
+                    color="brown", 
+                    zorder=10
+                )
+            dump_fit(fit_plummer, args.output + f"subtree_{sub_tree}/fits/"+ f"fit_plummer_surface_Rvir{round(halo_params['R/Rvir'], 1)}.json")
+
+        
     else:
         if args.plummer_fit:
             if fit_plummer.params['W0'].stderr<fit_plummer.params["W0"].value:
