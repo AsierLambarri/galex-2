@@ -56,7 +56,7 @@ def analyzer(f):
     candidates['rh3D_stars_physical'] = pd.Series()
     candidates['rh3D_dm_physical'] = pd.Series()
     
-    candidates['Mdyn'] = pd.Series()
+    candidates['Mhl'] = pd.Series()
     
     candidates['sigma*'] = pd.Series()
     candidates['e_sigma*'] = pd.Series()
@@ -99,7 +99,7 @@ def analyzer(f):
     
         candidates.loc[index, 'rh3D_stars_physical'] = halo_instance.stars.half_mass_radius().in_units("kpc").value
         candidates.loc[index, 'rh3D_dm_physical'] = halo_instance.darkmatter.half_mass_radius().in_units("kpc").value
-        candidates.loc[index, 'Mdyn'] = halo_instance.dynamical_mass().in_units("Msun").value
+        candidates.loc[index, 'Mhl'] = halo_instance.dynamical_mass().in_units("Msun").value
     
         rh_dm = []
         rh_st = []

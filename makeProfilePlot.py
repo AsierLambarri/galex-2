@@ -55,6 +55,43 @@ def einasto(r, rs, mu, M):
 #    "darkmatter": {"method": "adaptative", "nmin": 300},
 #    "gas": {"method": "rcc", "rc_scale": 0.5}
 #}
+#bins_params_all = {
+#    "stars": {"rmin": 0.08, "rmax": 50, "thicken": True},
+#    "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
+#    "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
+#}
+
+def add_bins(bin_edges, max_value):
+    """Extends the bin_edges array until max_value is reached, with a bin spacing of 
+    delta log(r_e) = mean( log(r_i+1) - log(r_i) )
+    """
+    if bin_edges is None:
+        return None
+    bin_edges = np.asarray(bin_edges)
+    
+    if not np.all(bin_edges[:-1] < bin_edges[1:]):
+        raise ValueError("bin_edges must be sorted in ascending order.")
+    if np.any(bin_edges <= 0):
+        raise ValueError("bin_edges must contain only positive values.")
+    if max_value <= bin_edges[-1]:
+        raise ValueError("max_value must be greater than the largest initial bin edge.")
+
+    log_deltas = np.log(bin_edges[1:] / bin_edges[:-1])
+    mean_log_delta = np.mean(log_deltas)
+    
+    current_edge = bin_edges[-1]
+    extended_bins = [current_edge]
+    
+    while current_edge < max_value:
+        next_edge = current_edge * np.exp(mean_log_delta)
+        if next_edge >= max_value:
+            next_edge = max_value
+        extended_bins.append(next_edge)
+        if next_edge == max_value:
+            break
+        current_edge = next_edge
+
+    return np.concatenate([bin_edges, extended_bins[1:]])
 
 
 def parse_args():
@@ -230,9 +267,9 @@ def plot_voldens(ax, halo, components):
     global gas_cm
   
     bins_params_all = {
-        "stars": {"rmin": 0.08, "rmax": 50, "thicken": True},
-        "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
-        "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
+        "stars": {"rmin": 0.08, "thicken": 1, "bins": 10},
+        "darkmatter": {"rmin": 0.08, "thicken": 0, "bins": 10},
+        "gas": {"rmin": 0.08, "thicken": 0, "bins": 10}
     }
     results = {}
     
@@ -264,7 +301,8 @@ def plot_voldens(ax, halo, components):
         r_all, rho_all, e_rho_all = component_object.density_profile(
             pc="all",
             center=component_object.cm,
-            bins=bins,
+            bins=add_bins(bins, sp.radius.to("kpc").value),
+            bins_params=bins_params_all[component],
             new_data_params={"sp": sp}
         )
 
@@ -278,9 +316,6 @@ def plot_voldens(ax, halo, components):
         
         ax.errorbar(r_bound, rho_bound, yerr=e_rho_bound, fmt=marker, ls="-", color=color, markersize=markersize, lw=1.2, label=label)
         ax.errorbar(r_all, rho_all, yerr=e_rho_all, fmt=marker, ls="--", color=color, markersize=markersize, lw=1.2)
-
-
-
         
         results[component] = {
             "bins": bins,
@@ -303,11 +338,6 @@ def plot_dispvel(ax, halo, components, bins):
     global gas_cm
     global quant
 
-    bins_params_all = {
-        "stars": {"rmin": 0.08, "rmax": 50, "thicken": True},
-        "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
-        "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
-    }
     
     results = {}
     
@@ -340,7 +370,7 @@ def plot_dispvel(ax, halo, components, bins):
             pc="all", 
             center=component_object.cm,
             v_center=component_object.vcm,
-            bins=bins[component],
+            bins=add_bins(bins[component], sp.radius.to("kpc").value),
             quantity=quant,
             new_data_params={"sp": sp}
         )
@@ -353,9 +383,7 @@ def plot_dispvel(ax, halo, components, bins):
         
         ax.errorbar(r_bound, vrms_bound, yerr=e_vrms_bound, fmt=marker, ls="-", color=color, markersize=markersize, lw=1.2)
         ax.errorbar(r_all, vrms_all, yerr=e_vrms_all, fmt=marker, ls="--", color=color, markersize=markersize, lw=1.2)    
-
-
-        
+    
         results[component] = {
             "bins": bins[component],
             "r_bound": r_bound,
@@ -377,9 +405,9 @@ def plot_surfdens(ax, halo, lines_of_sight, components):
     global gas_cm
 
     bins_params_all = {
-        "stars": {"rmin": 0.08, "rmax": 50, "thicken": True},
-        "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
-        "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
+        "stars": {"rmin": 0.08, "thicken": 1, "bins": 10},
+        "darkmatter": {"rmin": 0.08, "thicken": 0, "bins": 10},
+        "gas": {"rmin": 0.08, "thicken": 0, "bins": 10}
     }
     
     results = {}
@@ -422,7 +450,7 @@ def plot_surfdens(ax, halo, lines_of_sight, components):
             r_all, rho_all, e_rho_all = component_object.density_profile(
                 pc="all",
                 center=component_object.cm,
-                bins=bins,
+                bins=add_bins(bins, sp.radius.to("kpc").value),
                 projected=True,
                 bins_params=bins_params_all[component],
                 new_data_params={"sp": sp}
@@ -470,12 +498,6 @@ def plot_losvel(ax, halo, lines_of_sight, components, bins, velocity_projection)
     global extra_radius
     global gas_cm
     global quant
-
-    bins_params_all = {
-        "stars": {"rmin": 0.08, "rmax": 50, "thicken": True},
-        "darkmatter": {"rmin": 0.08, "rmax": 250, "thicken": False},
-        "gas": {"rmin": 0.08, "rmax": 250, "thicken": False}
-    }
     
     results = {}
     
@@ -517,7 +539,7 @@ def plot_losvel(ax, halo, lines_of_sight, components, bins, velocity_projection)
                 pc="all",
                 center=component_object.cm,
                 v_center=component_object.vcm,
-                bins=bins[component],
+                bins=add_bins(bins[component], sp.radius.to("kpc").value),
                 quantity=quant,
                 projected=velocity_projection,
                 new_data_params={"sp": sp}
@@ -695,7 +717,7 @@ except:
 
 
 nmin_stars = 40
-nmin_dm = 300
+nmin_dm = 100
 rc_gas = 0.5
 
 
@@ -771,6 +793,7 @@ for _, row in subtree_table.iterrows():
         extra_radius = float(args.extra_radius[0]), str(args.extra_radius[1])
     
     axes[0, i].set_title(f"R/Rvir={halo_params['R/Rvir']:.2f}, z={redshift:.2f}")
+
   
     halo = dge.SnapshotHalo(args.particle_data_folder + halo_params["fn"], center=center, radius=rvir)
 
@@ -799,7 +822,7 @@ for _, row in subtree_table.iterrows():
     bins = {c : result_dens[c]["bins"] for c in vol_components}
     result_vels = plot_dispvel(axes[1, i], halo, vol_components, bins)
     
-    
+    axes[0, i].vlines(result_dens["darkmatter"]["r_bound"][-1], ymin=0, ymax=result_dens["darkmatter"]["rho_bound"][-1], zorder=-1, color="black", ls="-")    
     axes[0, i].axvspan(0.0001, 2 * soft, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
     axes[1, i].axvspan(0.0001, 2 * soft, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
 
@@ -985,12 +1008,6 @@ for _, row in subtree_table.iterrows():
     axes[0, i].plot(r, rho_einasto, color="turquoise", label=f"Einasto Fit: rs={fit_einasto.params['rs'].value:.2f}±{fit_einasto.params['rs'].stderr:.2f}, " + r"$\mu=$" + f"{fit_einasto.params['mu'].value:.2f}±{fit_einasto.params['mu'].stderr:.2f} ", zorder=9)
 
 
-
-
-
-
-
-
     
     axes[0, i].legend(loc="upper right", fontsize=11, markerfirst=False, reverse=False)
 
@@ -1012,7 +1029,7 @@ for _, row in subtree_table.iterrows():
     plot_losvel(axes2[1, i], halo, lines_of_sight, proj_components, bins, velocity_projection)
 
 
-
+    axes2[0, i].vlines(result_surf["darkmatter"]["r_bound"][-1], ymin=0, ymax=result_surf["darkmatter"]["rho_bound"][-1], zorder=-1, color="black", ls="-")    
     axes2[0, i].axvspan(0.0001, 2 * soft, color="darkviolet", alpha=0.25, ls="--", lw=0.01)
     axes2[0, i].axvline(2 * soft, color="darkviolet", ls="--", lw=2.5)
     axes2[1, i].axvspan(0.0001, 2 * soft, color="darkviolet", alpha=0.25, ls="--", lw=0.01)

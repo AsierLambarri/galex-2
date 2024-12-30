@@ -93,7 +93,7 @@ for f in files:
             errors.append(f"Sub_tree_id {halo['Sub_tree_id']} in snapshot-{halo['Snapshot']} has no stars bound.")
             continue
         
-        lines_of_sight = random_vector_spherical(N=16)
+        lines_of_sight = random_vector_spherical(N=16, half_sphere=True)
     
         
     

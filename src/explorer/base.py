@@ -519,8 +519,11 @@ class BaseComponent:
         encmass : unyt_quantity
         """
         if only_bound:
-            mask = np.linalg.norm(self.coords - center, axis=1) <= r0
-            return self.bmasses[mask].sum()
+            if True in self.bmask:
+                mask = np.linalg.norm(self.bcoords - center, axis=1) <= r0
+                return self.bmasses[mask].sum()
+            else:
+                return unyt_quantity(0, "Msun")
         else:
             mask = np.linalg.norm(self.coords - center, axis=1) <= r0
             return self.masses[mask].sum()
@@ -535,7 +538,7 @@ class BaseComponent:
                         **kwargs
                        ):
         """Computes the average density profile of the particles. Returns r_i (R_i), rho_i and e_rho_i (Sigma_i, e_Sigma_i) for each bin. Center
-        and bins are sturgesmatically computed but can also be used specified. Profiles can be for all or bound particles. The smallest two bins
+        and bins are doanematically computed but can also be used specified. Profiles can be for all or bound particles. The smallest two bins
         can be combined into one to counteract lack of resolution. Density error is assumed to be poissonian.
 
         OPTIONAL Parameters
@@ -601,16 +604,17 @@ class BaseComponent:
             if "bins_params" in kwargs.keys():
                 rmin = rmin if "rmin" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["rmin"]
                 rmax = rmax if "rmax" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["rmax"]
-                thicken = False if "thicken" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["thicken"]
+                thicken = None if "thicken" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["thicken"]
 
             bins = np.histogram_bin_edges(
                 np.log10(radii),
+                bins=10 if "bins" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["bins"],
                 range=np.log10([rmin, rmax]) 
             )
             bins = 10 ** bins
 
-            if thicken:
-                binindex = [i for i in range(len(bins)) if i!=1]
+            if thicken is not None:
+                binindex = [i for i in range(len(bins)) if i==0 or i>thicken]
                 bins = bins[binindex]
 
         result = density_profile(
@@ -640,7 +644,7 @@ class BaseComponent:
                          **kwargs
                         ):
         """Computes the average disperion velocity profile of the particles. Returns r_i (R_i), vrms_i and e_vrms_i for each bin. Center
-        and bins are sturgesmatically computed but can also be used specified. Profiles can be for all or bound particles. The smallest two bins
+        and bins are doanematically computed but can also be used specified. Profiles can be for all or bound particles. The smallest two bins
         can be combined into one to counteract lack of resolution. Density error is assumed to be poissonian.
 
         OPTIONAL Parameters
@@ -716,16 +720,17 @@ class BaseComponent:
             if "bins_params" in kwargs.keys():
                 rmin = rmin if "rmin" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["rmin"]
                 rmax = rmax if "rmax" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["rmax"]
-                thicken = False if "thicken" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["thicken"]
+                thicken = None if "thicken" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["thicken"]
 
             bins = np.histogram_bin_edges(
                 np.log10(radii), 
+                bins=10 if "bins" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["bins"],
                 range=np.log10([rmin, rmax]) 
             )
             bins = 10 ** bins
             
-            if thicken:
-                binindex = [i for i in range(len(bins)) if i!=1]
+            if thicken is not None:
+                binindex = [i for i in range(len(bins)) if i==0 or i>thicken]
                 bins = bins[binindex]
 
         if projected == "none":
