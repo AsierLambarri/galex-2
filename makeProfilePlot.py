@@ -829,8 +829,7 @@ for _, row in subtree_table.iterrows():
         )
    
         k_g, fit_g =  limepy_fitAndPlot(densModel, fit_params_g, result_dens, "volumetric")
-
-        if fit_g.errorbars:
+        if fit_g.params['W0'].stderr<fit_g.params["W0"].value:
             if gvary:
                 axes[0, i].plot(
                     k_g.r, 
@@ -864,7 +863,7 @@ for _, row in subtree_table.iterrows():
         )
    
         k_king, fit_king =  limepy_fitAndPlot(densModel, fit_params_king, result_dens, "volumetric")
-        if fit_king.errorbars:
+        if fit_king.params['W0'].stderr<fit_king.params["W0"].value:
             axes[0, i].plot(
                 k_king.r, 
                 k_king.rho, 
@@ -888,7 +887,7 @@ for _, row in subtree_table.iterrows():
         )
    
         k_plummer, fit_plummer =  limepy_fitAndPlot(densModel, fit_params_plummer, result_dens, "volumetric")
-        if fit_plummer.errorbars:
+        if fit_plummer.params['W0'].stderr<fit_plummer.params["W0"].value:
             axes[0, i].plot(
                 k_plummer.r, 
                 k_plummer.rho, 
@@ -975,57 +974,60 @@ for _, row in subtree_table.iterrows():
         pass
     else:
         if args.plummer_fit:
-            axes2[0, i].plot(
-                k_plummer.r,
-                k_plummer.Sigma,
-                color="brown", 
-                zorder=10,
-                label=f"Fit to Plummer: rhp={k_plummer.rhp:.2f} kpc"
-            )
-            axes2[1, i].plot(
-                k_plummer.r,
-                np.sqrt(k_plummer.v2p),
-                color="brown", 
-                zorder=10
-            )
+            if fit_plummer.params['W0'].stderr<fit_plummer.params["W0"].value:
+                axes2[0, i].plot(
+                 k_plummer.r,
+                 k_plummer.Sigma,
+                 color="brown", 
+                 zorder=10,
+                 label=f"Fit to Plummer: rhp={k_plummer.rhp:.2f} kpc"
+                 )
+                axes2[1, i].plot(
+                 k_plummer.r,
+                 np.sqrt(k_plummer.v2p),
+                 color="brown", 
+                 zorder=10
+                )
 
         if args.set_g is not None:
-            if gvary:
-                axes2[0, i].plot(
-                    k_g.r, 
-                    k_g.Sigma, 
+            if fit_g.params['W0'].stderr<fit_g.params["W0"].value:
+                if gvary:
+                    axes2[0, i].plot(
+                        k_g.r, 
+                        k_g.Sigma, 
+                        color="green", 
+                        zorder=10, 
+                        label=f"Fit to {fit_g.params['g'].value:.1f}: rhp={k_g.rhp:.2f}kpc"
+                    )
+                else:
+                    axes2[0, i].plot(
+                        k_g.r, 
+                        k_g.Sigma, 
+                        color="green", 
+                        zorder=10, 
+                        label=f"Fit to {gval}: rhp={k_g.rhp:.2f} kpc"
+                    )
+                axes2[1, i].plot(
+                    k_g.r,
+                    np.sqrt(k_g.v2p),
                     color="green", 
-                    zorder=10, 
-                    label=f"Fit to {fit_g.params['g'].value:.1f}: rhp={k_g.rhp:.2f}kpc"
+                    zorder=10
                 )
-            else:
-                axes2[0, i].plot(
-                    k_g.r, 
-                    k_g.Sigma, 
-                    color="green", 
-                    zorder=10, 
-                    label=f"Fit to {gval}: rhp={k_g.rhp:.2f} kpc"
-                )
-            axes2[1, i].plot(
-                k_g.r,
-                np.sqrt(k_g.v2p),
-                color="green", 
-                zorder=10
-            )
         if args.king_fit:
-            axes2[0, i].plot(
-                k_king.r, 
-                k_king.Sigma, 
-                color="darkblue", 
-                zorder=10, 
-                label=f"Fit to King: rhp={k_king.rhp:.2f} kpc"
-            )
-            axes2[1, i].plot(
-                k_king.r,
-                np.sqrt(k_king.v2p),
-                color="darkblue", 
-                zorder=10
-            )
+            if fit_king.params['W0'].stderr<fit_king.params["W0"].value:
+                axes2[0, i].plot(
+                    k_king.r, 
+                    k_king.Sigma, 
+                    color="darkblue", 
+                    zorder=10, 
+                    label=f"Fit to King: rhp={k_king.rhp:.2f} kpc"
+                )
+                axes2[1, i].plot(
+                    k_king.r,
+                    np.sqrt(k_king.v2p),
+                    color="darkblue", 
+                    zorder=10
+                )
     
     axes2[0, i].legend(loc="upper right", fontsize=11, markerfirst=False, reverse=False)
 
