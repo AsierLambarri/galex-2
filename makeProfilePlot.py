@@ -682,6 +682,9 @@ plt.rcParams['ytick.major.size'] = 7 * 1.5
 plt.rcParams['xtick.minor.size'] = 5 
 plt.rcParams['ytick.minor.size'] = 5 
 
+plt.rcParams['legend.handlelength'] = 1
+plt.rcParams['legend.handletextpad'] = 0.7
+plt.rcParams['legend.borderaxespad'] = 0.4
 
 from src.explorer.class_methods import random_vector_spherical
 
@@ -701,12 +704,12 @@ soft = args.softening
 
 
 fig, axes = plt.subplots(nrows=2, ncols=4, figsize=(len(fns)/2*12,12), sharex=True, sharey="row")
-plt.subplots_adjust(hspace=0.05, wspace=0.05)
+plt.subplots_adjust(hspace=0.04, wspace=0.04)
 fig.suptitle(f"Averaged volumemetric density and velocity profiles, for sub_tree: {sub_tree}, at different host distances:", y=0.95, fontsize=29, ha="center")
 
 
 fig2, axes2 = plt.subplots(nrows=2, ncols=4, figsize=(len(fns)/2*12,12), sharex=True, sharey="row")
-plt.subplots_adjust(hspace=0.05, wspace=0.05)
+plt.subplots_adjust(hspace=0.04, wspace=0.04)
 fig2.suptitle(f"Averaged surface density and velocity profiles, for sub_tree: {sub_tree}, at different host distances:", y=0.95, fontsize=29, ha="center")
 
 
@@ -817,7 +820,7 @@ for _, row in subtree_table.iterrows():
                 k_g.rho, 
                 color="green", 
                 zorder=10, 
-                label=f"Fit to {fit_g.params['g'].value:.1f}±{fit_g.params['g'].stderr:.1f}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc"
+                label=f"Fit to g={fit_g.params['g'].value:.1f}±{fit_g.params['g'].stderr:.1f}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc"
             )
         else:
             axes[0, i].plot(
@@ -896,7 +899,7 @@ for _, row in subtree_table.iterrows():
 
 
     
-    axes[0, i].legend(loc="upper right", fontsize=12, markerfirst=False, reverse=False)
+    axes[0, i].legend(loc="upper right", fontsize=11, markerfirst=False, reverse=False)
 
 
 
@@ -1005,7 +1008,7 @@ for _, row in subtree_table.iterrows():
                 zorder=10
             )
     
-    axes2[0, i].legend(loc="upper right", fontsize=12, markerfirst=False, reverse=False)
+    axes2[0, i].legend(loc="upper right", fontsize=11, markerfirst=False, reverse=False)
 
     i += 1
 
