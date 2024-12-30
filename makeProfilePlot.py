@@ -13,11 +13,11 @@ from lmfit import Model, Parameters, fit_report
 from limepy import limepy
 
 from scipy.interpolate import PchipInterpolator, Akima1DInterpolator
-def KingProfileIterp(r, W0, g, M, rh):
+def KingProfileIterp(r, W0, g, M, rh, ra):
     """Produces a sample of a Lowered isothermal model with parameters W0, g, M and rh using LIMEPY 
     and interpolates the result for a specified r.
     """
-    k = limepy(phi0=W0, g=g, M=M, rh=rh, G=4.300917270038e-06)
+    k = limepy(phi0=W0, g=g, M=M, rh=rh, ra=ra, G=4.300917270038e-06)
     evals = np.interp(r, xp=k.r, fp=k.rho)
     return evals #in Msun/kpc**3
 
@@ -571,6 +571,7 @@ def limepy_fitAndPlot(model, fit_params, result_dens, mode):
         g=result.params['g'].value, 
         M=result.params['M'].value, 
         rh=result.params['rh'].value, 
+        ra=result.params['ra'].value,
         G=4.300917270038e-06,
         project=True
     )
@@ -804,6 +805,7 @@ for _, row in subtree_table.iterrows():
     if args.radial_anisotropy:
         ra_value = 5
         ra_vary = True
+        print("radial_anisotropy")
     else:
         ra_value = 1E8
         ra_vary = False
@@ -815,7 +817,7 @@ for _, row in subtree_table.iterrows():
             gvary = True
 
         else:
-            gval = args.set_g
+            gval = float(args.set_g)
             gvary = False
 
         fit_params_g = densModel.make_params(
@@ -828,29 +830,30 @@ for _, row in subtree_table.iterrows():
    
         k_g, fit_g =  limepy_fitAndPlot(densModel, fit_params_g, result_dens, "volumetric")
 
-        if gvary:
-            axes[0, i].plot(
-                k_g.r, 
-                k_g.rho, 
-                color="green", 
-                zorder=10, 
-                label=f"Fit to g={fit_g.params['g'].value:.1f}±{fit_g.params['g'].stderr:.1f}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
-            )
-        else:
-            axes[0, i].plot(
-                k_g.r, 
-                k_g.rho, 
-                color="green", 
-                zorder=10, 
-                label=f"Fit to {gval}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
-            )
+        if fit_g.errorbars:
+            if gvary:
+                axes[0, i].plot(
+                    k_g.r, 
+                    k_g.rho, 
+                    color="green", 
+                    zorder=10, 
+                    label=f"Fit to g={fit_g.params['g'].value:.1f}±{fit_g.params['g'].stderr:.1f}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
+                )
+            else:
+                axes[0, i].plot(
+                    k_g.r, 
+                    k_g.rho, 
+                    color="green", 
+                    zorder=10, 
+                    label=f"Fit to {gval}: W0={fit_g.params['W0'].value:.2f}±{fit_g.params['W0'].stderr:.0e},  rh={fit_g.params['rh'].value:.2f}±{fit_g.params['rh'].stderr:.0e} kpc" if fit_g.success else f"NOT CONVERGED"
+                )
 
-        axes[1, i].plot(
-            k_g.r, 
-            np.sqrt(k_g.v2), 
-            color="green", 
-            zorder=10
-        )
+            axes[1, i].plot(
+                k_g.r, 
+                np.sqrt(k_g.v2), 
+                color="green", 
+                zorder=10
+            )
     if args.king_fit:
         fit_params_king = densModel.make_params(
             W0={'value': 5.5,'min': 0.01,'max': np.inf,'vary': True},
@@ -861,43 +864,44 @@ for _, row in subtree_table.iterrows():
         )
    
         k_king, fit_king =  limepy_fitAndPlot(densModel, fit_params_king, result_dens, "volumetric")
-
-        axes[0, i].plot(
-            k_king.r, 
-            k_king.rho, 
-            color="darkblue", 
-            zorder=10, 
-            label=f"Fit to King: W0={fit_king.params['W0'].value:.2f}±{fit_king.params['W0'].stderr:.0e},  rh={fit_king.params['rh'].value:.2f}±{fit_king.params['rh'].stderr:.0e} kpc" if fit_king.success else f"King NOT CONVERGED"
-        )
-        axes[1, i].plot(
-            k_king.r, 
-            np.sqrt(k_king.v2), 
-            color="darkblue", 
-            zorder=10
-        )
+        if fit_king.errorbars:
+            axes[0, i].plot(
+                k_king.r, 
+                k_king.rho, 
+                color="darkblue", 
+                zorder=10, 
+                label=f"Fit to King: W0={fit_king.params['W0'].value:.2f}±{fit_king.params['W0'].stderr:.0e},  rh={fit_king.params['rh'].value:.2f}±{fit_king.params['rh'].stderr:.0e} kpc" if fit_king.success else f"King NOT CONVERGED"
+            )
+            axes[1, i].plot(
+                k_king.r, 
+                np.sqrt(k_king.v2), 
+                color="darkblue", 
+                zorder=10
+            )
     if args.plummer_fit:
         fit_params_plummer = densModel.make_params(
             W0={'value': 0.01,'min': 0.01,'max': np.inf,'vary': False},
             g={'value': 3.499, 'vary': False},
             M={'value': halo.stars.bmasses.sum().to("Msun").value, 'vary' : False},
-            rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True}
+            rh={'value': rh3d_stars[0], 'min': 1E-4, 'max': 50, 'vary': True},
+            ra={'value': 1E8, 'min': 0.1, 'max': 1E8, 'vary': False}
         )
    
         k_plummer, fit_plummer =  limepy_fitAndPlot(densModel, fit_params_plummer, result_dens, "volumetric")
-
-        axes[0, i].plot(
-            k_plummer.r, 
-            k_plummer.rho, 
-            color="brown", 
-            zorder=10, 
-            label=f"Fit to Plummer: rh={fit_plummer.params['rh'].value:.2f}±{fit_plummer.params['rh'].stderr:.0e} kpc" if fit_plummer.success else f"Plummer NOT CONVERGED"
-        )
-        axes[1, i].plot(
-            k_plummer.r, 
-            np.sqrt(k_plummer.v2), 
-            color="brown", 
-            zorder=10
-        )
+        if fit_plummer.errorbars:
+            axes[0, i].plot(
+                k_plummer.r, 
+                k_plummer.rho, 
+                color="brown", 
+                zorder=10, 
+                label=f"Fit to Plummer: rh={fit_plummer.params['rh'].value:.2f}±{fit_plummer.params['rh'].stderr:.0e} kpc" if fit_plummer.success else f"Plummer NOT CONVERGED"
+            )
+            axes[1, i].plot(
+                k_plummer.r, 
+                np.sqrt(k_plummer.v2), 
+                color="brown", 
+                zorder=10
+            )
     
 
 
