@@ -10,6 +10,8 @@ import src.explorer as dge
 from src.explorer.class_methods import load_ftable
 
 from lmfit import Model, Parameters, fit_report
+from lmfit.model import save_modelresult, load_modelresult
+
 from limepy import limepy
 
 from scipy.interpolate import PchipInterpolator, Akima1DInterpolator
@@ -602,7 +604,20 @@ def plummer_fitAndPlot(model, fit_params, result_dens, mode):
 
     return result
 
+def dump_fit(result, path):
+    import json
 
+    params_with_stderr = {}
+    for name, param in result.params.items():
+        params_with_stderr[name] = {
+            "value": param.value.tolist() if isinstance(param.value, np.ndarray) else param.value,
+            "stderr": param.stderr.tolist() if isinstance(param.stderr, np.ndarray) else param.stderr,
+        }
+
+    with open(path, 'w') as f:
+        json.dump(params_with_stderr, f, indent=4)
+
+    return None
 
 
 
@@ -853,6 +868,7 @@ for _, row in subtree_table.iterrows():
                 color="green", 
                 zorder=10
             )
+        dump_fit(fit_g, args.output + f"subtree_{sub_tree}/"+ f"fit_g_volume_Rvir{round(halo_params['R/Rvir'], 1)}.json")
     if args.king_fit:
         fit_params_king = densModel.make_params(
             W0={'value': 5.5,'min': 0.01,'max': np.inf,'vary': True},
@@ -877,6 +893,7 @@ for _, row in subtree_table.iterrows():
                 color="darkblue", 
                 zorder=10
             )
+        dump_fit(fit_king, args.output + f"subtree_{sub_tree}/"+ f"fit_king_volume_Rvir{round(halo_params['R/Rvir'], 1)}.json")
     if args.plummer_fit:
         fit_params_plummer = densModel.make_params(
             W0={'value': 0.01,'min': 0.01,'max': np.inf,'vary': False},
@@ -901,7 +918,7 @@ for _, row in subtree_table.iterrows():
                 color="brown", 
                 zorder=10
             )
-    
+        dump_fit(fit_plummer, args.output + f"subtree_{sub_tree}/"+ f"fit_plummer_volume_Rvir{round(halo_params['R/Rvir'], 1)}.json")
 
 
 
