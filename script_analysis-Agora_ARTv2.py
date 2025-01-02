@@ -8,8 +8,8 @@ from uncertainties import ufloat
 
 import concurrent.futures
 
-from src import galex as dge
-from src.galex.class_methods import random_vector_spherical
+from src import explorer as dge
+from src.explorer.class_methods import random_vector_spherical
 
 ytLogger.setLevel(30)
 
@@ -34,7 +34,7 @@ def load_ftable(fn):
 
 
 dge.config.code = "ART"
-files = ["ART_satellitesV5_Rvir1.csv", "ART_satellitesV5_Rvir1.5.csv", "ART_satellitesV5_Rvir2.0.csv", "ART_satellitesV5_Rvir3.0.csv", "ART_satellitesV5_Rvir4.0.csv", "ART_satellitesV5_Rvir5.0.csv"]
+files = ["ART_satellitesV5_Rvir1.0.csv", "ART_satellitesV5_Rvir1.5.csv", "ART_satellitesV5_Rvir2.0.csv", "ART_satellitesV5_Rvir3.0.csv", "ART_satellitesV5_Rvir4.0.csv", "ART_satellitesV5_Rvir5.0.csv"]
 
 def analyzer(f):
     print(f"Analyzing {f}")
@@ -46,28 +46,31 @@ def analyzer(f):
     
     candidates = pd.read_csv(file)
     
-    candidates['delta_rel'] = pd.Series()
     candidates['stellar_mass'] = pd.Series()
     candidates['dark_mass'] = pd.Series()
     candidates['gas_mass'] = pd.Series()
+
+    candidates['rh3D_stars_physical'] = pd.Series()
+    candidates['rh3D_dm_physical'] = pd.Series()
+    candidates['rh3D_gas_physical'] = pd.Series()
 
     candidates['rh_stars_physical'] = pd.Series()
     candidates['rh_dm_physical'] = pd.Series()
     candidates['e_rh_stars_physical'] = pd.Series()
     candidates['e_rh_dm_physical'] = pd.Series()
     
-    candidates['rh3D_stars_physical'] = pd.Series()
-    candidates['rh3D_dm_physical'] = pd.Series()
-    candidates['rh3D_gas_physical'] = pd.Series()
 
-    candidates['Mhl'] = pd.Series()
-    
+
     candidates['sigma*'] = pd.Series()
     candidates['e_sigma*'] = pd.Series()
-    
+
+    candidates['Mhl'] = pd.Series()
+
     candidates['Mdyn'] = pd.Series()
     candidates['e_Mdyn'] = pd.Series()
-    
+
+    candidates['delta_rel'] = pd.Series()
+
     for index, halo in candidates.iterrows():
         try:
             fn = snapequiv[snapequiv['snapshot'] == halo['Snapshot']]['snapname'].values[0]
@@ -89,44 +92,52 @@ def analyzer(f):
         except:
             continue
 
+        if halo_instance.stars.masses.sum() == 0:
+            errors.append(f"Sub_tree_id {halo['Sub_tree_id']} in snapshot-{halo['Snapshot']} has no stars at all.")
+            continue
+            
+
+            
         halo_instance.compute_bound_particles(
             components=["stars", "darkmatter", "gas"], 
             method="bh", 
             weighting="softmax", 
             T="adaptative", 
             verbose=False,  
-            cm=unyt_array(*center), 
-            vcm=unyt_array(*center_vel)
+            cm=unyt_array(*halocen), 
+            vcm=unyt_array(*halovel)
         )
+
+        if halo_instance.stars.bmasses.sum() == 0:
+            errors.append(f"Sub_tree_id {halo['Sub_tree_id']} in snapshot-{halo['Snapshot']} has no stars bound.")
+            continue
+                    
         halo_instance.darkmatter.refined_center6d(method="adaptative", nmin=100)
         halo_instance.stars.refined_center6d(method="adaptative", nmin=40)
         halo_instance.gas.cm, halo_instance.gas.vcm = halo_instance.darkmatter.cm, halo_instance.darkmatter.vcm
 
-        if halo_instance.stars.masses.sum() == 0:
-            errors.append(f"Sub_tree_id {halo['Sub_tree_id']} in snapshot-{halo['Snapshot']} has no stars at all.")
-            continue
-            
-        if halo_instance.stars.bmasses.sum() == 0:
-            errors.append(f"Sub_tree_id {halo['Sub_tree_id']} in snapshot-{halo['Snapshot']} has no stars bound.")
-            continue
+
 
         
-        lines_of_sight = random_vector_spherical(N=16, half_sphere=True)
+        lines_of_sight = random_vector_spherical(N=16, half_sphere=False)
 
         
         candidates.loc[index, "stellar_mass"] =  halo_instance.stars.bmasses.sum().in_units("Msun").value
         candidates.loc[index, "dark_mass"] =  halo_instance.darkmatter.bmasses.sum().in_units("Msun").value
         candidates.loc[index, "gas_mass"] =  halo_instance.gas.bmasses.sum().in_units("Msun").value
 
-        candidates.loc[index, "delta_rel"] = float(halo_instance.stars.delta_rel)
+        try:
+            candidates.loc[index, "delta_rel"] = float(halo_instance.stars.delta_rel)
+        except:
+            candidates.loc[index, "delta_rel"] = 0
     
         
     
-        candidates.loc[index, 'rh3D_stars_physical'] = halo_instance.stars.half_mass_radius().in_units("kpc").value
-        candidates.loc[index, 'rh3D_dm_physical'] = halo_instance.darkmatter.half_mass_radius().in_units("kpc").value
-        candidates.loc[index, 'rh3D_gas_physical'] = halo_instance.gas.half_mass_radius().in_units("kpc").value
+        candidates.loc[index, 'rh3D_stars_physical'] = halo_instance.stars.half_mass_radius(only_bound=True).in_units("kpc").value
+        candidates.loc[index, 'rh3D_dm_physical'] = halo_instance.darkmatter.half_mass_radius(only_bound=True).in_units("kpc").value
+        candidates.loc[index, 'rh3D_gas_physical'] = halo_instance.gas.half_mass_radius(only_bound=True).in_units("kpc").value
         
-        candidates.loc[index, 'Mhl'] = halo_instance.Mdyn().in_units("Msun").value
+        candidates.loc[index, 'Mhl'] = halo_instance.Mhl.in_units("Msun").value
     
         rh_dm = []
         rh_st = []
@@ -134,12 +145,17 @@ def analyzer(f):
         mdyn = []
         for los in lines_of_sight:
             halo_instance.set_line_of_sight(los.tolist())
+
+            tmp_st = halo_instance.stars.half_mass_radius(project=True, only_bound=True)
+            tmp_dm = halo_instance.darkmatter.half_mass_radius(project=True, only_bound=True)
+            tmp_sig = halo_instance.stars.los_dispersion()
             
-            rh_st.append(halo_instance.stars.half_mass_radius(project=True))
-            rh_dm.append(halo_instance.darkmatter.half_mass_radius(project=True))
-    
-            sigma.append(halo_instance.stars.los_velocity())
-            mdyn.append(580 * 1E3 * rh_st * sigma**2)
+            rh_st.append(tmp_st)
+            rh_dm.append(tmp_dm)
+            sigma.append(tmp_sig)
+            
+            mdyn.append(580 * 1E3 * tmp_st.to("kpc") * tmp_sig.to("km/s")**2)
+
         
         halo_instance.set_line_of_sight([1,0,0])
 
@@ -157,16 +173,10 @@ def analyzer(f):
 
         
         print(halo_instance.info())
-    
-    #cols = ['Halo_ID','Snapshot','Redshift','Time','Sub_tree_id','uid','desc_uid','mass','stellar_mass','Mdyn','virial_radius','scale_radius','rh3D_stars_physical','rh3D_dm_physical', 'sigma*','e_sigma*', 
-    #        'rh_stars_physical','rh_dm_physical',
-    #        'e_rh_stars_physical','e_rh_dm_physical','R/Rvir','vrms','vmax','position_x','position_y','position_z','velocity_x','velocity_y','velocity_z',
-    #        'A[x]','A[y]','A[z]','b_to_a','c_to_a','T_U','Tidal_Force','Tidal_ID','Secondary','Halo_at_z0','has_stars','has_galaxy','delta_rel','num_prog'
-    #       ]
-    
+        
     
     candidates.to_csv(file, index=False)
-    return f"{file} processed"
+    return f"{file} processed", errors
         
     
 
@@ -179,8 +189,9 @@ def analyzer(f):
 with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
     results = list(executor.map(analyzer, files))
 
-print(results)
-print(f"Finished")
+print(f"\n\nWarnings occurred during execution:")
+print(results,"\n")
+print(f"Finished. Bye!")
 
 
 

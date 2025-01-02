@@ -141,6 +141,22 @@ class SnapshotHalo(BaseSimulationObject):
         
         self._vcm = value
 
+    @property
+    def Mhl(self):
+        self.stars.half_mass_radius()
+        return self.enclosed_mass(
+            self.stars.cm,
+            self.stars.rh3d,
+            ["stars", "darkmatter", "gas"]
+        )
+    @Mhl.setter
+    def Mhl(self, value):
+        if not isinstance(value, unyt_quantity):
+            raise ValueError("vcm must be a number unyt_array.")
+        if str(value.units.dimensions) != '(mass)':
+            raise ValueError(f"Your units are not correct: {str(value.units.dimensions)} != mass")
+        
+        self._Mhl = value
 
     
 
@@ -190,7 +206,7 @@ class SnapshotHalo(BaseSimulationObject):
         output.append(f"{'dm':<20}: {self.darkmatter.masses.sum():.3e}")
         output.append(f"{'stars':<20}: {self.stars.masses.sum():.3e}")
         output.append(f"{'gas':<20}: {self.gas.masses.sum():.3e}")
-        output.append(f"{'Mdyn':<20}: {None if self.Mdyn is None else f'{self.Mdyn:.3e}'}")
+        output.append(f"{'Mdyn':<20}: {None if self.Mhl is None else f'{self.Mhl:.3e}'}")
 
         output.append(f"\nunits")
         output.append(f"{'':-<21}")
@@ -348,11 +364,11 @@ class SnapshotHalo(BaseSimulationObject):
             
         return None
 
-    def Mdyn(self, components=["stars", "gas", "darkmatter"]):
+    def enclosed_mass(self, center, radius, components, only_bound=False):
         """Computes the dynamical mass: the mass enclonsed inside the 3D half light radius of stars. Right now, the half-mass-radius is
         used, under the assumptionn that M/L does not vary much from star-particle to star-particle.
 
-        OPTIONAL Parameters
+        Parameters
         ----------
         components : list[str]
             Components to use: stars, gas and/or darkmatter.
@@ -361,14 +377,17 @@ class SnapshotHalo(BaseSimulationObject):
         -------
         mdyn : float
         """
+        if components == "all": components=["stars", "darkmatter", "gas"]
+        if components == "particles": components=["stars", "darkmatter"]
+
         mgas, mstars, mdm = unyt_quantity(0, "Msun"), unyt_quantity(0, "Msun"), unyt_quantity(0, "Msun") 
         
         if "stars" in components:
-            mstars = self.stars.enclosed_mass(self.stars.rh3d, self.stars.cm)
+            mstars = self.stars.enclosed_mass(radius, center, only_bound=only_bound)
         if "gas" in components:
-            mgas = self.gas.enclosed_mass(self.stars.rh3d, self.stars.cm)
+            mgas = self.gas.enclosed_mass(radius, center, only_bound=only_bound)
         if "darkmatter" in components:
-            mdm = self.darkmatter.enclosed_mass(self.stars.rh3d, self.stars.cm)
+            mdm = self.darkmatter.enclosed_mass(radius, center, only_bound=only_bound)
 
         return  mstars + mdm + mgas
 
@@ -452,22 +471,25 @@ class SnapshotHalo(BaseSimulationObject):
         particle_types = np.empty((0,))
 
         for component in components:
-            N = len(getattr(self, component).masses)
-            masses = np.concatenate((
-                masses, getattr(self, component).masses.to("Msun")
-            ))
-            coords = np.vstack((
-                coords, getattr(self, component).coords.to("kpc")
-            ))
-            vels = np.vstack((
-                vels, getattr(self, component).vels.to("km/s")
-            ))
-            softenings = np.concatenate((
-                softenings, getattr(self, component).softs.to("kpc")
-            ))              #unyt_array(np.full(N, psoft.to("kpc")), 'kpc')
-            particle_types = np.concatenate((
-                particle_types, np.full(N, component)
-            ))
+            if getattr(self, component).empty == False:
+                getattr(self, component)._delete_bound_fields()
+                
+                N = len(getattr(self, component).masses)
+                masses = np.concatenate((
+                    masses, getattr(self, component).masses.to("Msun")
+                ))
+                coords = np.vstack((
+                    coords, getattr(self, component).coords.to("kpc")
+                ))
+                vels = np.vstack((
+                    vels, getattr(self, component).vels.to("km/s")
+                ))
+                softenings = np.concatenate((
+                    softenings, getattr(self, component).softs.to("kpc")
+                ))              #unyt_array(np.full(N, psoft.to("kpc")), 'kpc')
+                particle_types = np.concatenate((
+                    particle_types, np.full(N, component)
+                ))
 
         thermal_energy = unyt_array(np.zeros_like(masses).value, "Msun * km**2/s**2")
         if "gas" in components:
@@ -532,7 +554,160 @@ class SnapshotHalo(BaseSimulationObject):
 
         return None
 
+    def plot(self, normal="z", catalogue=None, **kwargs):
+        """Plots the projected darkmatter, stars and gas distributions along a given normal direction. The projection direction can be changed with
+        the "normal" argument. If catalogue is provided, halos of massgreater than 5E7 will be displayed on top of the darkmatter plot.
 
+        OPTIONAL Parameters
+        ----------
+        normal : str or (3,)-list[float]
+            Projection line of sight, either axis-str repr. or los-vector
+        catalogue : pd.DataFrame
+            Halo catalogue created using galex.extractor.mergertrees.
+
+        Returns
+        -------
+        fig : matplotlib figure object
+        """
+        from matplotlib import gridspec
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.axes_grid1 import AxesGrid
+        try:
+            import smplotlib
+        except:
+            pass
+
+        plt.rcParams['axes.linewidth'] = 1.1
+        plt.rcParams['xtick.major.width'] = 1.1
+        plt.rcParams['xtick.minor.width'] = 1.1
+        plt.rcParams['ytick.major.width'] = 1.1
+        plt.rcParams['ytick.minor.width'] = 1.1
+        
+        plt.rcParams['xtick.major.size'] = 7 * 1.5
+        plt.rcParams['ytick.major.size'] = 7 * 1.5
+        
+        plt.rcParams['xtick.minor.size'] = 5 
+        plt.rcParams['ytick.minor.size'] = 5
+        
+        ds = self._data.ds
+        center = ds.arr(self.sp_center)
+        radius = ds.quan(self.sp_radius)
+
+        if "zoom_factors" in kwargs.keys():
+            plot_radii = radius * kwargs["zoom_factors"] 
+        else:
+            plot_radius = radius * 2 
+
+        
+        plots = 3
+        if self.darkmatter.empty: plots -= 1
+        if self.stars.empty: plots -= 1
+        if self.gas.empty: plots -= 1
+
+        if plots == 0:
+            raise ValueError(f"It Seems that all components are empty!")
+
+        fig = plt.figure(figsize=(plots*10, 10))
+        grid = AxesGrid(
+            fig, 
+            (-1.8, -1.8, 1.8, 1.8),
+            nrows_ncols=(1, plots),
+            axes_pad=1.2,
+            cbar_mode='each',  # Colorbar mode: 'each' for individual colorbars
+            cbar_location='right',  # Colorbar position for each subplot
+            cbar_pad=0,  # Padding between plot and colorbar
+            share_all=False,
+        )
+
+        ip = 0
+        if not self.darkmatter.empty: 
+            dm_type = (self.ptypes["darkmatter"], self.fields["darkmatter"]["masses"])
+            p = yt.ParticleProjectionPlot(ds, normal, dm_type, center=center, width=plot_radius, density=True, data_source=ds.sphere(center, 2*radius))
+            p.set_unit(dm_type, "Msun/kpc**2")
+            p.set_font({"size": 20})
+            p.set_axes_unit('kpc')
+            p.annotate_timestamp(redshift=True, text_args={"color": "black"})
+
+            p.annotate_marker(center, coord_system="data", color="black", s=150, marker="1")
+            p.annotate_sphere(center, radius, coord_system="data", circle_args={"color": "black"})
+
+            #p.annotate_marker(self.stars.cm, coord_system="data", color="red", s=150, marker="*")
+            p.annotate_marker(self.darkmatter.cm, coord_system="data", color="black", s=150, marker="x")
+            p.annotate_marker(self.gas.cm, coord_system="data", color="darkorange", s=150, marker="+" )
+            p.annotate_sphere(self.stars.cm, self.stars.half_mass_radius(), coord_system="data", circle_args={"color": "red"})
+
+
+
+            
+            plot = p.plots[dm_type]
+            plot.figure = fig
+            plot.axes = grid[ip].axes
+            plot.cax = grid.cbar_axes[ip]
+            p.render()
+            grid[ip].axes.set_title(kwargs["titles"][0] if "titles" in kwargs.keys() else None, fontsize=20)
+
+
+
+            
+            ip += 1
+
+        
+        if not self.stars.empty:
+            star_type = (self.ptypes["stars"], self.fields["stars"]["masses"])
+            
+            p = yt.ParticleProjectionPlot(ds, normal, star_type, center=center, width=plot_radius, density=True, data_source=ds.sphere(center, 2*radius))
+            p.set_unit(star_type, "Msun/kpc**2")
+            p.set_font({"size": 20})
+            p.set_axes_unit('kpc')
+            p.annotate_timestamp(redshift=True, text_args={"color": "black"})
+
+            p.annotate_marker(center, coord_system="data", color="black", s=50, marker="o")
+            p.annotate_sphere(center, radius, coord_system="data", circle_args={"color": "black"})
+
+            p.annotate_marker(self.stars.cm, coord_system="data", color="red", s=50, marker="*")
+            p.annotate_marker(self.darkmatter.cm, coord_system="data", color="black", s=70, marker="x")
+            #p.annotate_marker(self.gas.cm, coord_system="data", color="blue", s=70, marker="+" )
+            p.annotate_sphere(self.stars.cm, self.stars.half_mass_radius(), coord_system="data", circle_args={"color": "red"})
+
+
+            
+            plot = p.plots[star_type]
+            plot.figure = fig
+            plot.axes = grid[ip].axes
+            plot.cax = grid.cbar_axes[ip]
+            p.render()
+            grid[ip].axes.set_title(kwargs["titles"][1] if "titles" in kwargs.keys() else None, fontsize=20)
+            ip += 1
+
+        
+        if not self.gas.empty: 
+            gas_type = (self.ptypes["gas"], self.fields["gas"]["dens"])
+        
+            p = yt.ProjectionPlot(ds, normal, gas_type, center=center, width=plot_radius, data_source=ds.sphere(center, 2*radius))
+            p.set_unit(gas_type, "Msun/kpc**2")
+            p.set_font({"size": 20})            
+            p.set_axes_unit('kpc')
+            p.annotate_timestamp(redshift=True, text_args={"color":"black"})
+
+            p.annotate_marker(center, coord_system="data", color="black", s=50, marker="o")
+            p.annotate_sphere(center, radius, coord_system="data", circle_args={"color": "black"})
+
+            #p.annotate_marker(self.stars.cm, coord_system="data", color="red", s=50, marker="*")
+            p.annotate_marker(self.darkmatter.cm, coord_system="data", color="black", s=70, marker="x")
+            p.annotate_marker(self.gas.cm, coord_system="data", color="blue", s=70, marker="+" )
+            p.annotate_sphere(self.stars.cm, self.stars.half_mass_radius(), coord_system="data", circle_args={"color": "red"})
+
+
+            plot = p.plots[gas_type]
+            plot.figure = fig
+            plot.axes = grid[ip].axes
+            plot.cax = grid.cbar_axes[ip]
+            p.render()
+            grid[ip].axes.set_title(kwargs["titles"][2] if "titles" in kwargs.keys() else None, fontsize=20)
+            ip += 1
+
+        plt.close()
+        return fig
 
 
 

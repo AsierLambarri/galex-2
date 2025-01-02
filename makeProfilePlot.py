@@ -1022,7 +1022,7 @@ for _, row in subtree_table.iterrows():
 
     axes2[0, i].set_title(f"R/Rvir={halo_params['R/Rvir']:.2f}, z={redshift:.2f}")
 
-    lines_of_sight = random_vector_spherical(N, half_sphere=True)
+    lines_of_sight = random_vector_spherical(N, half_sphere=False)
 
     result_surf = plot_surfdens(axes2[0, i], halo, lines_of_sight, proj_components)
     bins = {c : result_surf[c]["bins"] for c in proj_components}

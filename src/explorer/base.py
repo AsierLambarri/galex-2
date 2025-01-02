@@ -6,7 +6,7 @@ Created on Wed Nov 20 10:03:19 2024
 @author: asier
 """
 import numpy as np
-from unyt import unyt_array
+from unyt import unyt_array, unyt_quantity
 from scipy.spatial import KDTree
 
 from .config import config
@@ -119,6 +119,10 @@ class BaseComponent:
         }
         
     }
+
+
+
+            
 
     @classmethod
     def format_value(cls, value):
@@ -286,7 +290,7 @@ class BaseComponent:
                 R=(1E4, "Mpc")
             )
         else:
-            self.empty_component = True
+            self.empty = True
             self.cm = None 
             self.vcm = None
         return None
@@ -394,6 +398,9 @@ class BaseComponent:
         cm : array
             Refined Center of mass and various quantities.
         """
+        if self.empty:
+            return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no center-of-mass to refine!")
+            
         if method.lower() == "pot-most-bound":
             bound_mask = self.E < 0
             f = 0.1 if "f" not in kwargs.keys() else kwargs["f"]
@@ -432,7 +439,7 @@ class BaseComponent:
             self.vcm = self._centering_results['velocity']
         return self.cm, self.vcm
     
-    def half_mass_radius(self, mfrac=0.5, project=False, only_bound=False):
+    def half_mass_radius(self, mfrac=0.5, project=False, only_bound=True):
         """By default, it computes 3D half mass radius of a given particle ensemble. If the center of the particles 
         is not provided, it is estimated by first finding the median of positions and then computing a refined CoM using
         only the particles inside r < 0.5*rmax.
@@ -452,14 +459,20 @@ class BaseComponent:
         MFRAC_mass_radius : float
             Desired mfrac mass fraction radius estimation. Provided in same units as pos, if any.
         """
+        if self.empty:
+            return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no half mass radius to compute!")
+            
         if only_bound:
-            rh = half_mass_radius(
-                self.bcoords, 
-                self.bmasses, 
-                self.cm, 
-                mfrac, 
-                project=project
-            )
+            if True in self._bmask:
+                rh = half_mass_radius(
+                    self.bcoords, 
+                    self.bmasses, 
+                    self.cm, 
+                    mfrac, 
+                    project=project
+                )
+            else:
+                return AttributeError(f"Compoennt {self.ptype} has no bound mass! and therefore there is no half-mass radius to compute!")
         else:
             rh = half_mass_radius(
                 self.coords, 
@@ -477,7 +490,7 @@ class BaseComponent:
         return rh
 
 
-    def los_dispersion(self, rcyl=(1, 'kpc'), return_projections = False):
+    def los_dispersion(self, rcyl=(1, 'kpc'), return_projections=False, only_bound=False):
         """Computes the line of sight velocity dispersion:  the width/std of f(v)dv of particles iside rcyl along the L.O.S. This is NOT the
         same as the dispersion velocity (which would be the rms of vx**2 + vy**2 + vz**2). All particles are used, including non-bound ones,
         given that observationally they are indistinguishable.
@@ -494,9 +507,21 @@ class BaseComponent:
         stdvel : unyt_quantity
         los_velocities : unyt_array
         """
+        if self.empty:
+            return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no line of sight velocity to compute")
+
         mask = np.linalg.norm(self.coords[:, 0:2] - self.cm[0:2], axis=1) < unyt_array(*rcyl)
+
+        if only_bound:
+            if True in self._bmask:
+                los_velocities = easy_los_velocity(self.vels[mask & self._bmask], self.los)
+            else:
+                return AttributeError(f"Compoennt {self.ptype} has no bound mass! and therefore there is no line of sight velocity to compute!")
+
+        else:
+            los_velocities = easy_los_velocity(self.vels[mask], self.los)
+
         
-        los_velocities = easy_los_velocity(self.vels[mask], self.los)
         losvel = np.std(los_velocities)
         
         if return_projections:
@@ -504,7 +529,7 @@ class BaseComponent:
         else:
             return losvel
 
-    def enclosed_mass(self, r0, center, only_bound=True):
+    def enclosed_mass(self, r0, center, only_bound=False):
         """Computes the enclosed mass on a sphere centered on center, and with radius r0.
 
         Parameters
@@ -518,12 +543,15 @@ class BaseComponent:
         -------
         encmass : unyt_quantity
         """
+        if self.empty:
+            return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no enclosed mass to compute!")
+            
         if only_bound:
-            if True in self.bmask:
+            if True in self._bmask:
                 mask = np.linalg.norm(self.bcoords - center, axis=1) <= r0
                 return self.bmasses[mask].sum()
             else:
-                return unyt_quantity(0, "Msun")
+                return AttributeError(f"Compoennt {self.ptype} has no bound mass! and therefore there is no enclosed mass to compute!")
         else:
             mask = np.linalg.norm(self.coords - center, axis=1) <= r0
             return self.masses[mask].sum()
@@ -559,6 +587,10 @@ class BaseComponent:
         r, dens, e_dens, (bins, optional) : arrays of bin centers, density and errors (and bin edges)
         
         """
+        if self.empty:
+            return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no density profile to compute!")
+
+        
         if "new_data_params" in kwargs.keys():
             if "sp" in kwargs["new_data_params"].keys():
                 sp = kwargs["new_data_params"]["sp"]
@@ -576,8 +608,11 @@ class BaseComponent:
             
         else:
             if pc == "bound":
-                pos = self.bcoords
-                mass = self.bmasses
+                if np.any(self._bmask) == False:
+                    return AttributeError(f"Compoennt {self.ptype} has no bound mass! and therefore there is no density profile to compute!")
+                else:
+                    pos = self.bcoords
+                    mass = self.bmasses
             elif pc == "all":
                 pos = self.coords
                 mass = self.masses
@@ -600,15 +635,16 @@ class BaseComponent:
         
         if bins is None:
             radii = np.linalg.norm(pos - center, axis=1)
-            rmin, rmax, thicken = radii.min(), radii.max(), False
+            rmin, rmax, thicken, nbins = radii.min(), radii.max(), False, 10
             if "bins_params" in kwargs.keys():
                 rmin = rmin if "rmin" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["rmin"]
                 rmax = rmax if "rmax" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["rmax"]
                 thicken = None if "thicken" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["thicken"]
-
+                nbins = 10 if "bins" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["bins"]
+                
             bins = np.histogram_bin_edges(
                 np.log10(radii),
-                bins=10 if "bins" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["bins"],
+                bins=nbins,
                 range=np.log10([rmin, rmax]) 
             )
             bins = 10 ** bins
@@ -664,6 +700,9 @@ class BaseComponent:
         -------
         r, vrms, e_vrms, (bins, optional) : arrays of bin centers, density and errors (and bin edges)
         """
+        if self.empty:
+            return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no velocity profile to compute!")
+            
         if "new_data_params" in kwargs.keys():
             if "sp" in kwargs["new_data_params"].keys():
                 sp = kwargs["new_data_params"]["sp"]
@@ -683,8 +722,11 @@ class BaseComponent:
             )
         else:
             if pc == "bound":
-                pos = self.bcoords
-                vels = self.bvels
+                if np.any(self._bmask) == False:
+                    return AttributeError(f"Compoennt {self.ptype} has no bound mass! and therefore there is no velocity profile to compute!")
+                else:    
+                    pos = self.bcoords
+                    vels = self.bvels
             elif pc == "all":
                 pos = self.coords
                 vels = self.vels
@@ -703,11 +745,7 @@ class BaseComponent:
 
         if projected != "none":
             pos = pos[:, :2]
-            vels = easy_los_velocity(vels - v_center, self.los)
-            #vels = np.column_stack((
-            #    vels, 
-            #    np.zeros_like(vels)
-            #))
+            vels = easy_los_velocity(vels - v_center, [1,0,0])
             center = center[:2]
             v_center = np.array([0])
 
@@ -716,15 +754,16 @@ class BaseComponent:
         
         if bins is None:
             radii = np.linalg.norm(pos - center, axis=1)
-            rmin, rmax, thicken = radii.min(), radii.max(), False
+            rmin, rmax, thicken, nbins = radii.min(), radii.max(), False, 10
             if "bins_params" in kwargs.keys():
                 rmin = rmin if "rmin" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["rmin"]
                 rmax = rmax if "rmax" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["rmax"]
                 thicken = None if "thicken" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["thicken"]
-
+                nbins = 10 if "bins" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["bins"]
+                
             bins = np.histogram_bin_edges(
                 np.log10(radii), 
-                bins=10 if "bins" not in kwargs["bins_params"].keys() else kwargs["bins_params"]["bins"],
+                bins=nbins,
                 range=np.log10([rmin, rmax]) 
             )
             bins = 10 ** bins

@@ -56,6 +56,13 @@ class StellarComponent(BaseSimulationObject, BaseComponent):
         self.set_shared_attrs(self.ptype, kwargs)
         self._default_center_of_mass()
 
+        if len(self.masses) == 0:
+            self.empty = True
+        else:
+            self.empty = False
+
+        self.bound_method = None
+            
         
         del self.loader
         del self.parser
@@ -316,6 +323,11 @@ class DarkComponent(BaseSimulationObject, BaseComponent):
         self.set_shared_attrs(self.ptype, kwargs)
         self._default_center_of_mass()
         
+        if len(self.masses) == 0:
+            self.empty = True
+        else:
+            self.empty = False
+        
         del self.loader
         del self.parser
         del self.ptypes
@@ -518,6 +530,11 @@ class GasComponent(BaseSimulationObject, BaseComponent):
 
         self.cm = self._shared_attrs["darkmatter"]["cm"]
         self.vcm = self._shared_attrs["darkmatter"]["vcm"]
+
+        if len(self.masses) == 0:
+            self.empty = True
+        else:
+            self.empty = False
         
         del self.loader
         del self.parser
