@@ -6,5 +6,6 @@ from .bound_particles import bound_particlesBH, bound_particlesAPROX
 from .half_mass_radius import half_mass_radius
 from .analitical_profiles import NFWc
 
+from .sph_dataset import create_sph_dataset
 from .loaders import load_ftable
 

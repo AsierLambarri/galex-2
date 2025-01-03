@@ -56,9 +56,13 @@ def gram_schmidt(los):
     if np.all(los == [1,0,0]):
         return np.identity(3)
     if np.all(los == [0,1,0]):
-        return np.roll(np.identity(3)[::-1],2, axis=1)
+        return np.array([[0., 0., 1.],
+                         [1., 0., 0.],
+                         [0., 1., 0.]])
     if np.all(los == [0,0,1]):
-        return np.roll(np.identity(3)[::-1],1, axis=1)
+        return np.array([[0., 1., 0.],
+                         [0., 0., 1.],
+                         [1., 0., 0.]])
         
     basis_matrix = np.identity(dims) + np.random.rand(3,3) * 1E-12
     basis_matrix = (basis_matrix + np.array(los)/np.linalg.norm(los)).T

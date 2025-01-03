@@ -7,7 +7,7 @@ from unyt import unyt_array, unyt_quantity
 from .config import config
 from .base import BaseSimulationObject
 from .particle_type import StellarComponent, DarkComponent, GasComponent
-from .class_methods import bound_particlesBH, bound_particlesAPROX, density_profile, velocity_profile
+from .class_methods import bound_particlesBH, bound_particlesAPROX, density_profile, velocity_profile, create_sph_dataset, gram_schmidt
 
 class SnapshotHalo(BaseSimulationObject):
     """zHalo class that implements a variety of functions to analyze the internal structure of a halo at a certain redshift, and the galaxy that
@@ -554,14 +554,15 @@ class SnapshotHalo(BaseSimulationObject):
 
         return None
 
-    def plot(self, normal="z", catalogue=None, **kwargs):
+    
+    def plot(self, normal="z", catalogue=None, smooth_particles = False, **kwargs):
         """Plots the projected darkmatter, stars and gas distributions along a given normal direction. The projection direction can be changed with
         the "normal" argument. If catalogue is provided, halos of massgreater than 5E7 will be displayed on top of the darkmatter plot.
 
         OPTIONAL Parameters
         ----------
-        normal : str or (3,)-list[float]
-            Projection line of sight, either axis-str repr. or los-vector
+        normal : str or 
+            Projection line of sight, either "x", "y" or "z".
         catalogue : pd.DataFrame
             Halo catalogue created using galex.extractor.mergertrees.
 
@@ -569,9 +570,13 @@ class SnapshotHalo(BaseSimulationObject):
         -------
         fig : matplotlib figure object
         """
+        import cmyt
         from matplotlib import gridspec
         import matplotlib.pyplot as plt
-        from mpl_toolkits.axes_grid1 import AxesGrid
+        from mpl_toolkits.axes_grid1 import AxesGrid, make_axes_locatable
+        from matplotlib.patches import Circle, Rectangle
+        from mpl_toolkits.axes_grid1.inset_locator import mark_inset
+        
         try:
             import smplotlib
         except:
@@ -593,137 +598,283 @@ class SnapshotHalo(BaseSimulationObject):
         center = ds.arr(self.sp_center)
         radius = ds.quan(self.sp_radius)
 
-        if "zoom_factors" in kwargs.keys():
-            plot_radii = radius * kwargs["zoom_factors"] 
-        else:
-            plot_radius = radius * 2 
-
+        source_factor = 1.5 if "source_factor" not in kwargs.keys() else kwargs["source_factor"]
+        draw_inset = True if "draw_inset" not in kwargs.keys() else kwargs["draw_inset"]
         
-        plots = 3
-        if self.darkmatter.empty: plots -= 1
-        if self.stars.empty: plots -= 1
-        if self.gas.empty: plots -= 1
+        if "zoom_factors_rvir" in kwargs.keys():
+            zooms = np.sort(kwargs["zoom_factors_rvir"])[::-1][[0,1]]
+            plot_radii = radius * zooms * 2
+        else:
+            plot_radii = radius * np.array([1 * 2])
+
+        sp_source = ds.sphere(center, source_factor*plot_radii.max())
+        
+        plots = 0
+        if not self.darkmatter.empty: plots += 1
+        if not self.stars.empty: plots += 1
+        if not self.gas.empty: plots += 1
 
         if plots == 0:
             raise ValueError(f"It Seems that all components are empty!")
 
-        fig = plt.figure(figsize=(plots*10, 10))
-        grid = AxesGrid(
-            fig, 
-            (-1.8, -1.8, 1.8, 1.8),
-            nrows_ncols=(1, plots),
-            axes_pad=1.2,
-            cbar_mode='each',  # Colorbar mode: 'each' for individual colorbars
-            cbar_location='right',  # Colorbar position for each subplot
-            cbar_pad=0,  # Padding between plot and colorbar
-            share_all=False,
+        if normal=="x" or normal==[1,0,0]: gs = gram_schmidt([1,0,0]); cindex = [1,2]
+        elif normal=="y" or normal==[0,1,0]: gs = gram_schmidt([0,1,0]); cindex = [2,0]
+        elif normal=="z" or normal==[0,0,1]: gs = gram_schmidt([0,0,1]); cindex = [0,1]
+        else: raise ValueError(f"Normal must along main axes. You provided {normal}.")
+
+
+        if smooth_particles:
+            ds_dm = create_sph_dataset(
+                ds,
+                self.ptypes["darkmatter"],
+                {"Mass": self.fields["darkmatter"]["masses"], "Coordinates": self.fields["darkmatter"]["coords"], "Velocities": self.fields["darkmatter"]["vels"], 'particle_index': self.fields["darkmatter"]["IDs"]},
+                data_source=sp_source,
+                n_neighbours=100 if "n_neighbours" not in kwargs.keys() else kwargs["n_neighbours"][0] if isinstance(kwargs["n_neighbours"], list) else kwargs["n_neighbours"],
+                kernel="wendland2" if "kernel" not in kwargs.keys() else kwargs["kernel"],
+                rotation_matrix=np.linalg.inv(gs),
+                rotation_center=center
+            )
+            dm_type = ("io", "density") 
+
+            ds_st = create_sph_dataset(
+                ds,
+                self.ptypes["stars"],
+                {"Mass": self.fields["stars"]["masses"], "Coordinates": self.fields["stars"]["coords"], "Velocities": self.fields["stars"]["vels"], 'particle_index': self.fields["stars"]["IDs"]},
+                data_source=sp_source,
+                n_neighbours=100 if "n_neighbours" not in kwargs.keys() else kwargs["n_neighbours"][1] if isinstance(kwargs["n_neighbours"], list) else kwargs["n_neighbours"],
+                kernel="wendland2" if "kernel" not in kwargs.keys() else kwargs["kernel"],
+                rotation_matrix=np.linalg.inv(gs),
+                rotation_center=center
+            )
+            star_type = ("io", "density")
+
+            sp_source_dm = ds_dm.sphere(center, source_factor*plot_radii.max())
+            sp_source_st = ds_st.sphere(center, source_factor*plot_radii.max())
+
+
+        stars_cen = self.stars.cm - center
+        dm_cen = self.darkmatter.cm - center
+        gas_cen = self.gas.cm - center
+
+        
+
+        
+        fig, axes = plt.subplots(
+            len(plot_radii),
+            plots,
+            figsize=(6*plots*1.2*1.1, 6*len(plot_radii)*1.2),
+            sharey="row",
+            constrained_layout=False
         )
-
+        grid = axes.flatten()
+        
         ip = 0
-        if not self.darkmatter.empty: 
-            dm_type = (self.ptypes["darkmatter"], self.fields["darkmatter"]["masses"])
-            p = yt.ParticleProjectionPlot(ds, normal, dm_type, center=center, width=plot_radius, density=True, data_source=ds.sphere(center, 2*radius))
-            p.set_unit(dm_type, "Msun/kpc**2")
-            p.set_font({"size": 20})
-            p.set_axes_unit('kpc')
-            p.annotate_timestamp(redshift=True, text_args={"color": "black"})
+        for jp, plot_radius in enumerate(plot_radii):
+            ext = (-plot_radius.to("kpc")/2, plot_radius.to("kpc")/2, -plot_radius.to("kpc")/2, plot_radius.to("kpc")/2)
+            if not self.darkmatter.empty: 
+                if smooth_particles:            
+                    p = yt.ProjectionPlot(ds_dm, [1,0,0], dm_type, center=center, width=plot_radius, data_source=sp_source_dm)
+                    p.set_unit(dm_type, "Msun/kpc**2")
+                    frb = p.data_source.to_frb(plot_radius, 800)
+    
+                else:
+                    dm_type = (self.ptypes["darkmatter"], self.fields["darkmatter"]["masses"])            
+                    p = yt.ParticleProjectionPlot(ds, normal, dm_type, center=center, width=plot_radius, density=True, data_source=sp_source)
+                    p.set_unit(dm_type, "Msun/kpc**2")
+                    frb = p.frb
+    
+    
+                ax = grid[ip]
+                data = frb[dm_type]
+                pc_dm = ax.imshow(data.to("Msun/kpc**2"), cmap=cmyt.arbre, norm="log", extent=ext)
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="5%", pad=0)
+                cbar_dm = plt.colorbar(pc_dm, cax=cax)
+                cbar_dm.set_label(r'Projected Dark Matter Density $[Msun/kpc^2]$', fontsize=20)
+                cbar_dm.ax.tick_params(labelsize=25)
 
-            p.annotate_marker(center, coord_system="data", color="black", s=150, marker="1")
-            p.annotate_sphere(center, radius, coord_system="data", circle_args={"color": "black"})
+                
+                ax.scatter(0,0, color="black", marker="1", s=370)
 
-            #p.annotate_marker(self.stars.cm, coord_system="data", color="red", s=150, marker="*")
-            p.annotate_marker(self.darkmatter.cm, coord_system="data", color="black", s=150, marker="x")
-            p.annotate_marker(self.gas.cm, coord_system="data", color="darkorange", s=150, marker="+" )
-            p.annotate_sphere(self.stars.cm, self.stars.half_mass_radius(), coord_system="data", circle_args={"color": "red"})
+                if jp==0:
+                    rvir_circ = Circle((0,0), radius.to("kpc").value, facecolor="none", edgecolor="black")
+                    ax.add_patch(rvir_circ)
+                if jp==1:
+                    ax.scatter(*stars_cen[cindex], color="red", marker="*", s=300)
+                    ax.scatter(*dm_cen[cindex], color="black", marker="+", s=370)
+                    ax.scatter(*gas_cen[cindex], color="orange", marker="o")
+                    rhf_circ = Circle(stars_cen[cindex].to("kpc").value, self.stars.half_mass_radius().to("kpc").value, facecolor="none", edgecolor="red")
+                    ax.add_patch(rhf_circ)
+                
+                ax.set_aspect('equal')
+                ax.tick_params(axis='both', which='both', labelbottom=True, labelsize=20)    
+                if ip < plots:
+                    ax.set_title(kwargs["titles"][0] if "titles" in kwargs.keys() else None, fontsize=25)
 
-
-
+                ip += 1
+    
             
-            plot = p.plots[dm_type]
-            plot.figure = fig
-            plot.axes = grid[ip].axes
-            plot.cax = grid.cbar_axes[ip]
-            p.render()
-            grid[ip].axes.set_title(kwargs["titles"][0] if "titles" in kwargs.keys() else None, fontsize=20)
+            if not self.stars.empty:
+                if smooth_particles: 
+                    p = yt.ProjectionPlot(ds_st, [1,0,0], star_type, center=center, width=plot_radius, data_source=sp_source_st)
+                    p.set_unit(star_type, "Msun/kpc**2")
+                    frb = p.data_source.to_frb(plot_radius, 800)
+    
+                else:
+                    star_type = (self.ptypes["stars"], self.fields["stars"]["masses"])
+                    p = yt.ParticleProjectionPlot(ds, normal, star_type, center=center, width=plot_radius, density=True, data_source=sp_source)
+                    p.set_unit(star_type, "Msun/kpc**2")    
+                    frb = p.frb
+
+    
+                ax = grid[ip]
+                data = frb[star_type]
+                pc_st = ax.imshow(data.to("Msun/kpc**2"), cmap=cmyt.arbre, norm="log", extent=ext)
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="5%", pad=0)
+                cbar_st = fig.colorbar(pc_st, cax=cax)
+                cbar_st.set_label(r'Projected Stellar Density $[Msun/kpc^2]$', fontsize=22)
+                cbar_st.ax.tick_params(labelsize=25)
+
+                ax.scatter(0,0, color="black", marker="1", s=370)
+                if jp==0:
+                    rvir_circ = Circle((0,0), radius.to("kpc").value, facecolor="none", edgecolor="black")
+                    ax.add_patch(rvir_circ)   
+                if jp==1:
+                    ax.scatter(*stars_cen[cindex], color="red", marker="*", s=300)
+                    ax.scatter(*dm_cen[cindex], color="black", marker="+", s=370)
+                    ax.scatter(*gas_cen[cindex], color="orange", marker="o")
+                    rhf_circ = Circle(stars_cen[cindex].to("kpc").value, self.stars.half_mass_radius().to("kpc").value, facecolor="none", edgecolor="red")
+                    ax.add_patch(rhf_circ)
 
 
+                
+                ax.set_aspect('equal')
+                ax.tick_params(axis='both', which='both', labelbottom=True, labelsize=20)
+                if ip < plots:
+                    ax.set_title(kwargs["titles"][1] if "titles" in kwargs.keys() else None, fontsize=25)
 
+                
+                ip += 1
+    
             
-            ip += 1
+            if not self.gas.empty: 
+                gas_type = (self.ptypes["gas"], self.fields["gas"]["dens"])        
+                p = yt.ProjectionPlot(ds, normal, gas_type, center=center, width=plot_radius, data_source=sp_source)
+                p.set_unit(gas_type, "Msun/kpc**2")
+                frb = p.data_source.to_frb(plot_radius, 800)
+                
+                ax = grid[ip]
+                density_data = frb[gas_type]
+                p_gas = ax.imshow(density_data.to("Msun/kpc**2"), cmap=cmyt.arbre, norm="log", extent=ext)
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="5%", pad=0)
+                cbar_gas = fig.colorbar(p_gas, cax=cax)
+                cbar_gas.set_label(r'Projected Gas Density $[Msun/kpc^2]$', fontsize=22)
 
-        
-        if not self.stars.empty:
-            star_type = (self.ptypes["stars"], self.fields["stars"]["masses"])
-            
-            p = yt.ParticleProjectionPlot(ds, normal, star_type, center=center, width=plot_radius, density=True, data_source=ds.sphere(center, 2*radius))
-            p.set_unit(star_type, "Msun/kpc**2")
-            p.set_font({"size": 20})
-            p.set_axes_unit('kpc')
-            p.annotate_timestamp(redshift=True, text_args={"color": "black"})
+                ax.scatter(0,0, color="black", marker="1", s=370)
+                if jp==0:
+                    rvir_circ = Circle((0,0), radius.to("kpc").value, facecolor="none", edgecolor="black")
+                    ax.add_patch(rvir_circ)
+                if jp==1:
+                    ax.scatter(*stars_cen[cindex], color="red", marker="*", s=300)
+                    ax.scatter(*dm_cen[cindex], color="black", marker="+", s=370)
+                    ax.scatter(*gas_cen[cindex], color="orange", marker="o")
+                    rhf_circ = Circle(stars_cen[cindex].to("kpc").value, self.stars.half_mass_radius().to("kpc").value, facecolor="none", edgecolor="red")
+                    ax.add_patch(rhf_circ)
 
-            p.annotate_marker(center, coord_system="data", color="black", s=50, marker="o")
-            p.annotate_sphere(center, radius, coord_system="data", circle_args={"color": "black"})
-
-            p.annotate_marker(self.stars.cm, coord_system="data", color="red", s=50, marker="*")
-            p.annotate_marker(self.darkmatter.cm, coord_system="data", color="black", s=70, marker="x")
-            #p.annotate_marker(self.gas.cm, coord_system="data", color="blue", s=70, marker="+" )
-            p.annotate_sphere(self.stars.cm, self.stars.half_mass_radius(), coord_system="data", circle_args={"color": "red"})
-
-
-            
-            plot = p.plots[star_type]
-            plot.figure = fig
-            plot.axes = grid[ip].axes
-            plot.cax = grid.cbar_axes[ip]
-            p.render()
-            grid[ip].axes.set_title(kwargs["titles"][1] if "titles" in kwargs.keys() else None, fontsize=20)
-            ip += 1
-
-        
-        if not self.gas.empty: 
-            gas_type = (self.ptypes["gas"], self.fields["gas"]["dens"])
-        
-            p = yt.ProjectionPlot(ds, normal, gas_type, center=center, width=plot_radius, data_source=ds.sphere(center, 2*radius))
-            p.set_unit(gas_type, "Msun/kpc**2")
-            p.set_font({"size": 20})            
-            p.set_axes_unit('kpc')
-            p.annotate_timestamp(redshift=True, text_args={"color":"black"})
-
-            p.annotate_marker(center, coord_system="data", color="black", s=50, marker="o")
-            p.annotate_sphere(center, radius, coord_system="data", circle_args={"color": "black"})
-
-            #p.annotate_marker(self.stars.cm, coord_system="data", color="red", s=50, marker="*")
-            p.annotate_marker(self.darkmatter.cm, coord_system="data", color="black", s=70, marker="x")
-            p.annotate_marker(self.gas.cm, coord_system="data", color="blue", s=70, marker="+" )
-            p.annotate_sphere(self.stars.cm, self.stars.half_mass_radius(), coord_system="data", circle_args={"color": "red"})
+                
+                cbar_gas.ax.tick_params(labelsize=25)
+                ax.set_aspect('equal')
+                ax.tick_params(axis='both', which='both', labelbottom=True, labelsize=20)
+                if ip < plots:
+                    ax.set_title(kwargs["titles"][2] if "titles" in kwargs.keys() else None, fontsize=25)
 
 
-            plot = p.plots[gas_type]
-            plot.figure = fig
-            plot.axes = grid[ip].axes
-            plot.cax = grid.cbar_axes[ip]
-            p.render()
-            grid[ip].axes.set_title(kwargs["titles"][2] if "titles" in kwargs.keys() else None, fontsize=20)
-            ip += 1
+                
+                ip += 1
 
+
+        for ax in axes[-1,:]:
+            ax.set_xlabel('x [kpc]', fontsize=20)
+
+        for ax in axes[:, 0]:
+            ax.set_ylabel('y [kpc]', fontsize=20)
+
+       # axes[0, 0].indicate_inset(
+       #     bounds=[-plot_radii[1].to("kpc").value/2, -plot_radii[1].to("kpc").value/2, plot_radii[1].to("kpc").value, plot_radii[1].to("kpc").value],
+       #     inset_ax = axes[-1, 0],
+       #     edgecolor="black",
+       #     alpha=1
+       # )
+        if len(plot_radii) != 1 and draw_inset:
+            mark_inset(
+                axes[0, 0], 
+                axes[-1, 0], 
+                loc1=1, loc2=2, 
+                facecolor="none",
+                edgecolor="black"
+            )
+    
+            plt.subplots_adjust(
+                hspace=-0.5,
+                wspace=0.1
+            )
+        else:
+            plt.subplots_adjust(
+                hspace=0.3,
+                wspace=0.1
+            )
+        plt.tight_layout()
         plt.close()
-        return fig
+        return fig     
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
 
 

@@ -1,14 +1,15 @@
 import yt
 import numpy as np
+from unyt import unyt_array
 
-def create_sph_dataset(ds, pt, 
-                       data_source = None,
-                       extra_fields = None, 
-                       n_neighbours = 32, 
-                       kernel = 'wendland2',
-                       use_norm = True,
-                       rotation_matrix = None,
-                       rotation_center = None
+def create_sph_dataset(ds, pt, fields_kw,
+                       data_source=None,
+                       extra_fields=None, 
+                       n_neighbours=32, 
+                       kernel='wendland2',
+                       use_norm=True,
+                       rotation_matrix=None,
+                       rotation_center=None
                       ):
     """Creates an sph field using the provided particle field, from the data contained
     in the ds dataset. The smoothing is performed by .add_sph_field. Both the number of
@@ -53,12 +54,12 @@ def create_sph_dataset(ds, pt,
         if rotation_center is None:
             raise Exception("You must provide a rotation center along with the rotation matrix.")
         else:
-            c = data_source[pt,"Coordinates"] - rotation_center
-            v = data_source[pt,"Velocities"]
-            rotated_coords = unyt_array([np.dot(rotation_matrix, c[i,:]) for i in range(len(c))], ) + rotation_center
-            rotated_vels = unyt_array([np.dot(rotation_matrix, v[i,:]) for i in range(len(v))], )
+            c = data_source[pt, fields_kw["Coordinates"]] - rotation_center
+            v = data_source[pt, fields_kw["Velocities"]]
+            rotated_coords = unyt_array([np.dot(rotation_matrix, c[i,:]) for i in range(len(c))], c.units) + rotation_center
+            rotated_vels = unyt_array([np.dot(rotation_matrix, v[i,:]) for i in range(len(v))], v.units)
             data = {
-                'particle_mass' : data_source[pt, 'Mass'],
+                'particle_mass' : data_source[pt, fields_kw['Mass']],
                 
                 'particle_position_x' : rotated_coords[:,0],
                 'particle_position_y' : rotated_coords[:,1],
@@ -68,7 +69,7 @@ def create_sph_dataset(ds, pt,
                 'particle_velocity_y' : rotated_vels[:,1],
                 'particle_velocity_z' : rotated_vels[:,2],
                 
-                'particle_index' : data_source[pt, 'particle_index']
+                'particle_index' : data_source[pt, fields_kw['particle_index']]
             }
             if extra_fields is not None:
                 for field in extra_fields:
