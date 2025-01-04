@@ -2,14 +2,15 @@ import yt
 import numpy as np
 from unyt import unyt_array
 
-def create_sph_dataset(ds, pt, fields_kw,
+def create_sph_dataset(ds, pt, 
                        data_source=None,
                        extra_fields=None, 
                        n_neighbours=32, 
                        kernel='wendland2',
                        use_norm=True,
                        rotation_matrix=None,
-                       rotation_center=None
+                       rotation_center=None,
+                       fields_kw=None
                       ):
     """Creates an sph field using the provided particle field, from the data contained
     in the ds dataset. The smoothing is performed by .add_sph_field. Both the number of

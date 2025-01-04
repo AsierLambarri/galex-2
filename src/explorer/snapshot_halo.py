@@ -617,9 +617,9 @@ class SnapshotHalo(BaseSimulationObject):
         if plots == 0:
             raise ValueError(f"It Seems that all components are empty!")
 
-        if normal=="x" or normal==[1,0,0]: gs = gram_schmidt([1,0,0]); cindex = [1,2]
-        elif normal=="y" or normal==[0,1,0]: gs = gram_schmidt([0,1,0]); cindex = [2,0]
-        elif normal=="z" or normal==[0,0,1]: gs = gram_schmidt([0,0,1]); cindex = [0,1]
+        if normal=="x" or normal==[1,0,0]: cindex = [1,2]
+        elif normal=="y" or normal==[0,1,0]: cindex = [2,0]
+        elif normal=="z" or normal==[0,0,1]: cindex = [0,1]
         else: raise ValueError(f"Normal must along main axes. You provided {normal}.")
 
 
@@ -627,59 +627,66 @@ class SnapshotHalo(BaseSimulationObject):
             ds_dm = create_sph_dataset(
                 ds,
                 self.ptypes["darkmatter"],
-                {"Mass": self.fields["darkmatter"]["masses"], "Coordinates": self.fields["darkmatter"]["coords"], "Velocities": self.fields["darkmatter"]["vels"], 'particle_index': self.fields["darkmatter"]["IDs"]},
                 data_source=sp_source,
                 n_neighbours=100 if "n_neighbours" not in kwargs.keys() else kwargs["n_neighbours"][0] if isinstance(kwargs["n_neighbours"], list) else kwargs["n_neighbours"],
                 kernel="wendland2" if "kernel" not in kwargs.keys() else kwargs["kernel"],
-                rotation_matrix=np.linalg.inv(gs),
-                rotation_center=center
             )
             dm_type = ("io", "density") 
 
             ds_st = create_sph_dataset(
                 ds,
                 self.ptypes["stars"],
-                {"Mass": self.fields["stars"]["masses"], "Coordinates": self.fields["stars"]["coords"], "Velocities": self.fields["stars"]["vels"], 'particle_index': self.fields["stars"]["IDs"]},
                 data_source=sp_source,
                 n_neighbours=100 if "n_neighbours" not in kwargs.keys() else kwargs["n_neighbours"][1] if isinstance(kwargs["n_neighbours"], list) else kwargs["n_neighbours"],
                 kernel="wendland2" if "kernel" not in kwargs.keys() else kwargs["kernel"],
-                rotation_matrix=np.linalg.inv(gs),
-                rotation_center=center
             )
             star_type = ("io", "density")
 
             sp_source_dm = ds_dm.sphere(center, source_factor*plot_radii.max())
             sp_source_st = ds_st.sphere(center, source_factor*plot_radii.max())
 
-
-        stars_cen = self.stars.cm - center
-        dm_cen = self.darkmatter.cm - center
-        gas_cen = self.gas.cm - center
-
-        
-
-        
+                
         fig, axes = plt.subplots(
             len(plot_radii),
             plots,
-            figsize=(6*plots*1.2*1.1, 6*len(plot_radii)*1.2),
+            figsize=(6*plots*1.2*1.05, 6*len(plot_radii)*1.2),
             sharey="row",
             constrained_layout=False
         )
         grid = axes.flatten()
+
+        stars_cen = self.stars.cm
+        dm_cen = self.darkmatter.cm
+        gas_cen = self.gas.cm
+        plot_centers = [center, 0.5 * (stars_cen + dm_cen)]
+        
         
         ip = 0
-        for jp, plot_radius in enumerate(plot_radii):
-            ext = (-plot_radius.to("kpc")/2, plot_radius.to("kpc")/2, -plot_radius.to("kpc")/2, plot_radius.to("kpc")/2)
+        for jp, (pcenter, plot_radius) in enumerate(zip(plot_centers, plot_radii)):
+            center_dist =  (pcenter - plot_centers[0])[cindex]
+
+            ext = (-plot_radius.to("kpc")/2 + center_dist[0], 
+                   plot_radius.to("kpc")/2 + center_dist[0], 
+                   -plot_radius.to("kpc")/2 + center_dist[1], 
+                   plot_radius.to("kpc")/2 + center_dist[1]
+            )
+
+
+
+            tmp_stars_cen = (stars_cen - pcenter)[cindex] + center_dist
+            tmp_dm_cen = (dm_cen - pcenter)[cindex] + center_dist
+            tmp_gas_cen = (gas_cen - pcenter)[cindex] + center_dist
+            tmp_cen = (center - pcenter)[cindex] + center_dist
+            
             if not self.darkmatter.empty: 
                 if smooth_particles:            
-                    p = yt.ProjectionPlot(ds_dm, [1,0,0], dm_type, center=center, width=plot_radius, data_source=sp_source_dm)
+                    p = yt.ProjectionPlot(ds_dm, normal, dm_type, center=pcenter, width=plot_radius, data_source=sp_source_dm)
                     p.set_unit(dm_type, "Msun/kpc**2")
                     frb = p.data_source.to_frb(plot_radius, 800)
     
                 else:
                     dm_type = (self.ptypes["darkmatter"], self.fields["darkmatter"]["masses"])            
-                    p = yt.ParticleProjectionPlot(ds, normal, dm_type, center=center, width=plot_radius, density=True, data_source=sp_source)
+                    p = yt.ParticleProjectionPlot(ds, normal, dm_type, center=pcenter, width=plot_radius, density=True, data_source=sp_source, deposition="ngp" if "deposition" not in kwargs.keys() else kwargs["deposition"])
                     p.set_unit(dm_type, "Msun/kpc**2")
                     frb = p.frb
     
@@ -694,16 +701,17 @@ class SnapshotHalo(BaseSimulationObject):
                 cbar_dm.ax.tick_params(labelsize=25)
 
                 
-                ax.scatter(0,0, color="black", marker="1", s=370)
-
+                ax.scatter(*tmp_cen, color="black", marker="1", s=370, zorder=20)
                 if jp==0:
                     rvir_circ = Circle((0,0), radius.to("kpc").value, facecolor="none", edgecolor="black")
                     ax.add_patch(rvir_circ)
+                    ax.scatter(*tmp_stars_cen, color="red", marker="*", s=150)
+                    ax.scatter(*tmp_dm_cen, color="black", marker="+", s=300)
                 if jp==1:
-                    ax.scatter(*stars_cen[cindex], color="red", marker="*", s=300)
-                    ax.scatter(*dm_cen[cindex], color="black", marker="+", s=370)
-                    ax.scatter(*gas_cen[cindex], color="orange", marker="o")
-                    rhf_circ = Circle(stars_cen[cindex].to("kpc").value, self.stars.half_mass_radius().to("kpc").value, facecolor="none", edgecolor="red")
+                    ax.scatter(*tmp_stars_cen, color="red", marker="*", s=300)
+                    ax.scatter(*tmp_dm_cen, color="black", marker="+", s=370)
+                    ax.scatter(*tmp_gas_cen, color="orange", marker="o")
+                    rhf_circ = Circle(tmp_stars_cen.to("kpc").value, self.stars.half_mass_radius().to("kpc").value, facecolor="none", edgecolor="red")
                     ax.add_patch(rhf_circ)
                 
                 ax.set_aspect('equal')
@@ -711,18 +719,20 @@ class SnapshotHalo(BaseSimulationObject):
                 if ip < plots:
                     ax.set_title(kwargs["titles"][0] if "titles" in kwargs.keys() else None, fontsize=25)
 
+                ax.set_xlim(ext[0], ext[1])
+                ax.set_ylim(ext[2], ext[3])
                 ip += 1
     
             
             if not self.stars.empty:
                 if smooth_particles: 
-                    p = yt.ProjectionPlot(ds_st, [1,0,0], star_type, center=center, width=plot_radius, data_source=sp_source_st)
+                    p = yt.ProjectionPlot(ds_st, normal, star_type, center=pcenter, width=plot_radius, data_source=sp_source_st)
                     p.set_unit(star_type, "Msun/kpc**2")
                     frb = p.data_source.to_frb(plot_radius, 800)
     
                 else:
                     star_type = (self.ptypes["stars"], self.fields["stars"]["masses"])
-                    p = yt.ParticleProjectionPlot(ds, normal, star_type, center=center, width=plot_radius, density=True, data_source=sp_source)
+                    p = yt.ParticleProjectionPlot(ds, normal, star_type, center=pcenter, width=plot_radius, density=True, data_source=sp_source, deposition="ngp" if "deposition" not in kwargs.keys() else kwargs["deposition"])
                     p.set_unit(star_type, "Msun/kpc**2")    
                     frb = p.frb
 
@@ -736,15 +746,17 @@ class SnapshotHalo(BaseSimulationObject):
                 cbar_st.set_label(r'Projected Stellar Density $[Msun/kpc^2]$', fontsize=22)
                 cbar_st.ax.tick_params(labelsize=25)
 
-                ax.scatter(0,0, color="black", marker="1", s=370)
+                ax.scatter(*tmp_cen, color="black", marker="1", s=370, zorder=20)
                 if jp==0:
                     rvir_circ = Circle((0,0), radius.to("kpc").value, facecolor="none", edgecolor="black")
-                    ax.add_patch(rvir_circ)   
+                    ax.add_patch(rvir_circ)
+                    ax.scatter(*tmp_stars_cen, color="red", marker="*", s=150)
+                    ax.scatter(*tmp_dm_cen, color="black", marker="+", s=300)
                 if jp==1:
-                    ax.scatter(*stars_cen[cindex], color="red", marker="*", s=300)
-                    ax.scatter(*dm_cen[cindex], color="black", marker="+", s=370)
-                    ax.scatter(*gas_cen[cindex], color="orange", marker="o")
-                    rhf_circ = Circle(stars_cen[cindex].to("kpc").value, self.stars.half_mass_radius().to("kpc").value, facecolor="none", edgecolor="red")
+                    ax.scatter(*tmp_stars_cen, color="red", marker="*", s=300)
+                    ax.scatter(*tmp_dm_cen, color="black", marker="+", s=370)
+                    ax.scatter(*tmp_gas_cen, color="orange", marker="o")
+                    rhf_circ = Circle(tmp_stars_cen.to("kpc").value, self.stars.half_mass_radius().to("kpc").value, facecolor="none", edgecolor="red")
                     ax.add_patch(rhf_circ)
 
 
@@ -754,13 +766,14 @@ class SnapshotHalo(BaseSimulationObject):
                 if ip < plots:
                     ax.set_title(kwargs["titles"][1] if "titles" in kwargs.keys() else None, fontsize=25)
 
-                
+                ax.set_xlim(ext[0], ext[1])
+                ax.set_ylim(ext[2], ext[3])               
                 ip += 1
     
             
             if not self.gas.empty: 
                 gas_type = (self.ptypes["gas"], self.fields["gas"]["dens"])        
-                p = yt.ProjectionPlot(ds, normal, gas_type, center=center, width=plot_radius, data_source=sp_source)
+                p = yt.ProjectionPlot(ds, normal, gas_type, center=pcenter, width=plot_radius, data_source=sp_source)
                 p.set_unit(gas_type, "Msun/kpc**2")
                 frb = p.data_source.to_frb(plot_radius, 800)
                 
@@ -772,15 +785,18 @@ class SnapshotHalo(BaseSimulationObject):
                 cbar_gas = fig.colorbar(p_gas, cax=cax)
                 cbar_gas.set_label(r'Projected Gas Density $[Msun/kpc^2]$', fontsize=22)
 
-                ax.scatter(0,0, color="black", marker="1", s=370)
+                ax.scatter(*tmp_cen, color="black", marker="1", s=370, zorder=20)
                 if jp==0:
                     rvir_circ = Circle((0,0), radius.to("kpc").value, facecolor="none", edgecolor="black")
                     ax.add_patch(rvir_circ)
+                    ax.scatter(*tmp_stars_cen, color="red", marker="*", s=150)
+                    ax.scatter(*tmp_dm_cen, color="black", marker="+", s=300)
+                    ax.scatter(*tmp_gas_cen, color="orange", marker="o")
                 if jp==1:
-                    ax.scatter(*stars_cen[cindex], color="red", marker="*", s=300)
-                    ax.scatter(*dm_cen[cindex], color="black", marker="+", s=370)
-                    ax.scatter(*gas_cen[cindex], color="orange", marker="o")
-                    rhf_circ = Circle(stars_cen[cindex].to("kpc").value, self.stars.half_mass_radius().to("kpc").value, facecolor="none", edgecolor="red")
+                    ax.scatter(*tmp_stars_cen, color="red", marker="*", s=300)
+                    ax.scatter(*tmp_dm_cen, color="black", marker="+", s=370)
+                    ax.scatter(*tmp_gas_cen, color="orange", marker="o")
+                    rhf_circ = Circle(tmp_stars_cen.to("kpc").value, self.stars.half_mass_radius().to("kpc").value, facecolor="none", edgecolor="red")
                     ax.add_patch(rhf_circ)
 
                 
@@ -790,10 +806,23 @@ class SnapshotHalo(BaseSimulationObject):
                 if ip < plots:
                     ax.set_title(kwargs["titles"][2] if "titles" in kwargs.keys() else None, fontsize=25)
 
-
-                
+                ax.set_xlim(ext[0], ext[1])
+                ax.set_ylim(ext[2], ext[3])
                 ip += 1
 
+
+        if catalogue is not None:
+            dist = np.linalg.norm(ds.arr(catalogue[['position_x', 'position_y', 'position_z']].values, 'kpccm') - center.to("kpccm"), axis=1)
+            filtered_halos = catalogue[(dist < radius.to("kpc")) & (catalogue['mass'] > 9E7) & (dist > 0)]
+            for i in range(0, len(filtered_halos)):
+                sub_tree_id = filtered_halos['Sub_tree_id'].iloc[i]
+                halo_pos = ds.arr(filtered_halos.iloc[i][['position_x', 'position_y', 'position_z']].values, 'kpccm').to('kpc') - center
+                virial_radius = ds.quan(filtered_halos.iloc[i]['virial_radius'], 'kpccm').to('kpc')
+    
+                extra_halo = Circle(halo_pos[cindex], 0.5*virial_radius, facecolor="none", edgecolor="white")
+                axes[0, 0].add_patch(extra_halo)
+    
+            
 
         for ax in axes[-1,:]:
             ax.set_xlabel('x [kpc]', fontsize=20)
@@ -801,23 +830,17 @@ class SnapshotHalo(BaseSimulationObject):
         for ax in axes[:, 0]:
             ax.set_ylabel('y [kpc]', fontsize=20)
 
-       # axes[0, 0].indicate_inset(
-       #     bounds=[-plot_radii[1].to("kpc").value/2, -plot_radii[1].to("kpc").value/2, plot_radii[1].to("kpc").value, plot_radii[1].to("kpc").value],
-       #     inset_ax = axes[-1, 0],
-       #     edgecolor="black",
-       #     alpha=1
-       # )
         if len(plot_radii) != 1 and draw_inset:
             mark_inset(
-                axes[0, 0], 
-                axes[-1, 0], 
+                axes[0, -1], 
+                axes[-1, -1], 
                 loc1=1, loc2=2, 
                 facecolor="none",
                 edgecolor="black"
             )
     
             plt.subplots_adjust(
-                hspace=-0.5,
+                hspace=-0.45,
                 wspace=0.1
             )
         else:
