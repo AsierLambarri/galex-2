@@ -582,7 +582,7 @@ class SnapshotHalo(BaseSimulationObject):
         except:
             pass
 
-        plt.rcParams['axes.linewidth'] = 1.1
+        plt.rcParams['axes.linewidth'] = 1.2
         plt.rcParams['xtick.major.width'] = 1.1
         plt.rcParams['xtick.minor.width'] = 1.1
         plt.rcParams['ytick.major.width'] = 1.1
@@ -810,18 +810,33 @@ class SnapshotHalo(BaseSimulationObject):
                 ax.set_ylim(ext[2], ext[3])
                 ip += 1
 
-
+        c = "white" if smooth_particles else "darkgreen"
+        low_m = 9E7 if "low_mass" not in kwargs.keys() else kwargs["low_mass"]
+        high_m = np.inf if "high_mass" not in kwargs.keys() else kwargs["high_mass"]
+        annotation_style = "circle" if "annotation_style" not in kwargs.keys() else kwargs["annotation_style"]
         if catalogue is not None:
             dist = np.linalg.norm(ds.arr(catalogue[['position_x', 'position_y', 'position_z']].values, 'kpccm') - center.to("kpccm"), axis=1)
-            filtered_halos = catalogue[(dist < radius.to("kpc")) & (catalogue['mass'] > 9E7) & (dist > 0)]
+            filtered_halos = catalogue[
+                (dist < 5*radius.to("kpc")) & 
+                (catalogue['mass'] > low_m) & 
+                (catalogue['mass'] < high_m) & 
+                (dist > 0.1)
+            ]
             for i in range(0, len(filtered_halos)):
                 sub_tree_id = filtered_halos['Sub_tree_id'].iloc[i]
                 halo_pos = ds.arr(filtered_halos.iloc[i][['position_x', 'position_y', 'position_z']].values, 'kpccm').to('kpc') - center
                 virial_radius = ds.quan(filtered_halos.iloc[i]['virial_radius'], 'kpccm').to('kpc')
-    
-                extra_halo = Circle(halo_pos[cindex], 0.5*virial_radius, facecolor="none", edgecolor="white")
-                axes[0, 0].add_patch(extra_halo)
-    
+
+                if annotation_style == "circle" or annotation_style == "all":
+                    extra_halo = Circle(halo_pos[cindex], 0.5*virial_radius, facecolor="none", edgecolor=c)
+                    axes[0, 0].add_patch(extra_halo)
+                    
+                if annotation_style == "center" or annotation_style == "all":
+                    axes[0, 0].scatter(*halo_pos[cindex], marker="v", edgecolor=c, s=90, color="none")
+
+                if annotation_style == "all":
+                    axes[0, 0].text(halo_pos[cindex][0], halo_pos[cindex][1] - 0.033*virial_radius, int(sub_tree_id), fontsize=14, ha="center", va="top", color=c)    
+
             
 
         for ax in axes[-1,:]:
