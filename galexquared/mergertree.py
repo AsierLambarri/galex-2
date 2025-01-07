@@ -9,8 +9,8 @@ from unyt import unyt_quantity
 
 from copy import copy, deepcopy
 
-
-
+from .class_methods import load_ftable
+from .snashot_halo import SnapshotHalo
 
 class MergerTree:
     """Easy manage of merger trees, with the specific purpose of extracting galaxies with desired parameters and qualities. Although
@@ -78,7 +78,9 @@ class MergerTree:
     @property
     def PrincipalLeaf(self):
         return self._PrincipalLeaf
-
+    @property
+    def equivalence_table(self):
+        return self._equiv
 
 
     
@@ -197,6 +199,22 @@ class MergerTree:
         
         return None
 
+    def set_equivalence(self, equiv):
+        """Loads and sets equivalence table.
+        """
+        if isinstance(complete_tree, str):
+            try:
+                self._equiv = load_ftable(complete_tree)
+            except:
+                self._equiv = pd.read_csv(equiv)
+                
+        elif isinstance(complete_tree, pd.DataFrame):
+            self._equiv = equiv
+
+        else:
+            raise AttributeError(f"Could not set equivalence table!")
+            
+        return None
         
     def construc_df_tree(self, treenum, maingal = False):
         """Constructs merger-tree for a single tree.
@@ -471,12 +489,32 @@ class MergerTree:
         return None
             
         
-    def load_halo(self, sub_tree, redshift=None, snapshot=None):
+    def load_halo(self, pdir, sub_tree, redshift=None, snapshot=None):
         """Loads a halo identified by its sub_tree ID using the Halo class. A given redshift or snapshot number can be
         suplied to load the halo at a single redshift, or load all of its snapshots.
         """
+        closest_value = lambda number, array: array[np.argmin(np.abs(np.array(array) - number))]
+
+        if self.equivalence_table is None:
+            raise ValueError(f"There is no snapshot number <----> snapshot file equivalence table set!")
+
+        if redshift is None:
+            halo = self.CompleteTree[
+                (self.CompleteTree["Sub_tree_id"] == sub_tree) & 
+                (self.CompleteTree["Snapshot"] == snapshot)
+            ]
+        elif snapshot is None:
+            halo = self.CompleteTree[
+                (self.CompleteTree["Sub_tree_id"] == sub_tree) & 
+                (self.CompleteTree["redshift"] == closest_value(redshift, self.CompleteTree["redshift"].values))
+            ]
+            
+        fn = self.equivalence_table[self.equivalence_table['snapshot'] == halo['Snapshot']]['snapname'].values[0]
         
-        return None
+        z = halo['Redshift'].values
+        center = (halo[['position_x', 'position_y', 'position_z']].values.astype(float) / (1+z), 'kpc')
+        center_vel =  (halo[['velocity_x', 'velocity_y', 'velocity_z']].values.astype(float), 'km/s')
+        return SnapshotHalo(pdir + fn, center=center, radius=rvir)
 
 
 
