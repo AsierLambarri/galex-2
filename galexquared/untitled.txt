@@ -1,54 +1,116 @@
-import numpy as np
-from scipy.spatial import KDTree
-from unyt import unyt_array, unyt_quantity
-from copy import copy
+def compute_stars_in_halo(self, 
+                              verbose=False,
+                              **kwargs
+                             ):
+        """Computes the stars that form a galaxy inside a given halo using the recipe of Jenna Samuel et al. (2020). 
+        For this one needs a catalogue of halos (e.g. Rockstar). The steps are the following:
+    
+            1. All the stars inside the min(0.8*Rvir, 30) kpccm of the host halo are considered as 
+               candidates to form the given galaxy.
+            2. The stars with relative speed bigger than 2*V_{circ, max} (usually a quantity computed in the
+               catalogues) are removed.
+            3. An iterative process is started where:
+                  (i) All the particles outside of 1.5*R90 (radius where m(R)/M_T = 0.9) are removed. We take into 
+                      account both the stars cm and the halo center.
+                 (ii) We remove all the particles that have velocities 2*sigma above the mean.
+                (iii) A convergence criterion of deltaM*/M*<0.01 is stablished.
+    
+            4. We only keep the galaxy if it has more than six stellar particles.
+    
+        OPTIONAL Parameters
+        ----------
+        verbose : bool
+            Wether to verbose or not. Default: False.        
 
-from .config import config
-from .base import BaseHaloObject
-from .class_methods import (
-                            gram_schmidt, 
-                            vectorized_base_change, 
-                            center_of_mass_pos, 
-                            center_of_mass_vel, 
-                            refine_6Dcenter, 
-                            half_mass_radius, 
-                            easy_los_velocity,
-                            softmax,
-                            density_profile,
-                            velocity_profile,
-                            random_vector_spherical
-                            )
+        KEYWORD Parameters
+        ----------
+        center, center_vel : unyt_array
+            Dark Matter halo center and center velocity.
+        rvir : unyt_quantity
+            virial radius
+        vmax : unyt_quantity
+            Maximum circular velocity of the halo
+        vrms : unyt_quantity
+            Disperion velocity of the halo
+        max_radius : tuple[float, str] 
+            Max radius to consider stellar particles. Default: 30 'kpc'
+        imax : int
+            Maximum number of iterations. Default: 200
+            
+        
+            
+        Returns
+        -------
+        indices : array
+            Array of star particle indices belonging to the halo.
+        mask : boolean-array
+            Boolean array for masking quantities
+        delta_rel : float
+            Obtained convergence for selected total mass after imax iterations. >1E-2.
+        """ 
+        halo_params = {
+            'center': self._shared_attrs["darkmatter"]["rockstar_center"],
+            'center_vel': self._shared_attrs["darkmatter"]["rockstar_vel"],
+            'rvir': self._shared_attrs["darkmatter"]["rvir"],
+            'vmax': self._shared_attrs["darkmatter"]["vmax"],
+            'vrms': self._shared_attrs["darkmatter"]["vrms"]                                                             
+        }
+        
+        for key in halo_params.keys():
+            halo_params[key] = halo_params[key] if key not in kwargs.keys() else kwargs[key]
+        
+        
+        _, mask, delta_rel = compute_stars_in_halo(
+            self.coords,
+            self.masses,
+            self.vels,
+            self.IDs,
+            halo_params=halo_params,
+            max_radius=(30, 'kpc') if "max_radius" not in kwargs.keys() else kwargs["max_radius"],
+            imax=200 if "imax" not in kwargs.keys() else int(kwargs["imax"]),
+            verbose=verbose
+        )
+        
+        self._starry_mask = mask
+        self.delta_rel = delta_rel
+        self.bound_method = "starry-halo"
+        
+        for key in list(self._fields_loaded.keys()):  
+            if key.startswith("b"):
+                del self._fields_loaded[key]
+                
+        return None        
 
 
-class Component(BaseHaloObject):
+
+
+class DarkComponent(BaseHaloObject, BaseComponent):
     """ptype class that contains the particle data, for each particle type present/relevant to your analysis, in the simulation. 
     Fields are stored as attributes and have units thanks to unyt. The class might have as much fields as wished by the user,
     but a few are mandatory:
         
     Mandatory fields
     ----------------
-    - coordinates : stored as c
-    - velocities : stored as v
-    - masses : stored as self["mass"]
+    - coordinates : stored as self.coords
+    - velocities : stored as self.vels
+    - masses : stored as self.masses
     - IDs : stored as self.ids
-    """ 
+    """
     def __init__(self,
                  data,
-                 tag,
                  **kwargs
                  ):
         """Initializes the ptype class.
         """
-        super().__init__()
-
-        self.ptype, self._base_ptype = tag, self.ptypes[tag]
+        super().__init__()        
+        self.ptype, self._base_ptype = "darkmatter", self.ptypes["darkmatter"]
         self._data = data
-        self._ds = data.ds
+        
         self.clean_shared_attrs(self.ptype)
         self.set_shared_attrs(self.ptype, kwargs)
         
         del self.ptypes
-        
+          
     @property
     def q(self):
         return self.get_shared_attr(self.ptype, cat="quantities")
@@ -56,13 +118,107 @@ class Component(BaseHaloObject):
     def m(self):
         return self.get_shared_attr(self.ptype, cat="moments")
 
+
+
     def __getitem__(self, key):
         """Retrieve the value for the given key, dynamically computing it if it's a dynamic field.
         """
-        if key in ["coordinates", "velocity"]:
-            return vectorized_base_change(np.linalg.inv(self.basis), self._data[self._base_ptype, key])
+        return self._data[self._base_ptype, key]
+    
+    def info(self, 
+             get_str=False
+            ):
+        """Returns a pretty information summary.
+        
+        Parameters
+        ----------
+        get_str : bool
+            Return str instead of print. Default: False
+
+        Returns
+        -------
+        info : str, optionally
+
+        """
+        output = []
+        
+        output.append(f"\n{self.ptype}")
+        output.append(f"{'':-<21}")
+        try:
+            output.append(f"{'len_pos':<20}: {len(self.coords)}")
+            output.append(f"{'pos[0]':<20}: [{self.coords[0,0].value:.2f}, {self.coords[0,1].value:.2f}, {self.coords[0,2].value:.2f}] {self.units['length']}")
+            output.append(f"{'len_vel':<20}: {len(self.vels)}")
+            output.append(f"{'vel[0]':<20}: [{self.vels[0,0].value:.2f}, {self.vels[0,1].value:.2f}, {self.vels[0,2].value:.2f}] {self.units['velocity']}")
+            output.append(f"{'len_mass':<20}: {len(self.masses)}")
+            output.append(f"{'mass[0]':<20}: {self.masses[0]}")
+            output.append(f"{'len_ids':<20}: {len(self.IDs)}")
+            output.append(f"{'ID[0]':<20}: {self.IDs[0].value}")
+            
+        except:
+            output.append(f"{'len_pos':<20}: {len(self.coords)}")
+            output.append(f"{'len_vel':<20}: {len(self.coords)}")
+            output.append(f"{'len_mass':<20}: {len(self.coords)}")
+            output.append(f"{'len_ids':<20}: {len(self.coords)}")
+
+        output.append(f"{'cm':<20}: {self.cm}")
+        output.append(f"{'vcm':<20}: {self.vcm}")
+        
+        output.append(f"{'rh, rh3D':<20}: {self.rh}, {self.rh3d}")
+        output.append(f"{'rvir, rs, c':<20}: {self.rvir}, {self.rs}, {self.c}")
+
+        if get_str:
+            return "\n".join(output)
         else:
-            return self._data[self._base_ptype, key]
+            print("\n".join(output))
+            return None
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class GasComponent(BaseHaloObject, BaseComponent):
+    """
+    """
+    def __init__(self,
+                 data,
+                 **kwargs
+                 ):
+        """Initializes the ptype class.
+        """
+        super().__init__()
+        self.ptype, self._base_ptype = "gas", self.ptypes["gas"]
+        self._data = data
+
+        self.clean_shared_attrs(self.ptype)
+        self.set_shared_attrs(self.ptype, kwargs)
+
+        del self.ptypes
+
+    @property
+    def q(self):
+        return self.get_shared_attr(self.ptype, cat="quantities")
+    @property
+    def m(self):
+        return self.get_shared_attr(self.ptype, cat="moments")
+
+
+
+    def __getitem__(self, key):
+        """Retrieve the value for the given key, dynamically computing it if it's a dynamic field.
+        """
+        return self._data[self._base_ptype, key]
 
     def info(self, 
              get_str=False
@@ -79,68 +235,82 @@ class Component(BaseHaloObject):
         info : str, optionally
 
         """
-        c = self["coordinates"]
-        m = self["mass"]
-        v = self["velocity"]
-        
-        
         output = []
         
         output.append(f"\n{self.ptype}")
         output.append(f"{'':-<21}")
-        output.append(f"{'len':<20}: {len(c)}")
-        output.append(f"{'pos[0]':<20}: [{c[0,0].value:.2f}, {c[0,1].value:.2f}, {c[0,2].value:.2f}] {c.units}")
-        output.append(f"{'vel[0]':<20}: [{v[0,0].value:.2f}, {v[0,1].value:.2f}, {v[0,2].value:.2f}] {v.units}")
-        output.append(f"{'mass[0]':<20}: {m[0]} {m.units}")
+        try:
+            output.append(f"{'len_pos':<20}: {len(self.coords)}")
+            output.append(f"{'pos[0]':<20}: [{self.coords[0,0].value:.2f}, {self.coords[0,1].value:.2f}, {self.coords[0,2].value:.2f}] {self.units['length']}")
+            output.append(f"{'len_vel':<20}: {len(self.vels)}")
+            output.append(f"{'vel[0]':<20}: [{self.vels[0,0].value:.2f}, {self.vels[0,1].value:.2f}, {self.vels[0,2].value:.2f}] {self.units['velocity']}")
+            output.append(f"{'len_mass':<20}: {len(self.masses)}")
+            output.append(f"{'mass[0]':<20}: {self.masses[0]}")
+            output.append(f"{'len_ids':<20}: {len(self.IDs)}")
             
-        output.append(f"{'cm':<20}: {self.p['cm']}")
-        output.append(f"{'vcm':<20}: {self.p['vcm']}")
-        output.append(f"{'rh, rh3d':<20}: {self.p['rh']}, {self.p['rh3d']}")
-        if self.ptype == "darkmatter":
-            output.append(f"{'rs, rvir':<20}: {self.p['rs']}, {self.p['rvir']}")
-            output.append(f"{'vmax, sigma':<20}: {self.p['vmax']}, {self.m['sigma']}")
-        if self.ptype == "stars":
-            output.append(f"{'sigma, sigma_los':<20}: {self.m['sigma']}, {self.m['sigma_los']}")
-            output.append(f"{'avg ML':<20}: {self.p['ML']}")
-            
+        except:
+            output.append(f"{'len_pos':<20}: {len(self.coords)}")
+            output.append(f"{'len_vel':<20}: {len(self.coords)}")
+            output.append(f"{'len_mass':<20}: {len(self.coords)}")
+
+        output.append(f"{'cm':<20}: {self.cm}")
+        output.append(f"{'vcm':<20}: {self.vcm}")
+        output.append(f"{'rh, rh3D':<20}: {self.rh}, {self.rh3d}")
+
         if get_str:
             return "\n".join(output)
         else:
             print("\n".join(output))
             return None
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class BaseComponent:
+    """BaseParticleType class that implements common methods and attributes for particle ensembles. These methods and attributes
+    are accesible for all particle types and hence this class acts as a bridge between stars, darkmatter and gas, allowing 
+    them to access properties of one another. This makes sense, as particles types in cosmological simulations are coupled to
+    each other.
+    
+    It also simplifies the code, as a plethora of common methods are displaced to here.
+    """
     
     def _default_center_of_mass(self):
         """Computes coarse CoM using all the particles as 
 
                 CoM = sum(mass * pos) / sum(mass)        
         """
-        self.empty = True
-        tmp_cm, tmp_vcm = None, None
-        
-        if self["mass"].sum() != 0:
-            tmp_cm = center_of_mass_pos(self["coordinates"], self["mass"])
-            tmp_vcm = center_of_mass_vel(
-                self["coordinates"], 
-                self["mass"],
-                self["velocity"],
+        if self.masses.sum() != 0:
+            self.cm = center_of_mass_pos(
+                self.coords, 
+                self.masses
+            )
+            self.vcm = center_of_mass_vel(
+                self.coords, 
+                self.masses,
+                self.vels,
                 R=(1E4, "Mpc")
-            )            
-            self.empty = False
-            
-        self.update_shared_attr(
-            self.ptype,
-            "cm",
-            tmp_cm
-        )
-        self.update_shared_attr(
-            self.ptype,
-            "vcm",
-            tmp_vcm            
-        )
+            )
+        else:
+            self.empty = True
+            self.cm = None 
+            self.vcm = None
         return None
 
 
-    def _knn_distance(self, center_point, k):
+
+    
+    def knn_distance(self, center_point, k):
         """Returns the distance from center_point to the k nearest neighbour.
 
         Parameters
@@ -153,13 +323,11 @@ class Component(BaseHaloObject):
         Returns
         -------
         dist : foat
-        """   
-        if not self.empty:
-            self._KDTree = KDTree(self["coordinates"])        
-            distances, _ = tree.query(center_point, k=k)
-            return distances[-1] * self["coordinates"].units
-        else:
-            return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no center-of-mass to refine!")
+        """        
+        self._KDTree = KDTree(self.coords)        
+        distances, _ = tree.query(center_point, k=k)
+        
+        return distances[-1] * self.coords.units
 
         
     def set_line_of_sight(self, los):
@@ -183,16 +351,12 @@ class Component(BaseHaloObject):
         coordinate basis.
         """
         self._set_los(los)
-        self.update_shared_attr(
-            self.ptype,
-            "cm",
-            self._old_to_new_base @ self.p["cm"] if self.p["cm"] is not None else None
-        )
-        self.update_shared_attr(
-            self.ptype,
-            "vcm",
-            self._old_to_new_base @ self.p["vcm"] if self.p["vcm"] is not None else None
-        )
+        self._delete_vectorial_fields()
+        if self.cm is not None:
+            self.cm = self._old_to_new_base @ self.cm
+        if self.vcm is not None:
+            self.vcm = self._old_to_new_base @ self.vcm
+
         return None
 
         
@@ -200,6 +364,7 @@ class Component(BaseHaloObject):
                          method="adaptative",
                          **kwargs
                         ):
+        
         """Refined center-of-mass position and velocity estimation. 
 
         The center of mass of a particle distribution is not well estimated by the full particle ensemble, since the outermost particles
@@ -239,61 +404,54 @@ class Component(BaseHaloObject):
         v_scale : float
             Last Radius scale-factor for velocity estimation. Default: 1.5.
             
+
         Returns
         -------
-        cm, vcm : array
+        cm : array
             Refined Center of mass and various quantities.
         """
         if self.empty:
             return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no center-of-mass to refine!")
             
-        if (method.lower() == "pot-most-bound") and (self.bound_method is not None):
+        if method.lower() == "pot-most-bound":
+            bound_mask = self.E < 0
             f = 0.1 if "f" not in kwargs.keys() else kwargs["f"]
             nbound = 32 if "nbound" not in kwargs.keys() else kwargs["nbound"]
             
-            N = int(np.rint(np.minimum(f * len(self["E"]), nbound)))
-            most_bound_ids = np.argsort(self["E"])[:N]
-            most_bound_mask = np.zeros(len(self["E"]), dtype=bool)
+            N = int(np.rint(np.minimum(f * np.count_nonzero(bound_mask), nbound)))
+            most_bound_ids = np.argsort(self.E)[:N]
+            most_bound_mask = np.zeros(len(self.E), dtype=bool)
             most_bound_mask[most_bound_ids] = True
             
-            tmp_cm = np.average(self["coordinates"][most_bound_mask], axis=0, weights=self["mass"][most_bound_mask])
-            tmp_vcm = np.average(self["velocity"][most_bound_mask], axis=0, weights=self["mass"][most_bound_mask]) 
+            self.cm = np.average(self.coords[most_bound_mask], axis=0, weights=self.masses[most_bound_mask])
+            self.vcm = np.average(self.vels[most_bound_mask], axis=0, weights=self.masses[most_bound_mask]) 
             
-        elif method.lower() == "pot-softmax" and (self.bound_method is not None):
+        elif method.lower() == "pot-softmax":
+            bound_mask = self.E < 0
             T = "adaptative" if "T" not in kwargs.keys() else kwargs["T"]
             
-            w = self["E"]/self["E"].min()
+            w = self.E[bound_mask]/self.E[bound_mask].min()
             if T == "adaptative":
-                T = np.abs(self["kin"].mean()/self["E"].min())
+                T = np.abs(self.kin[bound_mask].mean()/self.E[bound_mask].min())
                 
-            tmp_cm = np.average(self["coordinates"], axis=0, weights=softmax(w, T))
-            tmp_vcm = np.average(self["velocity"], axis=0, weights=softmax(w, T))               
+            self.cm = np.average(self.coords[bound_mask], axis=0, weights=softmax(w, T))
+            self.vcm = np.average(self.vels[bound_mask], axis=0, weights=softmax(w, T))               
+
 
         else:
             self._centering_results = refine_6Dcenter(
-                self["coordinates"],
-                self["mass"],
-                self["velocity"],
+                self.bcoords,
+                self.bmasses,
+                self.bvels,
                 method=method,
                 **kwargs
             )
     
-            tmp_cm = self._centering_results['center']
-            tmp_vcm = self._centering_results['velocity']
-
-        self.update_shared_attr(
-            self.ptype,
-            "cm",
-            tmp_cm
-        )
-        self.update_shared_attr(
-            self.ptype,
-            "vcm",
-            tmp_vcm            
-        )        
-        return tmp_cm, tmp_vcm
+            self.cm = self._centering_results['center']
+            self.vcm = self._centering_results['velocity']
+        return self.cm, self.vcm
     
-    def half_mass_radius(self, mfrac=0.5, project=False):
+    def half_mass_radius(self, mfrac=0.5, project=False, only_bound=True):
         """By default, it computes 3D half mass radius of a given particle ensemble. If the center of the particles 
         is not provided, it is estimated by first finding the median of positions and then computing a refined CoM using
         only the particles inside r < 0.5*rmax.
@@ -315,31 +473,36 @@ class Component(BaseHaloObject):
         """
         if self.empty:
             return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no half mass radius to compute!")
-        else:        
-            tmp_rh = half_mass_radius(
-                self["coordinates"], 
-                self["mass"], 
-                self.p["cm"], 
+            
+        if only_bound:
+            if True in self._bmask:
+                rh = half_mass_radius(
+                    self.bcoords, 
+                    self.bmasses, 
+                    self.cm, 
+                    mfrac, 
+                    project=project
+                )
+            else:
+                return AttributeError(f"Compoennt {self.ptype} has no bound mass! and therefore there is no half-mass radius to compute!")
+        else:
+            rh = half_mass_radius(
+                self.coords, 
+                self.masses, 
+                self.cm, 
                 mfrac, 
                 project=project
             )
         
         if project:
-            self.update_shared_attr(
-                self.ptype,
-                "rh",
-                tmp_rh            
-            ) 
+            self.rh = rh
         else:
-            self.update_shared_attr(
-                self.ptype,
-                "rh3d",
-                tmp_rh            
-            )             
-        return tmp_rh
+            self.rh3d = rh
+            
+        return rh
 
 
-    def los_dispersion(self, rcyl=(1, 'kpc'), return_projections=False):
+    def los_dispersion(self, rcyl=(1, 'kpc'), return_projections=False, only_bound=False):
         """Computes the line of sight velocity dispersion:  the width/std of f(v)dv of particles iside rcyl along the L.O.S. This is NOT the
         same as the dispersion velocity (which would be the rms of vx**2 + vy**2 + vz**2). All particles are used, including non-bound ones,
         given that observationally they are indistinguishable.
@@ -359,16 +522,16 @@ class Component(BaseHaloObject):
         if self.empty:
             return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no line of sight velocity to compute")
 
-        mask = np.linalg.norm(self["coordinates"][:, 0:2] - self.cm[0:2], axis=1) < unyt_array(*rcyl)
+        mask = np.linalg.norm(self.coords[:, 0:2] - self.cm[0:2], axis=1) < unyt_array(*rcyl)
 
         if only_bound:
             if True in self._bmask:
-                los_velocities = easy_los_velocity(self["velocity"][mask & self._bmask], self.los)
+                los_velocities = easy_los_velocity(self.vels[mask & self._bmask], self.los)
             else:
                 return AttributeError(f"Compoennt {self.ptype} has no bound mass! and therefore there is no line of sight velocity to compute!")
 
         else:
-            los_velocities = easy_los_velocity(self["velocity"][mask], self.los)
+            los_velocities = easy_los_velocity(self.vels[mask], self.los)
 
         
         losvel = np.std(los_velocities)
@@ -378,7 +541,7 @@ class Component(BaseHaloObject):
         else:
             return losvel
 
-    def enclosed_mass(self, r0, center):
+    def enclosed_mass(self, r0, center, only_bound=False):
         """Computes the enclosed mass on a sphere centered on center, and with radius r0.
 
         Parameters
@@ -392,13 +555,18 @@ class Component(BaseHaloObject):
         -------
         encmass : unyt_quantity
         """
-        
         if self.empty:
             return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no enclosed mass to compute!")
             
+        if only_bound:
+            if True in self._bmask:
+                mask = np.linalg.norm(self.bcoords - center, axis=1) <= r0
+                return self.bmasses[mask].sum()
+            else:
+                return AttributeError(f"Compoennt {self.ptype} has no bound mass! and therefore there is no enclosed mass to compute!")
         else:
-            mask = np.linalg.norm(self["coordinates"] - center, axis=1) <= r0
-            return self["mass"][mask].sum()
+            mask = np.linalg.norm(self.coords - center, axis=1) <= r0
+            return self.masses[mask].sum()
 
     
     def density_profile(self, 
@@ -446,9 +614,9 @@ class Component(BaseHaloObject):
 
             pos = vectorized_base_change(
                 np.linalg.inv(self.basis), 
-                sp[self._base_ptype, self._dynamic_fields["coords"]].in_units(self["coordinates"].units)
+                sp[self._base_ptype, self._dynamic_fields["coords"]].in_units(self.coords.units)
             )
-            mass = sp[self._base_ptype, self._dynamic_fields["masses"]].in_units(self["mass"].units)
+            mass = sp[self._base_ptype, self._dynamic_fields["masses"]].in_units(self.masses.units)
             
         else:
             if pc == "bound":
@@ -458,8 +626,8 @@ class Component(BaseHaloObject):
                     pos = self.bcoords
                     mass = self.bmasses
             elif pc == "all":
-                pos = self["coordinates"]
-                mass = self["mass"]
+                pos = self.coords
+                mass = self.masses
                 
         
         if center is None:
@@ -558,11 +726,11 @@ class Component(BaseHaloObject):
                 
             pos = vectorized_base_change(
                 np.linalg.inv(self.basis), 
-                sp[self._base_ptype, self._dynamic_fields["coords"]].in_units(self["coordinates"].units)
+                sp[self._base_ptype, self._dynamic_fields["coords"]].in_units(self.coords.units)
             )
             vels = vectorized_base_change(
                 np.linalg.inv(self.basis), 
-                sp[self._base_ptype, self._dynamic_fields["vels"]].in_units(self["velocity"].units)
+                sp[self._base_ptype, self._dynamic_fields["vels"]].in_units(self.vels.units)
             )
         else:
             if pc == "bound":
@@ -572,8 +740,8 @@ class Component(BaseHaloObject):
                     pos = self.bcoords
                     vels = self.bvels
             elif pc == "all":
-                pos = self["coordinates"]
-                vels = self["velocity"]
+                pos = self.coords
+                vels = self.vels
 
         
         
@@ -658,31 +826,7 @@ class Component(BaseHaloObject):
 
 
    
-            
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        
 
 
 

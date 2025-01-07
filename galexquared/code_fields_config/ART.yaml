@@ -8,43 +8,17 @@ base_units:
 
 stars: 
     pt: stars
-    fields: 
-        IDs: particle_index
-        coords: particle_position
-        vels: particle_velocity
-        masses: particle_mass
-        masses_ini: particle_mass_initial
-        metallicities: particle_metallicity_Zsun
-        softs: particle_softening
+
         
     
 darkmatter:
     pt: darkmatter
-    fields:
-        IDs: particle_index
-        coords: particle_position
-        vels: particle_velocity
-        masses: particle_mass
-        softs: particle_softening
+
 
     
 gas:
     type: MESH
     pt: gas
-    fields: 
-        volume: cell_volume
-        coords: cell_position
-        softs: cell_length
-        vels: cell_velocity
-        masses: cell_mass
-        dens: density
-        temperatures: temperature
-        thermal_energy: cell_thermal_energy
-        metallicities: correct_metallicity_Zsun
-        XH: H_mass_fraction
-        XHe: He_mass_fraction
-        XFe: Fe_mass_fraction
-        XM: correct_metal_mass_fraction
-            
+
 
     

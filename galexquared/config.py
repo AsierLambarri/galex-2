@@ -46,35 +46,21 @@ class Config:
             Particle types present.
         """
         self._package_dir = str(Path(__file__).resolve().parent)
-        self.loader = Config.default_loader
-        self.parser = Config.default_parser
-        self.base_units = None
-        self.fields = None
-        self.working_units = {
-            'dimensionless': 'dimensionless',
-            'mass': "Msun",
-            'time': "Gyr",
-            'length': "kpc",
-            'velocity': "km/s",
-            'comoving': False
-        }
-        self.ptypes = None
-
         self._code = None
+        self._ds = None
 
-        self.ds = None
+        self.loader = yt.load            
+        self.parser = Config.default_parser
 
     @property
     def code(self):
-        """Getter for the code attribute.
-        """
         return self._code
 
     @code.setter
     def code(self, value):
         """Sets base_units, ptypes and fields according to yaml configuration files for each code type.
         """
-        if self._code != value.upper():  # Only execute logic if the value changes
+        if self._code != value.upper(): 
             self._code = value.upper()
             self._load_code_config()
         else:
@@ -91,36 +77,27 @@ class Config:
         with open(self._package_dir + "/code_fields_config/" + self._code + ".yaml", 'r') as f:
             config_data = yaml.safe_load(f)
 
-            #self.base_units = config_data['base_units']
-            #self.ptypes = {
-            #    'stars': config_data['stars']['pt'],
-            #    'darkmatter': config_data['darkmatter']['pt'],
-            #    'gas': config_data['gas']['pt'],
-            #    'gas_type': config_data['gas_type']
-            #}
-            #self.fields = {
-            #    'stars': config_data['stars']['fields'],
-            #    'darkmatter': config_data['darkmatter']['fields'],
-            #    'gas': config_data['gas']['fields']
-            #}
-
             self.ptypes = {}
-            self.fields = {}
             self.base_units = config_data['base_units']
             
             if 'stars' in config_data:
                 self.ptypes['stars'] = config_data['stars']['pt']
-                self.fields['stars'] = config_data['stars']['fields']
-            
             if 'darkmatter' in config_data:
                 self.ptypes['darkmatter'] = config_data['darkmatter']['pt']
-                self.fields['darkmatter'] = config_data['darkmatter']['fields']
-            
             if 'gas' in config_data:
                 self.ptypes['gas'] = config_data['gas']['pt']
-                self.fields['gas'] = config_data['gas']['fields']
-                self.fields['gas']['type'] = config_data['gas']['type']
+                self.ptypes['gas_type'] = config_data['gas']['type']
 
+        self._set_loader()
+        return None
+
+    def _set_loader(self):
+        """Sets the loader
+        """
+        if self.code == "ART":
+            self.loader = ARTI_loader
+        elif self.code == "GEAR":
+            self.loader = GEAR_loader
         return None
 
     @staticmethod
@@ -137,24 +114,11 @@ class Config:
         """
         if base_units is None:
             return None
-
+            
         for key, unit in base_units.items():
             assert unit == unyt_quantity(1, units[key]), f"{key.upper(
             )} units do not coincide to 1E-10 precision. Units read from config file is {unit} but those read from yt are {units[key]}!"
 
-    @staticmethod
-    def default_loader(fn, code=None):
-        """Default loader. Returns yt.dataset
-        """
-        if code == "ART":
-            ds = ARTI_loader(fn)
-        elif code == "GEAR":
-            ds = GEAR_loader(fn)
-        else:
-            ds = yt.load(fn)
-            
-        Config._instance.ds = ds
-        return ds
 
     @staticmethod
     def default_parser(ds, center, radius):
@@ -162,25 +126,25 @@ class Config:
         """
         sp = ds.sphere(center, radius)
 
-        units = {'time': Config.convert_unyt_quant_str(ds.time_unit),
-                 'mass':  Config.convert_unyt_quant_str(ds.mass_unit),
-                 'length': Config.convert_unyt_quant_str(ds.length_unit),
-                 'velocity':  Config.convert_unyt_quant_str(ds.velocity_unit),
-                 'comoving': str(ds.length_unit.units).split("/")[0].endswith("cm")
-                 }
-
-        metadata = {'redshift': ds.current_redshift,
-                    'scale_factor': 1 / (ds.current_redshift + 1),
-                    'time': ds.current_time,
-                    'hubble_constant': ds.cosmology.hubble_constant,
-                    'omega_matter': ds.cosmology.omega_matter,
-                    'omega_lambda': ds.cosmology.omega_lambda,
-                    'omega_radiation': ds.cosmology.omega_radiation,
-                    'omega_curvature': ds.cosmology.omega_curvature,
-                    'omega': ds.cosmology.omega_matter + ds.cosmology.omega_lambda +
-                    ds.cosmology.omega_radiation + ds.cosmology.omega_curvature
-                    }
-
+        units = {
+            'time': Config.convert_unyt_quant_str(ds.time_unit),
+            'mass':  Config.convert_unyt_quant_str(ds.mass_unit),
+            'length': Config.convert_unyt_quant_str(ds.length_unit),
+            'velocity':  Config.convert_unyt_quant_str(ds.velocity_unit),
+            'comoving': str(ds.length_unit.units).split("/")[0].endswith("cm")
+        }
+        metadata = {
+            'redshift': ds.current_redshift,
+            'scale_factor': 1 / (ds.current_redshift + 1),
+            'time': ds.current_time,
+            'hubble_constant': ds.cosmology.hubble_constant,
+            'omega_matter': ds.cosmology.omega_matter,
+            'omega_lambda': ds.cosmology.omega_lambda,
+            'omega_radiation': ds.cosmology.omega_radiation,
+            'omega_curvature': ds.cosmology.omega_curvature,
+            'omega': ds.cosmology.omega_matter + ds.cosmology.omega_lambda +
+            ds.cosmology.omega_radiation + ds.cosmology.omega_curvature
+        }
         return units, metadata, sp
 
     @staticmethod

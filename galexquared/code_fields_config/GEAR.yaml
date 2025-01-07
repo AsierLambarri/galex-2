@@ -8,40 +8,14 @@ base_units:
 
 stars: 
     pt: PartType1
-    fields: 
-        IDs: ParticleIDs
-        coords: Coordinates
-        vels: Velocities
-        masses: Masses
-        masses_ini: InitialMass
-        ages: star_age
-        metallicities: particle_metallicity_Zsun
-        softs: particle_softening
+
 
     
 darkmatter:
     pt: PartType2
-    fields: 
-        IDs: ParticleIDs
-        coords: Coordinates
-        vels: Velocities
-        masses: Masses
-        softs: particle_softening
+
 
 gas:
     type: SPH
     pt: PartType0
-    fields: 
-        IDs: ParticleIDs
-        coords: Coordinates
-        vels: Velocities
-        masses: Masses
-        hsml: SmoothingLength
-        softs: particle_softening
-        dens: Density
-        temperatures: Temperature
-        thermal_energy: thermal_energy
-        metallicities: correct_metallicity_Zsun
-        XM: correct_metal_mass_fraction
-
-        
+    

@@ -5,11 +5,11 @@ import numpy as np
 from unyt import unyt_array, unyt_quantity
 
 from .config import config
-from .base import BaseSimulationObject
-from .particle_type import StellarComponent, DarkComponent, GasComponent
+from .base import BaseHaloObject
+from .particle_type import Component
 from .class_methods import bound_particlesBH, bound_particlesAPROX, density_profile, velocity_profile, create_sph_dataset, gram_schmidt
 
-class SnapshotHalo(BaseSimulationObject):
+class SnapshotHalo(BaseHaloObject):
     """zHalo class that implements a variety of functions to analyze the internal structure of a halo at a certain redshift, and the galaxy that
     is contained within it, such as computing their respective moments (x_cm and v_cm), projected and deprojected half-mass radii, total and LOS
     velocity dispersions, surface and volumetric density profiles, computation of dynamical and M_x masses and much more!
@@ -68,7 +68,7 @@ class SnapshotHalo(BaseSimulationObject):
             "particle_type" : "particle_type"
         }
         
-        self.parse_dataset(dataset)
+        self._parse_dataset(dataset)
         self._cm, self._vcm = None, None
 
     
@@ -236,34 +236,9 @@ class SnapshotHalo(BaseSimulationObject):
             print(str_info)
             return None
 
-    def load_dataset(self):
-        """Calls the module-level loader function to load the dataset. The module-level loader can be set as
-        import pkg; pkg.loader = loader_function. Afterwards, the whole module has access to it. The function must be
-        user written (it can use anything; h5py, yt, pynbody, ...), this is done to allow for more flexibillity when
-        loading the data, as the I/O sections of the analysis pipelines are usually time consuming.
 
-        The function must accept a file-name/path and return, in an XXX structure the following quantities, at minimum:
         
-        .....
-        .....
-        .....
-
-        Additional quantities can also be passed and will be loaded with the rest (e.g. element fractions for gas, 
-        luminosities for stars, etc.).
-
-        Afterwards, only the particles that are part of the halo are selected.
-        
-        Returns
-        -------
-        dataset : returned object is of the type returned by (user) specified config.loader
-        """
-
-        assert self.loader, "The module-level loader is not set! You can set it up as: import pkg; pkg.config.loader = loader_function before you start your scripts or use the default one.\nBeware of the requirements that this loader must fulfill!"
-    
-        return self.loader(self.fn, config.code)
-        
-        
-    def parse_dataset(self, dataset):
+    def _parse_dataset(self, dataset):
         """
         Calls the module-level parser to parse the loaded dataset. This function is directly linked to the loader, sinde it works with the object
         type provided on it. If you attempt to change one, you must change both and make sure that the data is returned in the correct format 
@@ -286,11 +261,11 @@ class SnapshotHalo(BaseSimulationObject):
         Each return is saved as an attribute of the config, zHalo or zHalo.ptype instance: parsed_data is saved inside ptype, for each particle type. base_units are saved inside config and
         the metadata is saved inside zHalo.
         """
-        assert self.parser, "The module-level loader is not set! You can set it up as: import pkg; pkg.config.parser = parser_function before you start your scripts or use the default one.\nBeware of the requirements that this parser must fulfill!"
-            
-        base_units, metadata, hashable_data = self.parser(self.load_dataset() if dataset is None else dataset, 
-                                                            self.sp_center, self.sp_radius
-                                                           )    
+        assert config.parser, "The module-level loader is not set! You can set it up as: import pkg; pkg.config.parser = parser_function before you start your scripts or use the default one.\nBeware of the requirements that this parser must fulfill!"
+
+        self._ds = config.loader(self.fn) if dataset is None else dataset
+        base_units, metadata, hashable_data = config.parser(self._ds, self.sp_center, self.sp_radius)
+        
         self._data = hashable_data
         self._metadata = metadata
         for meta, value in metadata.items():
@@ -304,7 +279,7 @@ class SnapshotHalo(BaseSimulationObject):
                         'omega_curvature',
                         'omega']:
                 
-                setattr(self, '_'+meta, value)
+                setattr(self, '_' + meta, value)
             else:
                 setattr(self, meta, value)
 
@@ -312,13 +287,9 @@ class SnapshotHalo(BaseSimulationObject):
         if self.base_units is None:
             self.base_units = base_units
         
-        self.stars = StellarComponent(hashable_data, **self._kwargs)
-        self.darkmatter = DarkComponent(hashable_data, **self._kwargs)
-        self.gas = GasComponent(hashable_data, **self._kwargs)
-
-        self.stars._sp_center, self.stars._sp_radius = self.sp_center, self.sp_radius
-        self.darkmatter._sp_center, self.darkmatter._sp_radius = self.sp_center, self.sp_radius
-        self.gas._sp_center, self.gas._sp_radius = self.sp_center, self.sp_radius
+        self.stars = Component(hashable_data, "stars",**self._kwargs)
+        self.darkmatter = Component(hashable_data, "darkmatter",**self._kwargs)
+        self.gas = Component(hashable_data, "gas",**self._kwargs)
         return None
         
         
