@@ -50,7 +50,6 @@ class Config:
         self._ds = None
 
         self.loader = yt.load            
-        self.parser = Config.default_parser
 
     @property
     def code(self):
@@ -101,53 +100,6 @@ class Config:
         return None
 
     @staticmethod
-    def check_consistent_units(base_units, units):
-        """Checks if base_units == units for consistency when loading and parsing data with yt and using code_fields_config files.
-        Parameters
-        ----------
-        units : dict[str : str]
-            Units to check agains units saved in self.base_units
-
-        Returns
-        -------
-        None
-        """
-        if base_units is None:
-            return None
-            
-        for key, unit in base_units.items():
-            assert unit == unyt_quantity(1, units[key]), f"{key.upper(
-            )} units do not coincide to 1E-10 precision. Units read from config file is {unit} but those read from yt are {units[key]}!"
-
-
-    @staticmethod
-    def default_parser(ds, center, radius):
-        """Default parser: extracts data from selected region with working units, and gets relevant metadata
-        """
-        sp = ds.sphere(center, radius)
-
-        units = {
-            'time': Config.convert_unyt_quant_str(ds.time_unit),
-            'mass':  Config.convert_unyt_quant_str(ds.mass_unit),
-            'length': Config.convert_unyt_quant_str(ds.length_unit),
-            'velocity':  Config.convert_unyt_quant_str(ds.velocity_unit),
-            'comoving': str(ds.length_unit.units).split("/")[0].endswith("cm")
-        }
-        metadata = {
-            'redshift': ds.current_redshift,
-            'scale_factor': 1 / (ds.current_redshift + 1),
-            'time': ds.current_time,
-            'hubble_constant': ds.cosmology.hubble_constant,
-            'omega_matter': ds.cosmology.omega_matter,
-            'omega_lambda': ds.cosmology.omega_lambda,
-            'omega_radiation': ds.cosmology.omega_radiation,
-            'omega_curvature': ds.cosmology.omega_curvature,
-            'omega': ds.cosmology.omega_matter + ds.cosmology.omega_lambda +
-            ds.cosmology.omega_radiation + ds.cosmology.omega_curvature
-        }
-        return units, metadata, sp
-
-    @staticmethod
     def convert_unyt_quant_str(un):
         """Converts a unyt_quantity into a string of format value * unit, taking into account that
         unit may be composite.
@@ -170,10 +122,51 @@ class Config:
 
         return u
 
+    #@staticmethod
+    #def default_parser(ds, center, radius):
+    #    """Default parser: extracts data from selected region with working units, and gets relevant metadata
+    #    """
+    #    sp = ds.sphere(center, radius)
+    #
+    #    units = {
+    #        'time': Config.convert_unyt_quant_str(ds.time_unit),
+    #        'mass':  Config.convert_unyt_quant_str(ds.mass_unit),
+    #        'length': Config.convert_unyt_quant_str(ds.length_unit),
+    #        'velocity':  Config.convert_unyt_quant_str(ds.velocity_unit),
+    #        'comoving': str(ds.length_unit.units).split("/")[0].endswith("cm")
+    #    }
+    #    metadata = {
+    #        'redshift': ds.current_redshift,
+    #        'scale_factor': 1 / (ds.current_redshift + 1),
+    #        'time': ds.current_time,
+    #        'H0': ds.cosmology.hubble_constant,
+    #        'omega_matter': ds.cosmology.omega_matter,
+    #        'omega_lambda': ds.cosmology.omega_lambda,
+    #        'omega_radiation': ds.cosmology.omega_radiation,
+    #        'omega_curvature': ds.cosmology.omega_curvature,
+    #        'omega': ds.cosmology.omega_matter + ds.cosmology.omega_lambda +
+    #        ds.cosmology.omega_radiation + ds.cosmology.omega_curvature
+    #    }
+    #    return units, metadata, sp
 
-
-
-
+    #@staticmethod
+    #def check_consistent_units(base_units, units):
+    #    """Checks if base_units == units for consistency when loading and parsing data with yt and using code_fields_config files.
+    #    Parameters
+    #    ----------
+    #    units : dict[str : str]
+    #        Units to check agains units saved in self.base_units
+    #
+    #    Returns
+    #    -------
+    #    None
+    #    """
+    #    if base_units is None:
+    #        return None
+    #        
+    #    for key, unit in base_units.items():
+    #        assert unit == unyt_quantity(1, units[key]), f"{key.upper(
+    #        )} units do not coincide to 1E-10 precision. Units read from config file is {unit} but those read from yt are {units[key]}!"
 
 
 config = Config()

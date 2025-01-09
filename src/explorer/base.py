@@ -510,7 +510,7 @@ class BaseComponent:
         if self.empty:
             return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no line of sight velocity to compute")
 
-        mask = np.linalg.norm(self.coords[:, 0:2] - self.cm[0:2], axis=1) < unyt_array(*rcyl)
+        mask = np.linalg.norm(self.coords[:, 1:] - self.cm[1:], axis=1) < unyt_array(*rcyl)
 
         if only_bound:
             if True in self._bmask:
@@ -519,7 +519,7 @@ class BaseComponent:
                 return AttributeError(f"Compoennt {self.ptype} has no bound mass! and therefore there is no line of sight velocity to compute!")
 
         else:
-            los_velocities = easy_los_velocity(self.vels[mask], self.los)
+            los_velocities = easy_los_velocity(self.vels[mask], [1,0,0])
 
         
         losvel = np.std(los_velocities)

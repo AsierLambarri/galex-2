@@ -1,8 +1,6 @@
 import numpy  as np
 from scipy.stats import binned_statistic
 
-from .utils import easy_los_velocity
-
 def density_profile(pos, 
                     mass, 
                     center = None, 
@@ -259,7 +257,7 @@ def _projected_velocity_profile(pos,
             particle_count = np.sum(mask)
             particle_counts.append(particle_count)
 
-
+        
         rcoords = R_aperture * coords.units
         vstat = np.array(cumulative_stats)
         npart = np.array(particle_counts)

@@ -84,6 +84,80 @@ def compute_stars_in_halo(self,
 
 
 
+        else:        
+            tmp_rh = half_mass_radius(
+                self["coordinates"], 
+                self["mass"], 
+                self.q["cm"], 
+                mfrac, 
+                project=project
+            )
+        
+        if project:
+            self.update_shared_attr(
+                self.ptype,
+                "rh",
+                tmp_rh            
+            ) 
+        else:
+            self.update_shared_attr(
+                self.ptype,
+                "rh3d",
+                tmp_rh            
+            )             
+        return tmp_rh
+
+
+
+        mask = np.linalg.norm(self["coordinates"][:, 1:] - self.q["cm"][1:], axis=1) <= unyt_quantity(*rcyl)
+        los_velocities = easy_los_velocity(self["velocity"][mask], [1,0,0])
+
+        los_disp = np.std(self["velocity"][mask][:, 0])
+        self.update_shared_attr(
+            self.ptype,
+            "sigma_los",
+            los_disp            
+        ) 
+        if return_projections:
+            return los_disp, los_velocities
+        else:
+            return los_disp
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class DarkComponent(BaseHaloObject, BaseComponent):
     """ptype class that contains the particle data, for each particle type present/relevant to your analysis, in the simulation. 
     Fields are stored as attributes and have units thanks to unyt. The class might have as much fields as wished by the user,

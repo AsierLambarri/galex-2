@@ -37,15 +37,12 @@ class SnapshotHalo(BaseHaloObject):
 
 
     
-
-
-
-    SOME OF THESE ARGUMENTS WILL BE INHERITED FROM A BIGGER CLASS AT SOME POINT.
     """
     def __init__(self,
                  fn,
-                 center,
-                 radius,
+                 from_catalogue=None,
+                 center=None,
+                 radius=None,
                  dataset=None,
                  **kwargs
                 ):
@@ -53,131 +50,107 @@ class SnapshotHalo(BaseHaloObject):
         """
         super().__init__()
 
-        ### File initialization information ###
         self.fn = fn
-        self.sp_center = unyt_array(center[0], center[1])
-        self.sp_radius = unyt_quantity(radius[0], radius[1])        
-        self.bound_method = None
+        if from_catalogue is not None:
+            self._cathalo = from_catalogue.iloc[0]
+            self.sp_radius = unyt_quantity(self._cathalo['virial_radius'] / (1 + self._cathalo['Redshift']), 'kpc')
+            self.sp_center = unyt_array(self._cathalo[['position_x', 'position_y', 'position_z']].values.astype(float) / (1 + self._cathalo['Redshift']), 'kpc')
+        elif center is not None and radius is not None:
+            self.sp_center = unyt_array(center[0], center[1])
+            self.sp_radius = unyt_quantity(radius[0], radius[1])        
+        else:
+            raise ValueError(f"You did not provide neither (center, radius) or from_catalogue!!")
 
         self._kwargs = kwargs
-        self._fields_loaded = {}
-        self._dynamic_fields = {
-            "all_coords" : "coords",
-            "all_vels" : "vels",
-            "all_masses" : "masses",
-            "particle_type" : "particle_type"
+        self._parse_dataset(dataset)
+        self.arr = self._ds.arr
+        self.quant = self._ds.quan        
+        if from_catalogue is not None:
+            self._setup_catalogue_shared_params()
+        else:
+            self.sp_center = self.arr(center[0], center[1])
+            self.sp_radius = self.quant(radius[0], radius[1])             
+
+
+    @property
+    def p(self):
+        return self.get_shared_attr("halo", cat="properties")
+    @property
+    def q(self):
+        return self.get_shared_attr("halo", cat="quantities")
+    @property
+    def m(self):
+        return self.get_shared_attr("halo", cat="moments")
+        
+
+    def _setup_catalogue_shared_params(self):
+        """Loads the parameters present in the catalogue.
+        """
+        fields = {
+            "rockstar_center": self.arr(self._cathalo[['position_x', 'position_y', 'position_z']].values.astype(float), 'kpccm').to("kpc"),
+            "rockstar_velocity": self.arr(self._cathalo[['velocity_x', 'velocity_y', 'velocity_z']].values.astype(float), 'km/s'),
+            "rockstar_rs": self.quant(self._cathalo['scale_radius'], 'kpccm').to("kpc"),
+            "rockstar_rvir": self.quant(self._cathalo['virial_radius'], 'kpccm').to("kpc"),
+            "rockstar_vmax": self.quant(self._cathalo['vmax'], 'km/s'),
+            "rockstar_vrms": self.quant(self._cathalo['vrms'], 'km/s')
+        }
+        self.set_shared_attrs("halo", fields)
+        self.sp_center = fields["rockstar_center"]
+        self.sp_radius = fields["rockstar_rvir"]
+               
+    def _parse_dataset(self, dataset):
+        """
+        Calls the module-level parser to parse the loaded dataset. This function is directly linked to the loader, sinde it works with the object
+        type provided on it. If you attempt to change one, you must change both and make sure that the data is returned in the correct format 
+        and specified order:
+            
+                                                                 units : dict[str : str]
+                        config.parser(fn, center, radius) -----> metadata : dict[str : str | float | unyt_quantity]
+                                                                 data : hashable as data[particle_type, field]
+                                                                 
+        As the particle type names change from one scheme to another, these MUST be set by the user beforehand as: config.particles : dict[str : str], where the equivalences between
+        gas, dm and star particles are listed.
+                                                                 
+
+        Returns
+        -------
+        base_units : dict[str : str]
+        metadata : dict[str : str | float | unyt_quantity]
+        parsed_data : returned object is of the type returned by (user) specified config.parser
+        
+        Each return is saved as an attribute of the config, zHalo or zHalo.ptype instance: parsed_data is saved inside ptype, for each particle type. base_units are saved inside config and
+        the metadata is saved inside zHalo.
+        """
+        self._ds = config.loader(self.fn) if dataset is None else dataset
+        self._data = self._ds.sphere(self.sp_center, self.sp_radius)
+
+        metadata = {
+            'redshift': self._ds.current_redshift,
+            'scale_factor': 1 / (self._ds.current_redshift + 1),
+            'time': self._ds.current_time,
+            'H0': self._ds.cosmology.hubble_constant,
+            'omega_matter': self._ds.cosmology.omega_matter,
+            'omega_lambda': self._ds.cosmology.omega_lambda,
+            'omega_radiation': self._ds.cosmology.omega_radiation,
+            'omega_curvature': self._ds.cosmology.omega_curvature,
+            'omega': self._ds.cosmology.omega_matter + self._ds.cosmology.omega_lambda +
+            self._ds.cosmology.omega_radiation + self._ds.cosmology.omega_curvature
         }
         
-        self._parse_dataset(dataset)
-        self._cm, self._vcm = None, None
+        self._metadata = metadata
+     
+        self.stars = Component(self._data, "stars", **self._kwargs["stars_params"] if "stars_params" in self._kwargs else {})
+        self.darkmatter = Component(self._data, "darkmatter", **self._kwargs["dm_params"] if "dm_params" in self._kwargs else {})
+        self.gas = Component(self._data, "gas", **self._kwargs["gas_params"] if "gas_params" in self._kwargs else {})
+
+        self.set_shared_attrs("halo", self._kwargs["halo_params"] if "halo_params" in self._kwargs else None)
+        self.set_shared_attrs("halo", self._metadata)
+
+        self.stars.sp_center, self.stars.sp_radius = self.sp_center, self.sp_radius
+        self.darkmatter.sp_center, self.darkmatter.sp_radius = self.sp_center, self.sp_radius
+        self.gas.sp_center, self.gas.sp_radius = self.sp_center, self.sp_radius
 
     
-    
-    @property
-    def time(self):
-        """Cosmic time
-        """
-        if self._time is not None:
-            return self._time.in_units(f"{self.units['time']}")
-        else:
-            return None
-    @property  
-    def redshift(self):
-        """Redshift
-        """
-        return self._redshift
-    @property  
-    def scale_factor(self):
-        """scale_factor
-        """
-        return self._scale_factor
-    @property  
-    def hubble_constant(self):
-        """hubble_constant
-        """
-        return self._hubble_constant
-    @property  
-    def omega_matter(self):
-        """omega_matter
-        """
-        return self._omega_matter
-    @property  
-    def omega_lambda(self):
-        """omega_lambda
-        """
-        return self._omega_lambda
-    @property  
-    def omega_radiation(self):
-        """omega_radiation
-        """
-        return self._omega_radiation
-    @property  
-    def omega(self):
-        """omega
-        """
-        return self._omega
-    
-
-    @property
-    def cm(self):
-        return self._cm.in_units(self.units['length'])
-    @cm.setter
-    def cm(self, value):
-        if not isinstance(value, unyt_array):
-            raise ValueError("vcm must be a number unyt_array.")
-        if str(value.units.dimensions) != '(length)':
-            raise ValueError(f"Your units are not correct: {str(value.units.dimensions)} != length")
-        
-        self._cm = value
-    @property
-    def vcm(self):
-        return self._vcm.in_units(self.units['velocity'])
-    @vcm.setter
-    def vcm(self, value):
-        if not isinstance(value, unyt_array):
-            raise ValueError("vcm must be a number unyt_array.")
-        if str(value.units.dimensions) != '(length)/(time)':
-            raise ValueError(f"Your units are not correct: {str(value.units.dimensions)} != velocity")
-        
-        self._vcm = value
-
-    @property
-    def Mhl(self):
-        self.stars.half_mass_radius()
-        return self.enclosed_mass(
-            self.stars.cm,
-            self.stars.rh3d,
-            ["stars", "darkmatter", "gas"]
-        )
-    @Mhl.setter
-    def Mhl(self, value):
-        if not isinstance(value, unyt_quantity):
-            raise ValueError("vcm must be a number unyt_array.")
-        if str(value.units.dimensions) != '(mass)':
-            raise ValueError(f"Your units are not correct: {str(value.units.dimensions)} != mass")
-        
-        self._Mhl = value
-
-    
-
-    
-    def _update_kwargs(self, default_kw, new_kw):
-        """Update default kwargs with user provided kwargs.
-        """
-        for key, value in new_kw.items():
-            if isinstance(value, dict) and key in default_kw and isinstance(default_kw[key], dict):
-                self._update_kwargs(default_kw[key], value)
-            else:
-                default_kw[key] = value
-
-        self._kwargs = default_kw
-        return None
-   
-    
-    
-    
-        
-            
     def info(self, get_str = False):
         """Prints information about the loaded halo: information about the position of the halo in the simulation
         and each component; dark matter, stars and gas: CoM, v_CoM, r1/2, sigma*, and properties of the whole halo such as
@@ -208,13 +181,6 @@ class SnapshotHalo(BaseHaloObject):
         output.append(f"{'gas':<20}: {self.gas.masses.sum():.3e}")
         output.append(f"{'Mdyn':<20}: {None if self.Mhl is None else f'{self.Mhl:.3e}'}")
 
-        output.append(f"\nunits")
-        output.append(f"{'':-<21}")
-        output.append(f"{'length_unit':<20}: {self.units['length']}")
-        output.append(f"{'velocity_unit':<20}: {self.units['velocity']}")
-        output.append(f"{'mass_unit':<20}: {self.units['mass']}")
-        output.append(f"{'time_unit':<20}: {self.units['time']}")
-        output.append(f"{'comoving':<20}: {self.units['comoving']}")
 
         output.append(f"\ncoordinate basis")
         output.append(f"{'':-<21}")
@@ -235,73 +201,7 @@ class SnapshotHalo(BaseHaloObject):
         else:
             print(str_info)
             return None
-
-
-        
-    def _parse_dataset(self, dataset):
-        """
-        Calls the module-level parser to parse the loaded dataset. This function is directly linked to the loader, sinde it works with the object
-        type provided on it. If you attempt to change one, you must change both and make sure that the data is returned in the correct format 
-        and specified order:
-            
-                                                                 units : dict[str : str]
-                        config.parser(fn, center, radius) -----> metadata : dict[str : str | float | unyt_quantity]
-                                                                 data : hashable as data[particle_type, field]
-                                                                 
-        As the particle type names change from one scheme to another, these MUST be set by the user beforehand as: config.particles : dict[str : str], where the equivalences between
-        gas, dm and star particles are listed.
-                                                                 
-
-        Returns
-        -------
-        base_units : dict[str : str]
-        metadata : dict[str : str | float | unyt_quantity]
-        parsed_data : returned object is of the type returned by (user) specified config.parser
-        
-        Each return is saved as an attribute of the config, zHalo or zHalo.ptype instance: parsed_data is saved inside ptype, for each particle type. base_units are saved inside config and
-        the metadata is saved inside zHalo.
-        """
-        assert config.parser, "The module-level loader is not set! You can set it up as: import pkg; pkg.config.parser = parser_function before you start your scripts or use the default one.\nBeware of the requirements that this parser must fulfill!"
-
-        self._ds = config.loader(self.fn) if dataset is None else dataset
-        base_units, metadata, hashable_data = config.parser(self._ds, self.sp_center, self.sp_radius)
-        
-        self._data = hashable_data
-        self._metadata = metadata
-        for meta, value in metadata.items():
-            if meta in ['redshift',
-                        'scale_factor',
-                        'time',
-                        'hubble_constant',
-                        'omega_matter',
-                        'omega_lambda',
-                        'omega_radiation',
-                        'omega_curvature',
-                        'omega']:
-                
-                setattr(self, '_' + meta, value)
-            else:
-                setattr(self, meta, value)
-
-            
-        if self.base_units is None:
-            self.base_units = base_units
-        
-        self.stars = Component(hashable_data, "stars",**self._kwargs)
-        self.darkmatter = Component(hashable_data, "darkmatter",**self._kwargs)
-        self.gas = Component(hashable_data, "gas",**self._kwargs)
-        return None
-        
-        
-
-    def set_units(self, new_units):
-        """Sets units for zHalo and all particle types it contains.
-        """
-        self._set_units(new_units)
-        self.stars._set_units(new_units)
-        self.darkmatter._set_units(new_units)
-        self.gas._set_units(new_units)
-        return None
+    
         
     def set_line_of_sight(self, los):
         """Sets the line of sight to the provided value. The default value for the line of sight is the x-axis: [1,0,0].
@@ -328,12 +228,12 @@ class SnapshotHalo(BaseHaloObject):
         self.darkmatter.set_line_of_sight(los)
         self.gas.set_line_of_sight(los)
 
-        if self._cm is not None:
-            self._cm = self._old_to_new_base @ self._cm
-        if self._vcm is not None:
-            self._vcm = self._old_to_new_base @ self._vcm
-            
-        return None
+        for q in ["cm", "vcm", "rockstar_velocity", "rockstar_center"]:
+            self.update_shared_attr(
+                "halo",
+                q,
+                self._old_to_new_base @ self.q[q] if self.q[q] is not None else None
+            )       
 
     def enclosed_mass(self, center, radius, components, only_bound=False):
         """Computes the dynamical mass: the mass enclonsed inside the 3D half light radius of stars. Right now, the half-mass-radius is
@@ -419,11 +319,7 @@ class SnapshotHalo(BaseHaloObject):
         Returns
         -------
         None
-        """
-        self.stars._delete_bound_fields()
-        self.gas._delete_bound_fields()
-        self.darkmatter._delete_bound_fields()
-        
+        """        
         if components == "particles":
             components = ["stars", "darkmatter"]
         elif components == "all":
@@ -442,29 +338,27 @@ class SnapshotHalo(BaseHaloObject):
         particle_types = np.empty((0,))
 
         for component in components:
-            if getattr(self, component).empty == False:
-                getattr(self, component)._delete_bound_fields()
-                
-                N = len(getattr(self, component).masses)
+            if not getattr(self, component).empty:                
+                N = len(getattr(self, component)["mass"])
                 masses = np.concatenate((
-                    masses, getattr(self, component).masses.to("Msun")
+                    masses, getattr(self, component)["mass"].to("Msun")
                 ))
                 coords = np.vstack((
-                    coords, getattr(self, component).coords.to("kpc")
+                    coords, getattr(self, component)["coordinates"].to("kpc")
                 ))
                 vels = np.vstack((
-                    vels, getattr(self, component).vels.to("km/s")
+                    vels, getattr(self, component)["velocity"].to("km/s")
                 ))
                 softenings = np.concatenate((
-                    softenings, getattr(self, component).softs.to("kpc")
-                ))              #unyt_array(np.full(N, psoft.to("kpc")), 'kpc')
+                    softenings, getattr(self, component)["softening"].to("kpc")
+                ))              
                 particle_types = np.concatenate((
                     particle_types, np.full(N, component)
                 ))
 
         thermal_energy = unyt_array(np.zeros_like(masses).value, "Msun * km**2/s**2")
         if "gas" in components:
-            thermal_energy[particle_types == "gas"] = getattr(self, "gas").thermal_energy.to("Msun * km**2/s**2")
+            thermal_energy[particle_types == "gas"] = self.gas["thermal_energy"].to("Msun * km**2/s**2")
 
         
         
@@ -512,20 +406,85 @@ class SnapshotHalo(BaseHaloObject):
 
             )
 
-        
-        
-        self.cm = cm
-        self.vcm = vcm
-        
-        for component in components:     
-            setattr(getattr(self, component), 'E', E[particle_types == component].copy())
-            setattr(getattr(self, component), 'kin', kin[particle_types == component].copy())
-            setattr(getattr(self, component), 'pot', pot[particle_types == component].copy())
-            setattr(getattr(self, component), 'bound_method', f"grav-{method}".lower())
+        self.update_shared_attr("halo", "cm", cm)
+        self.update_shared_attr("halo", "vcm", vcm)
+       
+        if "gas" in components:
+            self._ds.add_field(
+                (self.ptypes["gas"], "E"),
+                function=lambda field, data: E[particle_types == "gas"],
+                sampling_type="local",
+                units='Msun*km**2/s**2',
+                force_override=True
+            )
+            self._ds.add_field(
+                (self.ptypes["gas"], "kin"),
+                function=lambda field, data: kin[particle_types == "gas"],
+                sampling_type="local",
+                units='Msun*km**2/s**2',
+                force_override=True
+            )
+            self._ds.add_field(
+                (self.ptypes["gas"], "pot"),
+                function=lambda field, data: pot[particle_types == "gas"],
+                sampling_type="local",
+                units='Msun*km**2/s**2',
+                force_override=True
+            )
+        if "stars" in components:
+            self._ds.add_field(
+                (self.ptypes["stars"], "E"),
+                function=lambda field, data: E[particle_types == "stars"],
+                sampling_type="local",
+                units='Msun*km**2/s**2',
+                force_override=True
+            )
+            self._ds.add_field(
+                (self.ptypes["stars"], "kin"),
+                function=lambda field, data: kin[particle_types == "stars"],
+                sampling_type="local",
+                units='Msun*km**2/s**2',
+                force_override=True
+            )
+            self._ds.add_field(
+                (self.ptypes["stars"], "pot"),
+                function=lambda field, data: pot[particle_types == "stars"],
+                sampling_type="local",
+                units='Msun*km**2/s**2',
+                force_override=True
+            )
+        if "darkmatter" in components:
+            self._ds.add_field(
+                (self.ptypes["darkmatter"], "E"),
+                function=lambda field, data: E[particle_types == "darkmatter"],
+                sampling_type="local",
+                units='Msun*km**2/s**2',
+                force_override=True
+            )
+            self._ds.add_field(
+                (self.ptypes["darkmatter"], "kin"),
+                function=lambda field, data: kin[particle_types == "darkmatter"],
+                sampling_type="local",
+                units='Msun*km**2/s**2',
+                force_override=True
+            )
+            self._ds.add_field(
+                (self.ptypes["darkmatter"], "pot"),
+                function=lambda field, data: pot[particle_types == "darkmatter"],
+                sampling_type="local",
+                units='Msun*km**2/s**2',
+                force_override=True
+            )
 
-        return None
 
-    
+
+
+
+
+
+
+
+            
     def plot(self, normal="z", catalogue=None, smooth_particles = False, **kwargs):
         """Plots the projected darkmatter, stars and gas distributions along a given normal direction. The projection direction can be changed with
         the "normal" argument. If catalogue is provided, halos of massgreater than 5E7 will be displayed on top of the darkmatter plot.
@@ -565,9 +524,9 @@ class SnapshotHalo(BaseHaloObject):
         plt.rcParams['xtick.minor.size'] = 5 
         plt.rcParams['ytick.minor.size'] = 5
         
-        ds = self._data.ds
-        center = ds.arr(self.sp_center)
-        radius = ds.quan(self.sp_radius)
+        ds = self._ds
+        center = self.arr(self.sp_center)
+        radius = self.quant(self.sp_radius)
 
         source_factor = 1.5 if "source_factor" not in kwargs.keys() else kwargs["source_factor"]
         draw_inset = True if "draw_inset" not in kwargs.keys() else kwargs["draw_inset"]
@@ -615,8 +574,19 @@ class SnapshotHalo(BaseHaloObject):
 
             sp_source_dm = ds_dm.sphere(center, source_factor*plot_radii.max())
             sp_source_st = ds_st.sphere(center, source_factor*plot_radii.max())
+        else:
+            dm_type = (self.ptypes["darkmatter"], "mass")  
+            star_type = (self.ptypes["stars"], "mass")            
 
-                
+        gas_type = (self.ptypes["gas"], "density")        
+            
+        if "cm" not in kwargs:
+            cmyt.arbre.set_bad(cmyt.arbre.get_under())
+            cm = cmyt.arbre
+        else:
+            cm = kwargs["cm"]
+
+            
         fig, axes = plt.subplots(
             len(plot_radii),
             plots,
@@ -626,9 +596,9 @@ class SnapshotHalo(BaseHaloObject):
         )
         grid = axes.flatten()
 
-        stars_cen = self.stars.cm
-        dm_cen = self.darkmatter.cm
-        gas_cen = self.gas.cm
+        stars_cen = self.basis @ self.stars.q["cm"]
+        dm_cen = self.basis @ self.darkmatter.q["cm"]
+        gas_cen = self.basis @ self.gas.q["cm"]
         plot_centers = [center, 0.5 * (stars_cen + dm_cen)]
         
         
@@ -656,7 +626,6 @@ class SnapshotHalo(BaseHaloObject):
                     frb = p.data_source.to_frb(plot_radius, 800)
     
                 else:
-                    dm_type = (self.ptypes["darkmatter"], self.fields["darkmatter"]["masses"])            
                     p = yt.ParticleProjectionPlot(ds, normal, dm_type, center=pcenter, width=plot_radius, density=True, data_source=sp_source, deposition="ngp" if "deposition" not in kwargs.keys() else kwargs["deposition"])
                     p.set_unit(dm_type, "Msun/kpc**2")
                     frb = p.frb
@@ -664,7 +633,8 @@ class SnapshotHalo(BaseHaloObject):
     
                 ax = grid[ip]
                 data = frb[dm_type]
-                pc_dm = ax.imshow(data.to("Msun/kpc**2"), cmap=cmyt.arbre, norm="log", extent=ext)
+                data[data == 0] = data[data != 0 ].min()
+                pc_dm = ax.imshow(data.to("Msun/kpc**2"), cmap=cm, norm="log", extent=ext)
                 divider = make_axes_locatable(ax)
                 cax = divider.append_axes("right", size="5%", pad=0)
                 cbar_dm = plt.colorbar(pc_dm, cax=cax)
@@ -682,7 +652,7 @@ class SnapshotHalo(BaseHaloObject):
                     ax.scatter(*tmp_stars_cen, color="red", marker="*", s=300)
                     ax.scatter(*tmp_dm_cen, color="black", marker="+", s=370)
                     ax.scatter(*tmp_gas_cen, color="orange", marker="o")
-                    rhf_circ = Circle(tmp_stars_cen.to("kpc").value, self.stars.half_mass_radius().to("kpc").value, facecolor="none", edgecolor="red")
+                    rhf_circ = Circle(tmp_stars_cen.to("kpc").value, self.stars.half_mass_radius()[0].to("kpc").value, facecolor="none", edgecolor="red")
                     ax.add_patch(rhf_circ)
                 
                 ax.set_aspect('equal')
@@ -700,9 +670,8 @@ class SnapshotHalo(BaseHaloObject):
                     p = yt.ProjectionPlot(ds_st, normal, star_type, center=pcenter, width=plot_radius, data_source=sp_source_st)
                     p.set_unit(star_type, "Msun/kpc**2")
                     frb = p.data_source.to_frb(plot_radius, 800)
-    
+
                 else:
-                    star_type = (self.ptypes["stars"], self.fields["stars"]["masses"])
                     p = yt.ParticleProjectionPlot(ds, normal, star_type, center=pcenter, width=plot_radius, density=True, data_source=sp_source, deposition="ngp" if "deposition" not in kwargs.keys() else kwargs["deposition"])
                     p.set_unit(star_type, "Msun/kpc**2")    
                     frb = p.frb
@@ -710,7 +679,8 @@ class SnapshotHalo(BaseHaloObject):
     
                 ax = grid[ip]
                 data = frb[star_type]
-                pc_st = ax.imshow(data.to("Msun/kpc**2"), cmap=cmyt.arbre, norm="log", extent=ext)
+                data[data == 0] = data[data != 0 ].min()
+                pc_st = ax.imshow(data.to("Msun/kpc**2"), cmap=cm, norm="log", vmin=data.to("Msun/kpc**2").max().value/1E4, extent=ext)
                 divider = make_axes_locatable(ax)
                 cax = divider.append_axes("right", size="5%", pad=0)
                 cbar_st = fig.colorbar(pc_st, cax=cax)
@@ -727,7 +697,7 @@ class SnapshotHalo(BaseHaloObject):
                     ax.scatter(*tmp_stars_cen, color="red", marker="*", s=300)
                     ax.scatter(*tmp_dm_cen, color="black", marker="+", s=370)
                     ax.scatter(*tmp_gas_cen, color="orange", marker="o")
-                    rhf_circ = Circle(tmp_stars_cen.to("kpc").value, self.stars.half_mass_radius().to("kpc").value, facecolor="none", edgecolor="red")
+                    rhf_circ = Circle(tmp_stars_cen.to("kpc").value, self.stars.half_mass_radius()[0].to("kpc").value, facecolor="none", edgecolor="red")
                     ax.add_patch(rhf_circ)
 
 
@@ -743,14 +713,14 @@ class SnapshotHalo(BaseHaloObject):
     
             
             if not self.gas.empty: 
-                gas_type = (self.ptypes["gas"], self.fields["gas"]["dens"])        
                 p = yt.ProjectionPlot(ds, normal, gas_type, center=pcenter, width=plot_radius, data_source=sp_source)
                 p.set_unit(gas_type, "Msun/kpc**2")
                 frb = p.data_source.to_frb(plot_radius, 800)
                 
                 ax = grid[ip]
                 density_data = frb[gas_type]
-                p_gas = ax.imshow(density_data.to("Msun/kpc**2"), cmap=cmyt.arbre, norm="log", extent=ext)
+                density_data[density_data == 0] = density_data[density_data != 0 ].min()
+                p_gas = ax.imshow(density_data.to("Msun/kpc**2"), cmap=cm, norm="log", extent=ext)
                 divider = make_axes_locatable(ax)
                 cax = divider.append_axes("right", size="5%", pad=0)
                 cbar_gas = fig.colorbar(p_gas, cax=cax)
@@ -767,7 +737,7 @@ class SnapshotHalo(BaseHaloObject):
                     ax.scatter(*tmp_stars_cen, color="red", marker="*", s=300)
                     ax.scatter(*tmp_dm_cen, color="black", marker="+", s=370)
                     ax.scatter(*tmp_gas_cen, color="orange", marker="o")
-                    rhf_circ = Circle(tmp_stars_cen.to("kpc").value, self.stars.half_mass_radius().to("kpc").value, facecolor="none", edgecolor="red")
+                    rhf_circ = Circle(tmp_stars_cen.to("kpc").value, self.stars.half_mass_radius()[0].to("kpc").value, facecolor="none", edgecolor="red")
                     ax.add_patch(rhf_circ)
 
                 
@@ -788,7 +758,7 @@ class SnapshotHalo(BaseHaloObject):
         if catalogue is not None:
             dist = np.linalg.norm(ds.arr(catalogue[['position_x', 'position_y', 'position_z']].values, 'kpccm') - center.to("kpccm"), axis=1)
             filtered_halos = catalogue[
-                (dist < plot_radii.max()*radius.to("kpc")) & 
+                (dist < plot_radii.max()) & 
                 (catalogue['mass'] > low_m) & 
                 (catalogue['mass'] < high_m) & 
                 (dist > 0.1)

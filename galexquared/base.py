@@ -10,7 +10,10 @@ from unyt import unyt_array, unyt_quantity
 
 from .config import config
 
-
+from .class_methods import (
+                            gram_schmidt, 
+                            vectorized_base_change
+                            )
 
 class BaseHaloObject:
     """BaseSimulationObject that contains information shared between all objects in a simulation.
@@ -38,7 +41,8 @@ class BaseHaloObject:
                 "vcm": None,
                 "rh": None,
                 "rh3d": None,
-                "rt": None
+                "rt": None,
+                "ML": None
             },
             "moments": {
                 "sigma_los": None
@@ -57,19 +61,46 @@ class BaseHaloObject:
             "moments": {
                 "sigma_los": None
             }            
+        },
+
+        "halo": {
+            "properties": {
+                "time": None,
+                "redshift": None,
+                "scale_factor": None,
+                "omega": None,
+                "omega_m": None,
+                "omega_r": None,
+                "omega_l": None,
+                "H0": None
+            },
+            "quantities": {
+                "rockstar_center": None,
+                "rockstar_velocity": None,
+                "rockstar_rs": None,
+                "rockstar_rvir": None,
+                "rockstar_vmax": None,
+                "cm": None,
+                "vcm": None,
+                "Mhl": None,
+            },
+            "moments": {
+                "rockstar_vrms": None
+            }
+            
         }
+        
     }
         
 
     def __init__(self):
         self._parent = None  
-        
-        self.base_units = config.base_units
         self.ptypes = config.ptypes
         
         self.los = [1, 0, 0]
         self.basis = np.identity(3)
         self._old_to_new_base = np.identity(3)
+        self.bound_method = None
 
 
     @classmethod
@@ -91,24 +122,16 @@ class BaseHaloObject:
     def set_shared_attrs(cls, pt, kwargs):
         """Set class-level shared attributes for a specific particle type.
         """
-        tmp = {
-            "darkmatter": "dm_params",
-            "stars": "stars_params",
-            "gas": "gas_params"
-        }
-
         if pt not in cls._shared_attrs:
             raise ValueError(f"Unknown particle type: {pt}")
-        if tmp[pt] not in kwargs.keys():
+        elif kwargs is None:
             pass
-        else:
-            for key, value in kwargs[tmp[pt]].items():
+        else:    
+            for key, value in kwargs.items():
                 for category in list(cls._shared_attrs[pt].keys()):
-                    if key in cls._shared_attrs[pt][category]:
+                    if key in list(cls._shared_attrs[pt][category].keys()):
                         cls._shared_attrs[pt][category][key] = cls.format_value(value)
-                    else:
-                        raise ValueError(f"Invalid shared attribute '{key}' for type '{pt}'")
-        return None
+        
     
     @classmethod
     def get_shared_attr(cls, pt, key=None, cat=None):
@@ -133,8 +156,8 @@ class BaseHaloObject:
         for category in list(cls._shared_attrs[pt].keys()):
             if  key in list(cls._shared_attrs[pt][category].keys()):
                 cls._shared_attrs[pt][category][key] = value
-            else:    
-                raise ValueError(f"Cannot update: '{key}' not valid for '{pt}'")
+                break
+        #raise ValueError(f"Cannot update: '{key}' not valid for '{pt}'")
 
     @classmethod
     def list_shared_attributes(cls, pt, category):
@@ -149,7 +172,6 @@ class BaseHaloObject:
         for category in list(cls._shared_attrs[pt].keys()):
             for key in list(cls._shared_attrs[pt][category].keys()):
                 cls._shared_attrs[pt][category][key] = None
-        return None
 
 
     

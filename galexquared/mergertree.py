@@ -10,7 +10,7 @@ from unyt import unyt_quantity
 from copy import copy, deepcopy
 
 from .class_methods import load_ftable
-from .snashot_halo import SnapshotHalo
+from .snapshot_halo import SnapshotHalo
 
 class MergerTree:
     """Easy manage of merger trees, with the specific purpose of extracting galaxies with desired parameters and qualities. Although
@@ -202,13 +202,13 @@ class MergerTree:
     def set_equivalence(self, equiv):
         """Loads and sets equivalence table.
         """
-        if isinstance(complete_tree, str):
+        if isinstance(equiv, str):
             try:
-                self._equiv = load_ftable(complete_tree)
+                self._equiv = load_ftable(equiv)
             except:
                 self._equiv = pd.read_csv(equiv)
                 
-        elif isinstance(complete_tree, pd.DataFrame):
+        elif isinstance(equiv, pd.DataFrame):
             self._equiv = equiv
 
         else:
@@ -499,22 +499,21 @@ class MergerTree:
             raise ValueError(f"There is no snapshot number <----> snapshot file equivalence table set!")
 
         if redshift is None:
-            halo = self.CompleteTree[
+            index = self.CompleteTree[
                 (self.CompleteTree["Sub_tree_id"] == sub_tree) & 
                 (self.CompleteTree["Snapshot"] == snapshot)
-            ]
+            ].index
         elif snapshot is None:
-            halo = self.CompleteTree[
+            index = self.CompleteTree[
                 (self.CompleteTree["Sub_tree_id"] == sub_tree) & 
-                (self.CompleteTree["redshift"] == closest_value(redshift, self.CompleteTree["redshift"].values))
-            ]
-            
-        fn = self.equivalence_table[self.equivalence_table['snapshot'] == halo['Snapshot']]['snapname'].values[0]
-        
-        z = halo['Redshift'].values
-        center = (halo[['position_x', 'position_y', 'position_z']].values.astype(float) / (1+z), 'kpc')
-        center_vel =  (halo[['velocity_x', 'velocity_y', 'velocity_z']].values.astype(float), 'km/s')
-        return SnapshotHalo(pdir + fn, center=center, radius=rvir)
+                (self.CompleteTree["Redshift"] == closest_value(redshift, self.CompleteTree["Redshift"].values))
+            ].index
+        halo = self.CompleteTree.loc[index]
+        fn = self.equivalence_table[self.equivalence_table['snapshot'].values == halo['Snapshot'].values]['snapname'].values[0]
+        return SnapshotHalo(
+            pdir + fn, 
+            from_catalogue=halo
+        )
 
 
 

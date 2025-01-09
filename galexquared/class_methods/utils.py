@@ -134,7 +134,37 @@ def softmax(vals, T=1):
     exp_vals = np.exp((vals - np.max(vals))/T)  
     return exp_vals / np.sum(exp_vals)
 
+def add_bins(bin_edges, max_value):
+    """Extends the bin_edges array until max_value is reached, with a bin spacing of 
+    delta log(r_e) = mean( log(r_i+1) - log(r_i) )
+    """
+    if bin_edges is None:
+        return None
+    bin_edges = np.asarray(bin_edges)
+    
+    if not np.all(bin_edges[:-1] < bin_edges[1:]):
+        raise ValueError("bin_edges must be sorted in ascending order.")
+    if np.any(bin_edges <= 0):
+        raise ValueError("bin_edges must contain only positive values.")
+    if max_value <= bin_edges[-1]:
+        raise ValueError("max_value must be greater than the largest initial bin edge.")
 
+    log_deltas = np.log(bin_edges[1:] / bin_edges[:-1])
+    mean_log_delta = np.mean(log_deltas)
+    
+    current_edge = bin_edges[-1]
+    extended_bins = [current_edge]
+    
+    while current_edge < max_value:
+        next_edge = current_edge * np.exp(mean_log_delta)
+        if next_edge >= max_value:
+            next_edge = max_value
+        extended_bins.append(next_edge)
+        if next_edge == max_value:
+            break
+        current_edge = next_edge
+
+    return np.concatenate([bin_edges, extended_bins[1:]])
 
 
 

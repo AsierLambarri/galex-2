@@ -39,22 +39,23 @@ def ARTI_loader(fn):
         ("gas", "coordinates"),
         function=lambda field, data: unyt_array(np.vstack((data['gas', 'x'].value, data['gas', 'y'].value, data['gas', 'z'].value)).T, data['gas', 'x'].units),
         sampling_type="cell",
-        units='auto',
+        units='kpc',
         dimensions=dimensions.length
     )
     ds.add_field(
         ("gas", "velocity"),
         function=lambda field, data: unyt_array(np.vstack((data['gas', 'velocity_x'].value, data['gas', 'velocity_y'].value, data['gas', 'velocity_z'].value)).T, data['gas', 'velocity_z'].units),
         sampling_type="cell",
-        units='auto',
+        units='km/s',
         dimensions=dimensions.velocity
     )
     ds.add_field(
         ("gas", "mass"),
         function=lambda field, data: data['gas', 'cell_mass'],
         sampling_type="cell",
-        units='auto',
+        units='Msun',
         dimensions=dimensions.mass,
+        force_override=True
     )
     ds.add_field(
         ("gas", "thermal_energy"),
@@ -98,7 +99,7 @@ def ARTI_loader(fn):
         ("gas", "cell_length"),
         function=lambda field, data: data["gas", "cell_volume"]**(1/3),
         sampling_type="cell",
-        units='auto',
+        units='kpc',
         dimensions=dimensions.length,
     )
 
