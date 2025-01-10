@@ -86,12 +86,15 @@ class BaseHaloObject:
             },
             "moments": {
                 "rockstar_vrms": None
+            },
+            "data": {
+                "data_source": None,
+                "data_set": None
             }
             
         }
         
     }
-        
 
     def __init__(self):
         self._parent = None  
@@ -101,7 +104,6 @@ class BaseHaloObject:
         self.basis = np.identity(3)
         self._old_to_new_base = np.identity(3)
         self.bound_method = None
-
 
     @classmethod
     def format_value(cls, value):
@@ -118,6 +120,7 @@ class BaseHaloObject:
         else:
             return cls.format_value((value,))
 
+    
     @classmethod
     def set_shared_attrs(cls, pt, kwargs):
         """Set class-level shared attributes for a specific particle type.
@@ -140,8 +143,10 @@ class BaseHaloObject:
         if pt not in cls._shared_attrs:
             raise ValueError(f"Unknown particle type: {pt}")
 
-        if cat is not None:
-            return cls._shared_attrs[pt].get(cat)
+        if cat is not None and key is None:
+                return cls._shared_attrs[pt].get(cat)
+        elif cat is not None and key is not None:
+                return cls._shared_attrs[pt][cat].get(key)            
         elif key is not None:
             for category in list(cls._shared_attrs[pt].keys()):
                 if key in list(cls._shared_attrs[pt][category]):
@@ -157,7 +162,6 @@ class BaseHaloObject:
             if  key in list(cls._shared_attrs[pt][category].keys()):
                 cls._shared_attrs[pt][category][key] = value
                 break
-        #raise ValueError(f"Cannot update: '{key}' not valid for '{pt}'")
 
     @classmethod
     def list_shared_attributes(cls, pt, category):
@@ -173,7 +177,31 @@ class BaseHaloObject:
             for key in list(cls._shared_attrs[pt][category].keys()):
                 cls._shared_attrs[pt][category][key] = None
 
+    @classmethod
+    def set_shared_dataset(cls, dataset):
+        """Set class-level shared attributes for a specific particle type.
+        """
+        cls._shared_dataset = dataset
+        
+    @classmethod
+    def set_shared_datasource(cls, data_source):
+        """Set class-level shared attributes for a specific particle type.
+        """
+        cls._shared_datasource = data_source
+        
+    @classmethod        
+    def get_shared_data(cls):
+        return cls._shared_dataset, cls._shared_datasource
+        
+    @classmethod
+    def clean_shared_data(cls):
+        """Set class-level shared attributes for a specific particle type.
+        """
+        cls._shared_datasource = None
+        cls._shared_dataset = None       
 
+
+    
     
     def set_parent(self, parent):
         """Sets the parent of this object and ensures attributes propagate from parent to child.

@@ -33,8 +33,8 @@ class Component(BaseHaloObject):
     - IDs : stored as self.ids
     """ 
     def __init__(self,
-                 data,
                  tag,
+                 data=None,
                  **kwargs
                  ):
         """Initializes the ptype class.
@@ -42,13 +42,12 @@ class Component(BaseHaloObject):
         super().__init__()
 
         self.ptype, self._base_ptype = tag, self.ptypes[tag]
-        self._data = data
-        self._ds = data.ds
-        self.arr = data.ds.arr
-        self.quant = data.ds.quan
+
+        #self.arr = self._ds.arr
+        #self.quant = self._ds.quan
         self.clean_shared_attrs(self.ptype)
         self.set_shared_attrs(self.ptype, kwargs)
-        self._default_center_of_mass()
+        #self._default_center_of_mass()
         
         del self.ptypes
         
@@ -58,7 +57,15 @@ class Component(BaseHaloObject):
     @property
     def m(self):
         return self.get_shared_attr(self.ptype, cat="moments")
+    @property
+    def _ds(self):
+        return self.get_shared_attr("halo", cat="data", key="data_set")
+    @property
+    def _data(self):
+        return self.get_shared_attr("halo", cat="data", key="data_source")
 
+
+        
     def __getitem__(self, key):
         """Retrieve the value for the given key, dynamically computing it if it's a dynamic field.
         """

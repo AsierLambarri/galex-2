@@ -62,7 +62,7 @@ class SnapshotHalo(BaseHaloObject):
             raise ValueError(f"You did not provide neither (center, radius) or from_catalogue!!")
 
         self._kwargs = kwargs
-        self._parse_dataset(dataset)
+        self._load_and_parse_data(dataset)
         self.arr = self._ds.arr
         self.quant = self._ds.quan        
         if from_catalogue is not None:
@@ -81,8 +81,15 @@ class SnapshotHalo(BaseHaloObject):
     @property
     def m(self):
         return self.get_shared_attr("halo", cat="moments")
-        
+    @property
+    def _ds(self):
+        return self.get_shared_attr("halo", cat="data", key="data_set")
+    @property
+    def _data(self):
+        return self.get_shared_attr("halo", cat="data", key="data_source")
 
+
+        
     def _setup_catalogue_shared_params(self):
         """Loads the parameters present in the catalogue.
         """
@@ -97,8 +104,8 @@ class SnapshotHalo(BaseHaloObject):
         self.set_shared_attrs("halo", fields)
         self.sp_center = fields["rockstar_center"]
         self.sp_radius = fields["rockstar_rvir"]
-               
-    def _parse_dataset(self, dataset):
+    
+    def _load_and_parse_data(self, dataset):
         """
         Calls the module-level parser to parse the loaded dataset. This function is directly linked to the loader, sinde it works with the object
         type provided on it. If you attempt to change one, you must change both and make sure that the data is returned in the correct format 
@@ -121,8 +128,13 @@ class SnapshotHalo(BaseHaloObject):
         Each return is saved as an attribute of the config, zHalo or zHalo.ptype instance: parsed_data is saved inside ptype, for each particle type. base_units are saved inside config and
         the metadata is saved inside zHalo.
         """
-        self._ds = config.loader(self.fn) if dataset is None else dataset
-        self._data = self._ds.sphere(self.sp_center, self.sp_radius)
+        ds = config.loader(self.fn) if dataset is None else dataset
+        data = ds.sphere(self.sp_center, self.sp_radius)
+        self.update_shared_attr("halo", "data_set", ds)
+        self.update_shared_attr("halo", "data_source", data)
+
+        #self.set_shared_dataset()
+        #self.set_shared_datasource(  )
 
         metadata = {
             'redshift': self._ds.current_redshift,
@@ -139,9 +151,9 @@ class SnapshotHalo(BaseHaloObject):
         
         self._metadata = metadata
      
-        self.stars = Component(self._data, "stars", **self._kwargs["stars_params"] if "stars_params" in self._kwargs else {})
-        self.darkmatter = Component(self._data, "darkmatter", **self._kwargs["dm_params"] if "dm_params" in self._kwargs else {})
-        self.gas = Component(self._data, "gas", **self._kwargs["gas_params"] if "gas_params" in self._kwargs else {})
+        self.stars = Component("stars", **self._kwargs["stars_params"] if "stars_params" in self._kwargs else {})
+        self.darkmatter = Component("darkmatter", **self._kwargs["dm_params"] if "dm_params" in self._kwargs else {})
+        self.gas = Component("gas", **self._kwargs["gas_params"] if "gas_params" in self._kwargs else {})
 
         self.set_shared_attrs("halo", self._kwargs["halo_params"] if "halo_params" in self._kwargs else None)
         self.set_shared_attrs("halo", self._metadata)
@@ -150,6 +162,10 @@ class SnapshotHalo(BaseHaloObject):
         self.darkmatter.sp_center, self.darkmatter.sp_radius = self.sp_center, self.sp_radius
         self.gas.sp_center, self.gas.sp_radius = self.sp_center, self.sp_radius
 
+    def _update_data(self):
+        """Updates dataset after adding fields.
+        """
+        self.set_shared_datasource( self._ds.sphere(self.sp_center, self.sp_radius) )
     
     def info(self, get_str = False):
         """Prints information about the loaded halo: information about the position of the halo in the simulation
@@ -262,14 +278,14 @@ class SnapshotHalo(BaseHaloObject):
 
         return  mstars + mdm + mgas
 
-    def compute_bound_particles(self,
-                                method="BH",
-                                components=["stars","gas","darkmatter"],
-                                cm_subset=["darkmatter"],
-                                weighting="softmax",
-                                verbose=False,
-                                **kwargs
-                               ):
+    def compute_energies(self,
+                         method="BH",
+                         components=["stars","gas","darkmatter"],
+                         cm_subset=["darkmatter"],
+                         weighting="softmax",
+                         verbose=False,
+                         **kwargs
+                        ):
         """Computes the kinetic, potential and total energies of the particles in the specified components and determines
         which particles are bound (un-bound) as E<0 (E>=0). Energies are stored as attributes. The gravitational potential
         canbe calculated in two distinct ways:
@@ -477,7 +493,10 @@ class SnapshotHalo(BaseHaloObject):
             )
 
 
-
+    def get_bound_halo(self):
+        """Returns a SnapshotHalo instance where only bound particles are present. Only usable after running compute_energies and compute_bound_stars.
+        """
+        return None
 
 
 

@@ -226,7 +226,7 @@ def bound_particlesBH(pos,
                     print(f"   FINAL Center-of-mass velocity: {vcm}")
                     print(f"   FINAL Bound particle mass: {mass[bound_mask].sum().to('Msun')}")
                     print(f"   FINAL Number of bound particles: {len(mass[bound_mask])}")
-                    print(f"   FINAL Number of bound subset particles: {bound_subset_mask}")
+                    print(f"   FINAL Number of bound subset particles: {np.count_nonzero(bound_subset_mask)}")
                 else:
                     print(f"\nFinal Values:")
                     print(f"-------------")
