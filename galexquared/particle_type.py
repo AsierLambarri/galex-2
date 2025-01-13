@@ -255,25 +255,25 @@ class Component(BaseHaloObject):
             return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no center-of-mass to refine!")
 
         if method.lower() == "pot-most-bound":
-            bound_mask = self["E"] < 0
+            bound_mask = self["total_energy"] < 0
             f = 0.1 if "f" not in kwargs.keys() else kwargs["f"]
             nbound = 32 if "nbound" not in kwargs.keys() else kwargs["nbound"]
             
             N = int(np.rint(np.minimum(f * np.count_nonzero(bound_mask), nbound)))
-            most_bound_ids = np.argsort(self["E"])[:N]
-            most_bound_mask = np.zeros(len(self["E"]), dtype=bool)
+            most_bound_ids = np.argsort(self["total_energy"])[:N]
+            most_bound_mask = np.zeros(len(self["total_energy"]), dtype=bool)
             most_bound_mask[most_bound_ids] = True
             
             tmp_cm = np.average(self["coords"][most_bound_mask], axis=0, weights=self["mass"][most_bound_mask])
             tmp_vcm = np.average(self["velocity"][most_bound_mask], axis=0, weights=self["mass"][most_bound_mask]) 
             
         elif method.lower() == "pot-softmax":
-            bound_mask = self["E"] < 0
+            bound_mask = self["total_energy"] < 0
             T = "adaptative" if "T" not in kwargs.keys() else kwargs["T"]
             
-            w = self["E"][bound_mask]/self["E"][bound_mask].min()
+            w = self["total_energy"][bound_mask]/self["total_energy"][bound_mask].min()
             if T == "adaptative":
-                T = np.abs(self["kin"][bound_mask].mean()/self["E"][bound_mask].min())
+                T = np.abs(self["kinetic_energy"][bound_mask].mean()/self["total_energy"][bound_mask].min())
                 
             tmp_cm = np.average(self["coordinates"][bound_mask], axis=0, weights=softmax(w, T))
             tmp_vcm = np.average(self["velocity"][bound_mask], axis=0, weights=softmax(w, T))

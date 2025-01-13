@@ -5,7 +5,7 @@ from unyt import unyt_array, unyt_quantity
 from .config import config
 from .base import BaseHaloObject
 from .particle_type import Component
-from .class_methods import bound_particlesBH, bound_particlesAPROX, create_sph_dataset
+from .class_methods import bound_particlesBH, bound_particlesAPROX, create_sph_dataset, softmax, create_subset_mask
 
 class SnapshotHalo(BaseHaloObject):
     """zHalo class that implements a variety of functions to analyze the internal structure of a halo at a certain redshift, and the galaxy that
@@ -182,6 +182,8 @@ class SnapshotHalo(BaseHaloObject):
                     pos_source=np.concatenate(( data["gas", "coordinates"], data["stars", "coordinates"], data["darkmatter", "coordinates"] )).to("kpc"), 
                     pos_target=data["stars", "coordinates"].to("kpc"), 
                     m_source=np.concatenate(( data["gas", "mass"], data["stars", "mass"], data["darkmatter", "mass"] )).to("Msun"), 
+                    softening_target=data["stars", "softening"].to("kpc"),
+                    softening_source=np.concatenate(( data["gas", "softening"], data["stars", "softening"], data["darkmatter", "softening"] )).to("kpc"), 
                     G=4.300917270038e-06,
                     theta=0.6,
                     parallel=True,
@@ -216,6 +218,8 @@ class SnapshotHalo(BaseHaloObject):
                     pos_source=np.concatenate(( data["gas", "coordinates"], data["stars", "coordinates"], data["darkmatter", "coordinates"] )).to("kpc"), 
                     pos_target=data["gas", "coordinates"].to("kpc"), 
                     m_source=np.concatenate(( data["gas", "mass"], data["stars", "mass"], data["darkmatter", "mass"] )).to("Msun"), 
+                    softening_target=data["gas", "softening"].to("kpc"),
+                    softening_source=np.concatenate(( data["gas", "softening"], data["stars", "softening"], data["darkmatter", "softening"] )).to("kpc"), 
                     G=4.300917270038e-06,
                     theta=0.6,
                     parallel=True,
@@ -250,6 +254,8 @@ class SnapshotHalo(BaseHaloObject):
                     pos_source=np.concatenate(( data["gas", "coordinates"], data["stars", "coordinates"], data["darkmatter", "coordinates"] )).to("kpc"), 
                     pos_target=data["darkmatter", "coordinates"].to("kpc"), 
                     m_source=np.concatenate(( data["gas", "mass"], data["stars", "mass"], data["darkmatter", "mass"] )).to("Msun"), 
+                    softening_target=data["darkmatter", "softening"].to("kpc"),
+                    softening_source=np.concatenate(( data["gas", "softening"], data["stars", "softening"], data["darkmatter", "softening"] )).to("kpc"), 
                     G=4.300917270038e-06,
                     theta=0.6,
                     parallel=True,
@@ -266,14 +272,33 @@ class SnapshotHalo(BaseHaloObject):
             force_override=True
         )
 
+    def _compute_total_E(self):
+        """Adds total energy field
+        """
+        self._ds.add_field(
+            ("stars", "total_energy"),
+            function=lambda field, data: data["stars", "grav_potential"] + data["stars", "kinetic_energy"],
+            sampling_type="local",
+            units="Msun*km**2/s**2",
+            force_override=True
+        )
+        self._ds.add_field(
+            ("gas", "total_energy"),
+            function=lambda field, data: data["gas", "grav_potential"] + data["gas", "kinetic_energy"] + data["gas", "thermal_energy"],
+            sampling_type="local",
+            units="Msun*km**2/s**2",
+            force_override=True
+        )
+        self._ds.add_field(
+            ("darkmatter", "total_energy"),
+            function=lambda field, data: data["darkmatter", "grav_potential"] + data["darkmatter", "kinetic_energy"],
+            sampling_type="local",
+            units="Msun*km**2/s**2",
+            force_override=True
+        )        
+        self._update_data()
 
-        
-        
-        
-        
-        
-        
-    def info(self, get_str = False):
+    def info(self, get_str=False):
         """Prints information about the loaded halo: information about the position of the halo in the simulation
         and each component; dark matter, stars and gas: CoM, v_CoM, r1/2, sigma*, and properties of the whole halo such as
         the Dynamical Mass, half-light radius etc.
@@ -391,10 +416,11 @@ class SnapshotHalo(BaseHaloObject):
         self._compute_grav_gas(**kwargs)
         self._update_data()
    
-    def compute_kinetic_energy(self, **kwargs):
+    def compute_kinetic_energy(self, v_cm=None, **kwargs):
         """Adds kinetic energy to yt dataset.
         """
-        _, v_cm = self.darkmatter.refined_center6d(method=kwargs.get("method", "adaptative"), **kwargs)
+        if v_cm is None:
+            _, v_cm = self.darkmatter.refined_center6d(method=kwargs.get("method", "adaptative"), **kwargs)
         
         self._ds.add_field(
             ("stars", "kinetic_energy"),
@@ -419,10 +445,106 @@ class SnapshotHalo(BaseHaloObject):
         )        
         self._update_data()
    
-    
-   
-    
-   
+    def compute_energy(self,  
+                       cm_subset=["darkmatter"],
+                       cm_weighting="softmax",
+                       refine=False,
+                       verbose=False,
+                       **kwargs
+                      ):  
+        """Computes total energy of particles, taking into account gas thermal energy. Since the process is dependent of v_cm,
+        a refinement process can be carried out to converge on v_cm.
+        """
+        T = kwargs.get("T", "adaptative")
+        f = kwargs.get("f", 0.1)
+        nbound = kwargs.get("nbound", 32)
+        delta = kwargs.get("delta", 1E-3)
+
+        self.compute_gravitational_energy(**kwargs)
+        vcm = self.darkmatter.q["vcm"]
+        cm = self.darkmatter.q["cm"]
+
+        for i in range(100):
+            self.compute_kinetic_energy(v_cm=vcm)
+            self._compute_total_E()
+            E = self.darkmatter["total_energy"]
+            
+            
+            if np.all(E >= 0):
+                raise Exception("All the particles are unbound in the halo!")
+            else:
+                bound_subset_mask = E < 0
+                
+            if not refine:
+                break
+                
+            if cm_weighting.lower() == "most-bound":
+                N = int(np.rint(np.minimum(f * np.count_nonzero(bound_subset_mask), nbound)))
+                most_bound_mask = create_subset_mask(E, np.ones_like(E, dtype=bool), N)
+                
+                new_cm = np.average(
+                    self.darkmatter["coordiantes"][most_bound_mask], 
+                    axis=0, 
+                    weights=self.darkmatter["mass"][most_bound_mask]
+                )
+                new_vcm = np.average(
+                    self.darkmatter["velocity"][most_bound_mask], 
+                    axis=0, 
+                    weights=self.darkmatter["mass"][most_bound_mask]
+                )  
+            elif cm_weighting.lower() == "softmax":                
+                w = E[bound_subset_mask]/E[bound_subset_mask].min()
+                
+                if T == "adaptative":
+                    T = np.abs(self.darkmatter["kinetic_energy"][bound_subset_mask].mean()/E[bound_subset_mask].min())
+                    
+                new_cm = np.average(
+                    self.darkmatter["coordinates"][bound_subset_mask], 
+                    axis=0, 
+                    weights=softmax(w, T)
+                )
+                new_vcm = np.average(
+                    self.darkmatter["velocity"][bound_subset_mask], 
+                    axis=0, 
+                    weights=softmax(w, T)
+                )               
+            else:
+                raise ValueError("Weighting mode doesnt exist!")
+
+            delta_cm = np.sqrt(np.sum((new_cm - cm)**2, axis=0)) / np.linalg.norm(cm) < delta
+            delta_vcm =  np.sqrt(np.sum((new_vcm - vcm)**2, axis=0)) / np.linalg.norm(vcm) < delta        
+            
+            if (delta_cm and delta_vcm):
+                self.update_shared_attr("halo", "cm", new_cm)
+                self.update_shared_attr("halo", "vcm", new_vcm)
+                self.compute_kinetic_energy(v_cm=new_vcm)
+                self._compute_total_E()
+
+                break
+            cm, vcm = new_cm, new_vcm
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     
     def get_bound_halo(self):

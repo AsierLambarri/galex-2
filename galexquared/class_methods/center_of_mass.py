@@ -164,7 +164,7 @@ def refine_6Dcenter(pos,
     v_scale = 1.5 if "v_scale" not in kwargs.keys() else kwargs['v_scale']
     rsphere = unyt_quantity(4, 'kpc') if "rsphere" not in kwargs else unyt_quantity(*kwargs['rsphere']) if isinstance(kwargs['rsphere'], tuple) and len(kwargs['rsphere']) == 2 else unyt_quantity(kwargs['rsphere'], lengthunit)
     alpha = 0.7 if "alpha" not in kwargs.keys() else kwargs['alpha']
-    nmin = 250 if "nmin" not in kwargs.keys() else kwargs['nmin']
+    nmin = 150 if "nmin" not in kwargs.keys() else kwargs['nmin']
     mfrac = 0.3 if "mfrac" not in kwargs.keys() else kwargs['mfrac']
 
     rsphere = rsphere.to(lengthunit).value
