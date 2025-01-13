@@ -387,6 +387,7 @@ def GEAR_loader(fn):
         sampling_type="local",
         units='auto',
         dimensions=dimensions.mass,
+        force_override=True
     )
     ds.add_field(
         ("gas", "metallicity"),

@@ -259,7 +259,7 @@ class SnapshotHalo(BaseHaloObject):
             )
         
         self._ds.add_field(
-            ("gas", "grav_potential"),
+            ("darkmatter", "grav_potential"),
             function=_grav_function,
             sampling_type="local",
             units="Msun*km**2/s**2",
@@ -267,9 +267,12 @@ class SnapshotHalo(BaseHaloObject):
         )
 
 
-
-
-
+        
+        
+        
+        
+        
+        
     def info(self, get_str = False):
         """Prints information about the loaded halo: information about the position of the halo in the simulation
         and each component; dark matter, stars and gas: CoM, v_CoM, r1/2, sigma*, and properties of the whole halo such as
@@ -387,7 +390,39 @@ class SnapshotHalo(BaseHaloObject):
         self._compute_grav_stars(**kwargs)
         self._compute_grav_gas(**kwargs)
         self._update_data()
+   
+    def compute_kinetic_energy(self, **kwargs):
+        """Adds kinetic energy to yt dataset.
+        """
+        _, v_cm = self.darkmatter.refined_center6d(method=kwargs.get("method", "adaptative"), **kwargs)
         
+        self._ds.add_field(
+            ("stars", "kinetic_energy"),
+            function=lambda field, data: 0.5 * data["stars", "mass"] * np.linalg.norm(data["stars","velocity"] - v_cm, axis=1) ** 2,
+            sampling_type="local",
+            units="Msun*km**2/s**2",
+            force_override=True
+        )
+        self._ds.add_field(
+            ("gas", "kinetic_energy"),
+            function=lambda field, data: 0.5 * data["gas", "mass"] * np.linalg.norm(data["gas","velocity"] - v_cm, axis=1) ** 2,
+            sampling_type="local",
+            units="Msun*km**2/s**2",
+            force_override=True
+        )
+        self._ds.add_field(
+            ("darkmatter", "kinetic_energy"),
+            function=lambda field, data: 0.5 * data["darkmatter", "mass"] * np.linalg.norm(data["darkmatter","velocity"] - v_cm, axis=1) ** 2,
+            sampling_type="local",
+            units="Msun*km**2/s**2",
+            force_override=True
+        )        
+        self._update_data()
+   
+    
+   
+    
+   
 
     
     def get_bound_halo(self):
