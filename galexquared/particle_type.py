@@ -43,11 +43,11 @@ class Component(BaseHaloObject):
 
         self.ptype, self._base_ptype = tag, self.ptypes[tag]
 
-        #self.arr = self._ds.arr
-        #self.quant = self._ds.quan
+        self.arr = self._ds.arr
+        self.quant = self._ds.quan
         self.clean_shared_attrs(self.ptype)
         self.set_shared_attrs(self.ptype, kwargs)
-        #self._default_center_of_mass()
+        self._default_center_of_mass()
         
         del self.ptypes
         
@@ -149,7 +149,6 @@ class Component(BaseHaloObject):
         )
         return None
 
-
     def _knn_distance(self, center_point, k):
         """Returns the distance from center_point to the k nearest neighbour.
 
@@ -170,8 +169,7 @@ class Component(BaseHaloObject):
             return distances[-1] * self["coordinates"].units
         else:
             return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no center-of-mass to refine!")
-
-        
+    
     def set_line_of_sight(self, los):
         """Sets the line of sight to the provided value. The default value for the line of sight is the x-axis: [1,0,0].
         By setting a new line of sight the coordinate basis in which vectorial quantities are expressed changes, aligning the
@@ -204,8 +202,7 @@ class Component(BaseHaloObject):
             self._old_to_new_base @ self.q["vcm"] if self.q["vcm"] is not None else None
         )
         return None
-
-        
+       
     def refined_center6d(self, 
                          method="adaptative",
                          **kwargs
@@ -364,7 +361,6 @@ class Component(BaseHaloObject):
                 )             
         return tmp_rh_arr.mean(), tmp_rh_arr.std()
 
-
     def los_dispersion(self, rcyl=(1, 'kpc'), lines_of_sight=None):
         """Computes the line of sight velocity dispersion:  the width/std of f(v)dv of particles iside rcyl along the L.O.S. This is NOT the
         same as the dispersion velocity (which would be the rms of vx**2 + vy**2 + vz**2). All particles are used, including non-bound ones,
@@ -406,7 +402,6 @@ class Component(BaseHaloObject):
       
         return tmp_disp_arr.mean(), tmp_disp_arr.std()
 
-
     def enclosed_mass(self, r0, center):
         """Computes the enclosed mass on a sphere centered on center, and with radius r0.
 
@@ -426,8 +421,7 @@ class Component(BaseHaloObject):
         else:
             mask = np.linalg.norm(self["coordinates"] - center, axis=1) <= r0
             return self["mass"][mask].sum()
-
-    
+ 
     def density_profile(self, 
                         center=None,
                         bins=None,

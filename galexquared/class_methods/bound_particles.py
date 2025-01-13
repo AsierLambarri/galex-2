@@ -47,12 +47,12 @@ def create_subset_mask(E, subset, N):
 def bound_particlesBH(pos, 
                       vel, 
                       mass, 
-                      softs = None,
-                      extra_kin = None,
-                      cm = None,
-                      vcm = None,
-                      refine = True,
-                      delta = 1E-5,
+                      softs=None,
+                      extra_kin=None,
+                      cm=None,
+                      vcm=None,
+                      refine=False,
+                      delta=1E-5,
                       cm_subset=None,
                       weighting="softmax",
                       T=0.20,
@@ -60,7 +60,7 @@ def bound_particlesBH(pos,
                       nbound=32,
                       theta = 0.5,
                       return_cm=False,
-                      verbose = False
+                      verbose=False
                      ):
     """Computes the bound particles of a halo/ensemble of particles using the Barnes-Hut algorithm implemented in PYTREEGRAV.
     The bound particles are defined as those with E= pot + kin < 0. The center of mass position is not required, as the potential 
@@ -250,18 +250,18 @@ def bound_particlesBH(pos,
 def bound_particlesAPROX(pos, 
                          vel, 
                          mass, 
-                         extra_kin = None,
-                         cm = None,
-                         vcm = None,
-                         refine = True,
-                         delta = 1E-5,
+                         extra_kin=None,
+                         cm=None,
+                         vcm=None,
+                         refine=False,
+                         delta=1E-5,
                          cm_subset=None,
                          weighting="softmax",
                          T=0.20,
                          f=0.1,
                          nbound=32,
                          return_cm=False,
-                         verbose = False
+                         verbose=False
                         ):
     """Computes the bound particles by approximating the ensemble as a point source for ease of potential calculation. 
     The bound particles are defined as those with E= pot + kin < 0. The center of mass position is required, as the potential 

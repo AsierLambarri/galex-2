@@ -1,13 +1,11 @@
-import os
 import yt
-import shutil
 import numpy as np
 from unyt import unyt_array, unyt_quantity
 
 from .config import config
 from .base import BaseHaloObject
 from .particle_type import Component
-from .class_methods import bound_particlesBH, bound_particlesAPROX, density_profile, velocity_profile, create_sph_dataset, gram_schmidt
+from .class_methods import bound_particlesBH, bound_particlesAPROX, create_sph_dataset
 
 class SnapshotHalo(BaseHaloObject):
     """zHalo class that implements a variety of functions to analyze the internal structure of a halo at a certain redshift, and the galaxy that
@@ -132,9 +130,7 @@ class SnapshotHalo(BaseHaloObject):
         data = ds.sphere(self.sp_center, self.sp_radius)
         self.update_shared_attr("halo", "data_set", ds)
         self.update_shared_attr("halo", "data_source", data)
-
-        #self.set_shared_dataset()
-        #self.set_shared_datasource(  )
+        self._all_data = self._ds.all_data()
 
         metadata = {
             'redshift': self._ds.current_redshift,
@@ -165,8 +161,115 @@ class SnapshotHalo(BaseHaloObject):
     def _update_data(self):
         """Updates dataset after adding fields.
         """
-        self.set_shared_datasource( self._ds.sphere(self.sp_center, self.sp_radius) )
+        self._all_data = self._ds.all_data()
+        self.update_shared_attr("halo", "data_source", self._ds.sphere(self.sp_center, self.sp_radius))
+
+    def _compute_grav_stars(self, **kwargs):
+        """Adds gravitational potential for stars.
+        """
+        theta = kwargs.get("theta", 0.7)
+        parallel = kwargs.get("parallel", True)
+        quadrupole = kwargs.get("quadrupole", True)
     
+        def _grav_function(field, data):
+            from pytreegrav import PotentialTarget
+            global parallel
+            global quadrupole
+            global theta
+            
+            return data["stars", "mass"] * unyt_array(
+                PotentialTarget(
+                    pos_source=np.concatenate(( data["gas", "coordinates"], data["stars", "coordinates"], data["darkmatter", "coordinates"] )).to("kpc"), 
+                    pos_target=data["stars", "coordinates"].to("kpc"), 
+                    m_source=np.concatenate(( data["gas", "mass"], data["stars", "mass"], data["darkmatter", "mass"] )).to("Msun"), 
+                    G=4.300917270038e-06,
+                    theta=0.6,
+                    parallel=True,
+                    quadrupole=True
+                ), 
+                "km**2/s**2"
+            )
+        
+        self._ds.add_field(
+            ("stars", "grav_potential"),
+            function=_grav_function,
+            sampling_type="local",
+            units="Msun*km**2/s**2",
+            force_override=True
+        )
+
+    def _compute_grav_gas(self, **kwargs):
+        """Adds gravitational potential for stars.
+        """
+        theta = kwargs.get("theta", 0.7)
+        parallel = kwargs.get("parallel", True)
+        quadrupole = kwargs.get("quadrupole", True)
+    
+        def _grav_function(field, data):
+            from pytreegrav import PotentialTarget
+            global parallel
+            global quadrupole
+            global theta
+            
+            return data["gas", "mass"] * unyt_array(
+                PotentialTarget(
+                    pos_source=np.concatenate(( data["gas", "coordinates"], data["stars", "coordinates"], data["darkmatter", "coordinates"] )).to("kpc"), 
+                    pos_target=data["gas", "coordinates"].to("kpc"), 
+                    m_source=np.concatenate(( data["gas", "mass"], data["stars", "mass"], data["darkmatter", "mass"] )).to("Msun"), 
+                    G=4.300917270038e-06,
+                    theta=0.6,
+                    parallel=True,
+                    quadrupole=True
+                ), 
+                "km**2/s**2"
+            )
+        
+        self._ds.add_field(
+            ("gas", "grav_potential"),
+            function=_grav_function,
+            sampling_type="local",
+            units="Msun*km**2/s**2",
+            force_override=True
+        )
+
+    def _compute_grav_dm(self, **kwargs):
+        """Adds gravitational potential for stars.
+        """
+        theta = kwargs.get("theta", 0.7)
+        parallel = kwargs.get("parallel", True)
+        quadrupole = kwargs.get("quadrupole", True)
+    
+        def _grav_function(field, data):
+            from pytreegrav import PotentialTarget
+            global parallel
+            global quadrupole
+            global theta
+            
+            return data["darkmatter", "mass"] * unyt_array(
+                PotentialTarget(
+                    pos_source=np.concatenate(( data["gas", "coordinates"], data["stars", "coordinates"], data["darkmatter", "coordinates"] )).to("kpc"), 
+                    pos_target=data["darkmatter", "coordinates"].to("kpc"), 
+                    m_source=np.concatenate(( data["gas", "mass"], data["stars", "mass"], data["darkmatter", "mass"] )).to("Msun"), 
+                    G=4.300917270038e-06,
+                    theta=0.6,
+                    parallel=True,
+                    quadrupole=True
+                ), 
+                "km**2/s**2"
+            )
+        
+        self._ds.add_field(
+            ("gas", "grav_potential"),
+            function=_grav_function,
+            sampling_type="local",
+            units="Msun*km**2/s**2",
+            force_override=True
+        )
+
+
+
+
+
     def info(self, get_str = False):
         """Prints information about the loaded halo: information about the position of the halo in the simulation
         and each component; dark matter, stars and gas: CoM, v_CoM, r1/2, sigma*, and properties of the whole halo such as
@@ -217,7 +320,6 @@ class SnapshotHalo(BaseHaloObject):
         else:
             print(str_info)
             return None
-    
         
     def set_line_of_sight(self, los):
         """Sets the line of sight to the provided value. The default value for the line of sight is the x-axis: [1,0,0].
@@ -251,7 +353,7 @@ class SnapshotHalo(BaseHaloObject):
                 self._old_to_new_base @ self.q[q] if self.q[q] is not None else None
             )       
 
-    def enclosed_mass(self, center, radius, components, only_bound=False):
+    def enclosed_mass(self, center, radius, components):
         """Computes the dynamical mass: the mass enclonsed inside the 3D half light radius of stars. Right now, the half-mass-radius is
         used, under the assumptionn that M/L does not vary much from star-particle to star-particle.
 
@@ -278,231 +380,20 @@ class SnapshotHalo(BaseHaloObject):
 
         return  mstars + mdm + mgas
 
-    def compute_energies(self,
-                         method="BH",
-                         components=["stars","gas","darkmatter"],
-                         cm_subset=["darkmatter"],
-                         weighting="softmax",
-                         verbose=False,
-                         **kwargs
-                        ):
-        """Computes the kinetic, potential and total energies of the particles in the specified components and determines
-        which particles are bound (un-bound) as E<0 (E>=0). Energies are stored as attributes. The gravitational potential
-        canbe calculated in two distinct ways:
-
-                1) Barnes-Hut tree-code implemented in pytreegrav, with allowance for force softening.
-                2) By approximating the potential as for a particle of mass "m" located at "r" as:
-                                         pot(r) = -G* M(<r) * m / |r - r_cm|
-                   this requires knowledge of the center-of-mass position to a good degree.
-
-        Given that the initial center-of-mass position and velocity might be relativelly unknown (as the whole particle
-        distribution is usually not a good estimator for these), the posibility of performing a refinement exist, where several
-        iterationsa performed until the center-of-mass position and velocity converge `both` to delta. The enter-of-mass 
-        position and velocity can be calculated using the N-most bound particles of using softmax weighting.
-
-        OPTIONAL Parameters
-        ----------
-        method : str
-            Method of computation. Either BH or APROX. Default: BH
-        weighting : str
-            SOFTMAX or MOST-BOUND. Names are self, explanatory. Default: softmax.
-        components : list[str]
-            Components to use: stars, gas and/or darkmatter. Default: all
-        verbose : bool
-            Verbose. Default: False
-
-        KEYWORD ARGUMENTS
-        -----------------
-        cm, vcm : array
-            Optional initial center-of-mass position and velocity.
-        softenings : list[tuple[float, str]] or list[float]
-            Softening for each particle type. Same shape as components. Default: [0,0,0]
-        theta : float
-            Opening angle for BH. Default: 0.7
-        refine : bool
-            Whether to refine. Default: False
-        delta : float
-            Converge tolerance for refinement. Default: 1E-5
-        nbound : int
-        Controls how many particles are used when estimating CoM properties through MOST-BOUND.
-        T : int
-        Controls how many particles are used when estimating CoM properties through SOFTMAX.
-        parallel : bool
-            Whether to parallelize BH computation. Default: True
-        quadrupole : bool
-            Whether to use quardupole approximation istead of dipole. Default: True
-
-        Returns
-        -------
-        None
-        """        
-        if components == "particles":
-            components = ["stars", "darkmatter"]
-        elif components == "all":
-            components = ["stars", "darkmatter", "gas"]
-
-        if cm_subset == "particles":
-            cm_subset = ["stars", "darkmatter"]
-        elif cm_subset == "all":
-            cm_subset = ["stars", "darkmatter", "gas"]
-            
-        masses = unyt_array(np.empty((0,)), "Msun")
-        coords = unyt_array(np.empty((0,3)), "kpc")
-        vels = unyt_array(np.empty((0,3)), "km/s")
-        softenings = unyt_array(np.empty((0,)), "kpc")
+    def compute_gravitational_energy(self, **kwargs):
+        """Adds gravitational energy to stars, dm and gas. Fields are computed on demand by yt.
+        """
+        self._compute_grav_dm(**kwargs)
+        self._compute_grav_stars(**kwargs)
+        self._compute_grav_gas(**kwargs)
+        self._update_data()
         
-        particle_types = np.empty((0,))
 
-        for component in components:
-            if not getattr(self, component).empty:                
-                N = len(getattr(self, component)["mass"])
-                masses = np.concatenate((
-                    masses, getattr(self, component)["mass"].to("Msun")
-                ))
-                coords = np.vstack((
-                    coords, getattr(self, component)["coordinates"].to("kpc")
-                ))
-                vels = np.vstack((
-                    vels, getattr(self, component)["velocity"].to("km/s")
-                ))
-                softenings = np.concatenate((
-                    softenings, getattr(self, component)["softening"].to("kpc")
-                ))              
-                particle_types = np.concatenate((
-                    particle_types, np.full(N, component)
-                ))
-
-        thermal_energy = unyt_array(np.zeros_like(masses).value, "Msun * km**2/s**2")
-        if "gas" in components:
-            thermal_energy[particle_types == "gas"] = self.gas["thermal_energy"].to("Msun * km**2/s**2")
-
-        
-        
-        particle_subset = np.zeros_like(particle_types, dtype=bool)
-        for sub in cm_subset:
-            particle_subset = particle_subset | (particle_types == sub)
-
-        if method.lower() == "bh":
-            E, kin, pot, cm, vcm = bound_particlesBH(
-                coords,
-                vels,
-                masses,
-                softs=softenings,
-                extra_kin=thermal_energy,
-                cm=None if "cm" not in kwargs else unyt_array(*kwargs['cm']) if isinstance(kwargs['cm'], tuple) and len(kwargs['cm']) == 2 else kwargs['cm'],
-                vcm=None if "vcm" not in kwargs else unyt_array(*kwargs['vcm']) if isinstance(kwargs['vcm'], tuple) and len(kwargs['vcm']) == 2 else kwargs['vcm'],
-                cm_subset=particle_subset,
-                weighting=weighting,
-                refine=True if "refine" not in kwargs.keys() else kwargs["refine"],
-                delta=1E-5 if "delta" not in kwargs.keys() else kwargs["delta"],
-                f=0.1 if "f" not in kwargs.keys() else kwargs["f"],
-                nbound=32 if "nbound" not in kwargs.keys() else kwargs["nbound"],
-                T=0.22 if "T" not in kwargs.keys() else kwargs["T"],
-                return_cm=True,
-                verbose=verbose,
-
-            )
-        elif method.lower() == "aprox":
-            E, kin, pot, cm, vcm = bound_particlesAPROX(
-                coords,
-                vels,
-                masses,
-                extra_kin=thermal_energy,
-                cm=None if "cm" not in kwargs else unyt_array(*kwargs['cm']) if isinstance(kwargs['cm'], tuple) and len(kwargs['cm']) == 2 else kwargs['cm'],
-                vcm=None if "vcm" not in kwargs else unyt_array(*kwargs['vcm']) if isinstance(kwargs['vcm'], tuple) and len(kwargs['vcm']) == 2 else kwargs['vcm'],
-                cm_subset=particle_subset,
-                weighting=weighting,
-                refine=True if "refine" not in kwargs.keys() else kwargs["refine"],
-                delta=1E-5 if "delta" not in kwargs.keys() else kwargs["delta"],
-                f=0.1 if "f" not in kwargs.keys() else kwargs["f"],
-                nbound=32 if "nbound" not in kwargs.keys() else kwargs["nbound"],
-                T=0.22 if "T" not in kwargs.keys() else kwargs["T"],
-                return_cm=True,
-                verbose=verbose,
-
-            )
-
-        self.update_shared_attr("halo", "cm", cm)
-        self.update_shared_attr("halo", "vcm", vcm)
-       
-        if "gas" in components:
-            self._ds.add_field(
-                (self.ptypes["gas"], "E"),
-                function=lambda field, data: E[particle_types == "gas"],
-                sampling_type="local",
-                units='Msun*km**2/s**2',
-                force_override=True
-            )
-            self._ds.add_field(
-                (self.ptypes["gas"], "kin"),
-                function=lambda field, data: kin[particle_types == "gas"],
-                sampling_type="local",
-                units='Msun*km**2/s**2',
-                force_override=True
-            )
-            self._ds.add_field(
-                (self.ptypes["gas"], "pot"),
-                function=lambda field, data: pot[particle_types == "gas"],
-                sampling_type="local",
-                units='Msun*km**2/s**2',
-                force_override=True
-            )
-        if "stars" in components:
-            self._ds.add_field(
-                (self.ptypes["stars"], "E"),
-                function=lambda field, data: E[particle_types == "stars"],
-                sampling_type="local",
-                units='Msun*km**2/s**2',
-                force_override=True
-            )
-            self._ds.add_field(
-                (self.ptypes["stars"], "kin"),
-                function=lambda field, data: kin[particle_types == "stars"],
-                sampling_type="local",
-                units='Msun*km**2/s**2',
-                force_override=True
-            )
-            self._ds.add_field(
-                (self.ptypes["stars"], "pot"),
-                function=lambda field, data: pot[particle_types == "stars"],
-                sampling_type="local",
-                units='Msun*km**2/s**2',
-                force_override=True
-            )
-        if "darkmatter" in components:
-            self._ds.add_field(
-                (self.ptypes["darkmatter"], "E"),
-                function=lambda field, data: E[particle_types == "darkmatter"],
-                sampling_type="local",
-                units='Msun*km**2/s**2',
-                force_override=True
-            )
-            self._ds.add_field(
-                (self.ptypes["darkmatter"], "kin"),
-                function=lambda field, data: kin[particle_types == "darkmatter"],
-                sampling_type="local",
-                units='Msun*km**2/s**2',
-                force_override=True
-            )
-            self._ds.add_field(
-                (self.ptypes["darkmatter"], "pot"),
-                function=lambda field, data: pot[particle_types == "darkmatter"],
-                sampling_type="local",
-                units='Msun*km**2/s**2',
-                force_override=True
-            )
-
-
+    
     def get_bound_halo(self):
         """Returns a SnapshotHalo instance where only bound particles are present. Only usable after running compute_energies and compute_bound_stars.
         """
         return None
-
-
-
-
-
-
             
     def plot(self, normal="z", catalogue=None, smooth_particles = False, **kwargs):
         """Plots the projected darkmatter, stars and gas distributions along a given normal direction. The projection direction can be changed with

@@ -58,6 +58,14 @@ def ARTI_loader(fn):
         force_override=True
     )
     ds.add_field(
+        ("gas", "index"),
+        function=lambda field, data: ds.arr(np.linspace(1, data["gas", "mass"].shape[0] - 1, num=data["gas", "mass"].shape[0], dtype=int), "") + np.maximum(data["stars", "particle_index"].max(), data["darkmatter", "particle_index"].max()),
+        sampling_type="cell",
+        units='',
+        dimensions=dimensions.dimensionless,
+        force_override=False
+    )
+    ds.add_field(
         ("gas", "thermal_energy"),
         function=lambda field, data: data["gas", "cell_volume"] *  data["gas", "thermal_energy_density"],
         sampling_type="cell",
@@ -102,7 +110,13 @@ def ARTI_loader(fn):
         units='kpc',
         dimensions=dimensions.length,
     )
-
+    ds.add_field(
+        ("gas", "softening"),
+        function=lambda field, data: data["gas", "cell_length"],
+        sampling_type="cell",
+        units='kpc',
+        dimensions=dimensions.length,
+    )
     
 
     ### STARS ###
@@ -143,7 +157,7 @@ def ARTI_loader(fn):
     )
     ds.add_field(
         ("stars", "index"),
-        function=lambda field, data: data["stars", "particle_index"],
+        function=lambda field, data: data["stars", "particle_index"].astype(int),
         sampling_type="local",
         units='auto',
         dimensions=dimensions.dimensionless,
@@ -203,7 +217,7 @@ def ARTI_loader(fn):
     )
     ds.add_field(
         ("darkmatter", "index"),
-        function=lambda field, data: data["darkmatter", "particle_index"],
+        function=lambda field, data: data["darkmatter", "particle_index"].astype(int),
         sampling_type="local",
         units='auto',
         dimensions=dimensions.dimensionless,
@@ -238,78 +252,78 @@ def GEAR_loader(fn):
 
     ### STARS ###
     ds.add_field(
-        ("PartType1", "coordinates"),
+        ("stars", "coordinates"),
         function=lambda field, data: data["PartType1", "particle_position"],
         sampling_type="local",
         units='kpc',
         dimensions=dimensions.length,
     )
     ds.add_field(
-        ("PartType1", "velocity"),
+        ("stars", "velocity"),
         function=lambda field, data: data["PartType1", "particle_velocity"],
         sampling_type="local",
         units='km/s',
         dimensions=dimensions.velocity
     )
     ds.add_field(
-        ("PartType1", "mass"),
+        ("stars", "mass"),
         function=lambda field, data: data["PartType1", "particle_mass"],
         sampling_type="local",
         units='Msun',
         dimensions=dimensions.mass
     )
     ds.add_field(
-        ("PartType1", "initial_mass"),
+        ("stars", "initial_mass"),
         function=lambda field, data: data["PartType1", "InitialMass"],
         sampling_type="local",
         units='Msun',
         dimensions=dimensions.mass
     )
     ds.add_field(
-        ("PartType1", "softening"),
+        ("stars", "softening"),
         function=lambda field, data: unyt_array(0.08 * np.ones_like(data["PartType1", "particle_mass"].value, dtype=float), 'kpc'),
         sampling_type="local",
         units='kpc',
         dimensions=dimensions.length,
     )
     ds.add_field(
-        ("PartType1", "index"),
-        function=lambda field, data: data["PartType1", "particle_index"],
+        ("stars", "index"),
+        function=lambda field, data: data["PartType1", "particle_index"].astype(int),
         sampling_type="local",
         units='auto',
         dimensions=dimensions.dimensionless,
     )
     ds.add_field(
-        ("PartType1", "formation_time"),
+        ("stars", "formation_time"),
         function=lambda field, data: ds.cosmology.t_from_a(data['PartType1', 'StarFormationTime']),
         sampling_type="local",
         units='Gyr',
         dimensions=dimensions.time,
     )
     ds.add_field(
-        ("PartType1", "age"),
-        function=lambda field, data: ds.current_time - data["PartType1", "formation_time"],
+        ("stars", "age"),
+        function=lambda field, data: ds.current_time - data["stars", "formation_time"],
         sampling_type="local",
         units='Gyr',
         dimensions=dimensions.time,
     )
     ds.add_field(
-        ("PartType1", "metal_mass_fraction"),
+        ("stars", "metal_mass_fraction"),
         function=lambda field, data: data["PartType1", "StarMetals"].in_units("") if len(data["PartType1", "StarMetals"].shape) == 1 else data["PartType1", "StarMetals"][:,9].in_units(""),
         sampling_type="local",
         units='auto',
         dimensions=dimensions.dimensionless,
     )
     ds.add_field(
-        ("PartType1", "metal_mass"),
-        function=lambda field, data: data["PartType1", "metal_mass_fraction"] * data["PartType1", "mass"],
+        ("stars", "metal_mass"),
+        function=lambda field, data: data["stars", "metal_mass_fraction"] * data["stars", "mass"],
         sampling_type="local",
         units='auto',
         dimensions=dimensions.mass,
     )
     ds.add_field(
-        ("PartType1", "metallicity"),
-        function=lambda field, data: np.log10(data["PartType1", "metal_mass_fraction"] / Z_Solar),
+        ("stars", "metallicity"),
+        function=lambda field, data: np.log10(data["stars", "metal_mass_fraction"] / Z_Solar),
         sampling_type="local",
         units='auto',
         dimensions=dimensions.dimensionless,
@@ -322,7 +336,7 @@ def GEAR_loader(fn):
 
     ### GAS ###
     ds.add_field(
-        ("PartType0", "coordinates"),
+        ("gas", "coordinates"),
         function=lambda field, data: data["PartType0", "particle_position"],
         sampling_type="local",
         units='kpc',
@@ -330,7 +344,7 @@ def GEAR_loader(fn):
         force_override=True
     )
     ds.add_field(
-        ("PartType0", "velocity"),
+        ("gas", "velocity"),
         function=lambda field, data: data["PartType0", "particle_velocity"],
         sampling_type="local",
         units='km/s',
@@ -338,7 +352,7 @@ def GEAR_loader(fn):
         force_override=True
     )
     ds.add_field(
-        ("PartType0", "mass"),
+        ("gas", "mass"),
         function=lambda field, data: data["PartType0", "particle_mass"],
         sampling_type="local",
         units='Msun',
@@ -346,44 +360,44 @@ def GEAR_loader(fn):
         force_override=True
     )
     ds.add_field(
-        ("PartType0", "density"),
+        ("gas", "density"),
         function=lambda field, data: data["PartType0", "Density"],
         sampling_type="local",
         units='g/cm**3',
         dimensions=dimensions.mass / dimensions.length**3,
         force_override=True
-    )
+    )   
     ds.add_field(
-        ("PartType0", "softening"),
+        ("gas", "softening"),
         function=lambda field, data: unyt_array(0.08 * np.ones_like(data["PartType0", "particle_mass"].value, dtype=float), 'kpc'),
         sampling_type="local",
         units='kpc',
         dimensions=dimensions.length,
     )
     ds.add_field(
-        ("PartType0", "metal_mass_fraction"),
+        ("gas", "metal_mass_fraction"),
         function=lambda field, data: data["PartType0", "Metals"].in_units("") if len(data["PartType0", "Metals"].shape) == 1 else data["PartType0", "Metals"][:,9].in_units(""),
         sampling_type="local",
         units='auto',
         dimensions=dimensions.dimensionless,
     )
     ds.add_field(
-        ("PartType0", "metal_mass"),
-        function=lambda field, data: data["PartType0", "metal_mass_fraction"] * data["PartType0", "Masses"],
+        ("gas", "metal_mass"),
+        function=lambda field, data: data["gas", "metal_mass_fraction"] * data["PartType0", "Masses"],
         sampling_type="local",
         units='auto',
         dimensions=dimensions.mass,
     )
     ds.add_field(
-        ("PartType0", "metallicity"),
-        function=lambda field, data: np.log10(data["PartType0", "metal_mass_fraction"] / Z_Solar),
+        ("gas", "metallicity"),
+        function=lambda field, data: np.log10(data["gas", "metal_mass_fraction"] / Z_Solar),
         sampling_type="local",
         units='auto',
         dimensions=dimensions.dimensionless,
         force_override=True
     )    
     ds.add_field(
-        ("PartType0", "thermal_energy"),
+        ("gas", "thermal_energy"),
         function=lambda field, data: data["PartType0", "InternalEnergy"] * data["PartType0", "Masses"],
         sampling_type="local",
         units='auto',
@@ -395,36 +409,36 @@ def GEAR_loader(fn):
     
     ### DM ###
     ds.add_field(
-        ("PartType2", "coordinates"),
+        ("darkmatter", "coordinates"),
         function=lambda field, data: data["PartType2", "particle_position"],
         sampling_type="local",
         units='kpc',
         dimensions=dimensions.length,
     )
     ds.add_field(
-        ("PartType2", "velocity"),
+        ("darkmatter", "velocity"),
         function=lambda field, data: data["PartType2", "particle_velocity"],
         sampling_type="local",
         units='km/s',
         dimensions=dimensions.velocity
     )
     ds.add_field(
-        ("PartType2", "mass"),
+        ("darkmatter", "mass"),
         function=lambda field, data: data["PartType2", "particle_mass"],
         sampling_type="local",
         units='Msun',
         dimensions=dimensions.mass
     )
     ds.add_field(
-        ("PartType2", "softening"),
+        ("darkmatter", "softening"),
         function=lambda field, data: unyt_array(0.08 * np.ones_like(data["PartType2", "particle_mass"].value, dtype=float), 'kpc'),
         sampling_type="local",
         units='kpc',
         dimensions=dimensions.length,
     )
     ds.add_field(
-        ("PartType2", "index"),
-        function=lambda field, data: data["PartType2", "particle_index"],
+        ("darkmatter", "index"),
+        function=lambda field, data: data["PartType2", "particle_index"].astype(int),
         sampling_type="local",
         units='auto',
         dimensions=dimensions.dimensionless,
