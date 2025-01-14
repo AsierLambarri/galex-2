@@ -5,7 +5,7 @@ from unyt import unyt_array, unyt_quantity
 from .config import config
 from .base import BaseHaloObject
 from .particle_type import Component
-from .class_methods import bound_particlesBH, bound_particlesAPROX, create_sph_dataset, softmax, create_subset_mask
+from .class_methods import create_sph_dataset, softmax, create_subset_mask
 
 class SnapshotHalo(BaseHaloObject):
     """zHalo class that implements a variety of functions to analyze the internal structure of a halo at a certain redshift, and the galaxy that
@@ -57,7 +57,7 @@ class SnapshotHalo(BaseHaloObject):
             self.sp_center = unyt_array(center[0], center[1])
             self.sp_radius = unyt_quantity(radius[0], radius[1])        
         else:
-            raise ValueError(f"You did not provide neither (center, radius) or from_catalogue!!")
+            raise ValueError("You did not provide neither (center, radius) or from_catalogue!!")
 
         self._kwargs = kwargs
         self._load_and_parse_data(dataset)
@@ -400,11 +400,11 @@ class SnapshotHalo(BaseHaloObject):
         mgas, mstars, mdm = unyt_quantity(0, "Msun"), unyt_quantity(0, "Msun"), unyt_quantity(0, "Msun") 
         
         if "stars" in components:
-            mstars = self.stars.enclosed_mass(radius, center, only_bound=only_bound)
+            mstars = self.stars.enclosed_mass(radius, center)
         if "gas" in components:
-            mgas = self.gas.enclosed_mass(radius, center, only_bound=only_bound)
+            mgas = self.gas.enclosed_mass(radius, center)
         if "darkmatter" in components:
-            mdm = self.darkmatter.enclosed_mass(radius, center, only_bound=only_bound)
+            mdm = self.darkmatter.enclosed_mass(radius, center)
 
         return  mstars + mdm + mgas
 
@@ -523,33 +523,34 @@ class SnapshotHalo(BaseHaloObject):
                 break
             cm, vcm = new_cm, new_vcm
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
     def get_bound_halo(self):
         """Returns a SnapshotHalo instance where only bound particles are present. Only usable after running compute_energies and compute_bound_stars.
         """
+        yt.add_particle_filter(
+            "stars_bound", 
+            function=lambda pfilter, data: data[pfilter.filtered_type, "total_energy"] < 0, 
+            filtered_type="stars", 
+            requires=["total_energy"]
+
+        )
+        yt.add_particle_filter(
+            "gas_bound", 
+            function=lambda pfilter, data: data[pfilter.filtered_type, "total_energy"] < 0, 
+            filtered_type="gas", 
+            requires=["total_energy"]
+
+        )
+        yt.add_particle_filter(
+            "darkmatter_bound", 
+            function=lambda pfilter, data: data[pfilter.filtered_type, "total_energy"] < 0, 
+            filtered_type="darkmatter", 
+            requires=["total_energy"]
+
+        )
+        self._ds.add_particle_filter("stars_bound")
+        self._ds.add_particle_filter("gas_bound")
+        self._ds.add_particle_filter("darkmatter_bound")
+        self._update_data()
         return None
             
     def plot(self, normal="z", catalogue=None, smooth_particles = False, **kwargs):
