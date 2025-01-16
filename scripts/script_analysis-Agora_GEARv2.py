@@ -64,6 +64,8 @@ def analyzer(f):
     candidates['sigma*'] = pd.Series()
     candidates['e_sigma*'] = pd.Series()
     
+    
+    
     for index, halo in candidates.iterrows():
         try:
             fn = snapequiv[snapequiv['snapshot'] == halo['Snapshot']]['snapname'].values[0]

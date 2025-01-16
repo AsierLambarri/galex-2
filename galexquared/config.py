@@ -2,6 +2,7 @@ import yt
 import yaml
 from pathlib import Path
 from unyt import unyt_quantity
+import warnings
 
 from .loaders import ARTI_loader, GEAR_loader
 
@@ -49,8 +50,6 @@ class Config:
         self._code = None
         self._ds = None
 
-        self.loader = yt.load            
-
     @property
     def code(self):
         return self._code
@@ -61,34 +60,10 @@ class Config:
         """
         if self._code != value.upper(): 
             self._code = value.upper()
-            self._load_code_config()
+            self._set_loader()
+            #self._load_code_config()
         else:
             pass
-
-    def _load_code_config(self):
-        """Loads base_units, ptypes and their fields and gas type from the .yaml configuration file corresponding
-        to the precise code. YAML files are stored in package-dir/code_fields_config
-
-        Returns
-        -------
-        None
-        """
-        with open(self._package_dir + "/code_fields_config/" + self._code + ".yaml", 'r') as f:
-            config_data = yaml.safe_load(f)
-
-            self.ptypes = {}
-            self.base_units = config_data['base_units']
-            
-            if 'stars' in config_data:
-                self.ptypes['stars'] = config_data['stars']['pt']
-            if 'darkmatter' in config_data:
-                self.ptypes['darkmatter'] = config_data['darkmatter']['pt']
-            if 'gas' in config_data:
-                self.ptypes['gas'] = config_data['gas']['pt']
-                self.ptypes['gas_type'] = config_data['gas']['type']
-
-        self._set_loader()
-        return None
 
     def _set_loader(self):
         """Sets the loader
@@ -97,6 +72,10 @@ class Config:
             self.loader = ARTI_loader
         elif self.code == "GEAR":
             self.loader = GEAR_loader
+        else:
+            self.loader = yt.load
+
+            warnings.warn("You have not set a proper CODE! Setting loader to default yt loader. It wont probably run.", RuntimeWarning())
         return None
 
     @staticmethod
@@ -148,7 +127,7 @@ class Config:
     #        ds.cosmology.omega_radiation + ds.cosmology.omega_curvature
     #    }
     #    return units, metadata, sp
-
+    #
     #@staticmethod
     #def check_consistent_units(base_units, units):
     #    """Checks if base_units == units for consistency when loading and parsing data with yt and using code_fields_config files.
@@ -167,6 +146,30 @@ class Config:
     #    for key, unit in base_units.items():
     #        assert unit == unyt_quantity(1, units[key]), f"{key.upper(
     #        )} units do not coincide to 1E-10 precision. Units read from config file is {unit} but those read from yt are {units[key]}!"
-
+    #
+    #def _load_code_config(self):
+    #    """Loads base_units, ptypes and their fields and gas type from the .yaml configuration file corresponding
+    #    to the precise code. YAML files are stored in package-dir/code_fields_config#
+    #
+    #    Returns
+    #    -------
+    #    None
+    #    """
+    #    with open(self._package_dir + "/code_fields_config/" + self._code + ".yaml", 'r') as f:
+    #        config_data = yaml.safe_load(f)
+    #
+    #        self.ptypes = {}
+    #        self.base_units = config_data['base_units']
+    #        
+    #        if 'stars' in config_data:
+    #            self.ptypes['stars'] = config_data['stars']['pt']
+    #        if 'darkmatter' in config_data:
+    #            self.ptypes['darkmatter'] = config_data['darkmatter']['pt']
+    #        if 'gas' in config_data:
+    #            self.ptypes['gas'] = config_data['gas']['pt']
+    #            self.ptypes['gas_type'] = config_data['gas']['type']
+    #
+    #    self._set_loader()
+    #    return None
 
 config = Config()

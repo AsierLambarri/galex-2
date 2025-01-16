@@ -32,27 +32,37 @@ def ARTI_loader(fn):
     -------
     yt.ARTDataset
     """
+    def _gas_coordinates(field, data):
+        x = data["gas", "x"]
+        y = data["gas", "y"]
+        z = data["gas", "z"]
+        return np.column_stack((x, y, z))  
+    def _gas_velocity(field, data):
+        vx = data["gas", "velocity_x"]
+        vy = data["gas", "velocity_y"]
+        vz = data["gas", "velocity_z"]
+        return np.column_stack((vx, vy, vz))  
+    
     ds = yt.load(fn)
-
     ### GAS ###
     ds.add_field(
         ("gas", "coordinates"),
-        function=lambda field, data: unyt_array(np.vstack((data['gas', 'x'].value, data['gas', 'y'].value, data['gas', 'z'].value)).T, data['gas', 'x'].units),
-        sampling_type="cell",
+        function=_gas_coordinates,
+        sampling_type="local",
         units='kpc',
         dimensions=dimensions.length
     )
     ds.add_field(
         ("gas", "velocity"),
-        function=lambda field, data: unyt_array(np.vstack((data['gas', 'velocity_x'].value, data['gas', 'velocity_y'].value, data['gas', 'velocity_z'].value)).T, data['gas', 'velocity_z'].units),
-        sampling_type="cell",
+        function=_gas_velocity,
+        sampling_type="local",
         units='km/s',
         dimensions=dimensions.velocity
     )
     ds.add_field(
         ("gas", "mass"),
         function=lambda field, data: data['gas', 'cell_mass'],
-        sampling_type="cell",
+        sampling_type="local",
         units='Msun',
         dimensions=dimensions.mass,
         force_override=True
@@ -60,7 +70,7 @@ def ARTI_loader(fn):
     ds.add_field(
         ("gas", "index"),
         function=lambda field, data: ds.arr(np.linspace(1, data["gas", "mass"].shape[0] - 1, num=data["gas", "mass"].shape[0], dtype=int), "") + np.maximum(data["stars", "particle_index"].max(), data["darkmatter", "particle_index"].max()),
-        sampling_type="cell",
+        sampling_type="local",
         units='',
         dimensions=dimensions.dimensionless,
         force_override=False
@@ -68,7 +78,7 @@ def ARTI_loader(fn):
     ds.add_field(
         ("gas", "thermal_energy"),
         function=lambda field, data: data["gas", "cell_volume"] *  data["gas", "thermal_energy_density"],
-        sampling_type="cell",
+        sampling_type="local",
         units='auto',
         dimensions=dimensions.mass * dimensions.velocity**2,
     )
@@ -99,21 +109,21 @@ def ARTI_loader(fn):
     ds.add_field(
         ("gas", "He_mass_fraction"),
         function=lambda field, data: 1 - data['gas', 'H_mass_fraction'] - data['gas', 'metal_mass_fraction'],
-        sampling_type="cell",
+        sampling_type="local",
         units='auto',
         dimensions=dimensions.dimensionless
     )
     ds.add_field(
         ("gas", "cell_length"),
         function=lambda field, data: data["gas", "cell_volume"]**(1/3),
-        sampling_type="cell",
+        sampling_type="local",
         units='kpc',
         dimensions=dimensions.length,
     )
     ds.add_field(
         ("gas", "softening"),
         function=lambda field, data: data["gas", "cell_length"],
-        sampling_type="cell",
+        sampling_type="local",
         units='kpc',
         dimensions=dimensions.length,
     )
@@ -249,7 +259,44 @@ def GEAR_loader(fn):
     yt.GEARDataset
     """
     ds = yt.load(fn)
-
+    
+    particle_type_aliases = {
+        "PartType0": "gas",
+        "PartType1": "stars",
+        "PartType2": "darkmatter",
+    }
+    
+    for field in ds.field_list:
+        particle_type, field_name = field
+        if particle_type in particle_type_aliases:
+            alias_prefix = particle_type_aliases[particle_type]
+            
+            def alias_function(field, data, original_field=field):
+                return data[original_field]
+            
+            ds.add_field(
+                (alias_prefix, field_name), 
+                function=alias_function, 
+                units=str(ds.field_info[field].units),
+                sampling_type=ds.field_info[field].sampling_type
+            )
+            
+    for field in ds.derived_field_list:
+        particle_type, field_name = field
+        if particle_type in particle_type_aliases:
+            alias_prefix = particle_type_aliases[particle_type]
+            
+            def alias_function(field, data, original_field=field):
+                return data[original_field]
+            
+            ds.add_field(
+                (alias_prefix, field_name), 
+                function=alias_function, 
+                units=str(ds.field_info[field].units),
+                sampling_type=ds.field_info[field].sampling_type,
+                force_override=True
+            )        
+        
     ### STARS ###
     ds.add_field(
         ("stars", "coordinates"),

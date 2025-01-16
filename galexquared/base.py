@@ -98,11 +98,12 @@ class BaseHaloObject:
 
     def __init__(self):
         self._parent = None  
-        self.ptypes = config.ptypes
+        #self.ptypes = config.ptypes
         
         self.los = [1, 0, 0]
         self.basis = np.identity(3)
         self._old_to_new_base = np.identity(3)
+        self.bound = False
         self.bound_method = None
 
     @classmethod
@@ -236,6 +237,10 @@ class BaseHaloObject:
 
         return None
     
+    def _switch_to_bound(self):
+        self.bound = True
+    def _switch_to_all(self):
+        self.bound = False
     
     
 

@@ -7,15 +7,15 @@ base_units:
     comoving: True
 
 stars: 
-    pt: stars
+    pt: PartType1
 
 
     
 darkmatter:
-    pt: darkmatter
+    pt: PartType2
 
 
 gas:
     type: SPH
-    pt: gas
+    pt: PartType0
     

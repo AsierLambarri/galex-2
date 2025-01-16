@@ -5,7 +5,7 @@ from unyt import unyt_array, unyt_quantity
 from .config import config
 from .base import BaseHaloObject
 from .particle_type import Component
-from .class_methods import create_sph_dataset, softmax, create_subset_mask
+from .class_methods import create_sph_dataset, softmax, create_subset_mask, compute_stars_in_halo
 
 class SnapshotHalo(BaseHaloObject):
     """zHalo class that implements a variety of functions to analyze the internal structure of a halo at a certain redshift, and the galaxy that
@@ -42,6 +42,7 @@ class SnapshotHalo(BaseHaloObject):
                  center=None,
                  radius=None,
                  dataset=None,
+                 bound=False,
                  **kwargs
                 ):
         """Initialize function.
@@ -49,6 +50,8 @@ class SnapshotHalo(BaseHaloObject):
         super().__init__()
 
         self.fn = fn
+        self.bound = bound
+        self.clean_shared_attrs("halo")
         if from_catalogue is not None:
             self._cathalo = from_catalogue.iloc[0]
             self.sp_radius = unyt_quantity(self._cathalo['virial_radius'] / (1 + self._cathalo['Redshift']), 'kpc')
@@ -147,9 +150,10 @@ class SnapshotHalo(BaseHaloObject):
         
         self._metadata = metadata
      
-        self.stars = Component("stars", **self._kwargs["stars_params"] if "stars_params" in self._kwargs else {})
-        self.darkmatter = Component("darkmatter", **self._kwargs["dm_params"] if "dm_params" in self._kwargs else {})
-        self.gas = Component("gas", **self._kwargs["gas_params"] if "gas_params" in self._kwargs else {})
+        infix = "_bound" if self.bound else ""
+        self.stars = Component("stars" + infix, **self._kwargs["stars_params"] if "stars_params" in self._kwargs else {})
+        self.darkmatter = Component("darkmatter" + infix, **self._kwargs["dm_params"] if "dm_params" in self._kwargs else {})
+        self.gas = Component("gas" + infix, **self._kwargs["gas_params"] if "gas_params" in self._kwargs else {})
 
         self.set_shared_attrs("halo", self._kwargs["halo_params"] if "halo_params" in self._kwargs else None)
         self.set_shared_attrs("halo", self._metadata)
@@ -163,34 +167,32 @@ class SnapshotHalo(BaseHaloObject):
         """
         self._all_data = self._ds.all_data()
         self.update_shared_attr("halo", "data_source", self._ds.sphere(self.sp_center, self.sp_radius))
+        self.update_shared_attr("halo", "data_set", self._ds)
 
     def _compute_grav_stars(self, **kwargs):
         """Adds gravitational potential for stars.
         """
-        theta = kwargs.get("theta", 0.7)
-        parallel = kwargs.get("parallel", True)
-        quadrupole = kwargs.get("quadrupole", True)
+        #theta = kwargs.get("theta", 0.7)
+        #parallel = kwargs.get("parallel", True)
+        #quadrupole = kwargs.get("quadrupole", True)
     
         def _grav_function(field, data):
-            from pytreegrav import PotentialTarget
-            global parallel
-            global quadrupole
-            global theta
-            
+            from pytreegrav import PotentialTarget    
+
             return data["stars", "mass"] * unyt_array(
                 PotentialTarget(
-                    pos_source=np.concatenate(( data["gas", "coordinates"], data["stars", "coordinates"], data["darkmatter", "coordinates"] )).to("kpc"), 
+                    pos_source=np.concatenate( (data["stars", "coordinates"], data["darkmatter", "coordinates"]) ).to("kpc"), 
                     pos_target=data["stars", "coordinates"].to("kpc"), 
-                    m_source=np.concatenate(( data["gas", "mass"], data["stars", "mass"], data["darkmatter", "mass"] )).to("Msun"), 
+                    m_source=np.concatenate( (data["stars", "mass"], data["darkmatter", "mass"]) ).to("Msun"), 
                     softening_target=data["stars", "softening"].to("kpc"),
-                    softening_source=np.concatenate(( data["gas", "softening"], data["stars", "softening"], data["darkmatter", "softening"] )).to("kpc"), 
+                    softening_source=np.concatenate( (data["stars", "softening"], data["darkmatter", "softening"]) ).to("kpc"), 
                     G=4.300917270038e-06,
                     theta=0.6,
                     parallel=True,
                     quadrupole=True
                 ), 
                 "km**2/s**2"
-            )
+            ) 
         
         self._ds.add_field(
             ("stars", "grav_potential"),
@@ -207,62 +209,30 @@ class SnapshotHalo(BaseHaloObject):
         parallel = kwargs.get("parallel", True)
         quadrupole = kwargs.get("quadrupole", True)
     
-        def _grav_function(field, data):
-            from pytreegrav import PotentialTarget
-            global parallel
-            global quadrupole
-            global theta
-            
-            return data["gas", "mass"] * unyt_array(
-                PotentialTarget(
-                    pos_source=np.concatenate(( data["gas", "coordinates"], data["stars", "coordinates"], data["darkmatter", "coordinates"] )).to("kpc"), 
-                    pos_target=data["gas", "coordinates"].to("kpc"), 
-                    m_source=np.concatenate(( data["gas", "mass"], data["stars", "mass"], data["darkmatter", "mass"] )).to("Msun"), 
-                    softening_target=data["gas", "softening"].to("kpc"),
-                    softening_source=np.concatenate(( data["gas", "softening"], data["stars", "softening"], data["darkmatter", "softening"] )).to("kpc"), 
-                    G=4.300917270038e-06,
-                    theta=0.6,
-                    parallel=True,
-                    quadrupole=True
-                ), 
-                "km**2/s**2"
-            )
-        
-        self._ds.add_field(
-            ("gas", "grav_potential"),
-            function=_grav_function,
-            sampling_type="local",
-            units="Msun*km**2/s**2",
-            force_override=True
-        )
-
     def _compute_grav_dm(self, **kwargs):
         """Adds gravitational potential for stars.
         """
-        theta = kwargs.get("theta", 0.7)
-        parallel = kwargs.get("parallel", True)
-        quadrupole = kwargs.get("quadrupole", True)
+        #theta = kwargs.get("theta", 0.7)
+        #parallel = kwargs.get("parallel", True)
+        #quadrupole = kwargs.get("quadrupole", True)
     
         def _grav_function(field, data):
-            from pytreegrav import PotentialTarget
-            global parallel
-            global quadrupole
-            global theta
-            
+            from pytreegrav import PotentialTarget    
+
             return data["darkmatter", "mass"] * unyt_array(
                 PotentialTarget(
-                    pos_source=np.concatenate(( data["gas", "coordinates"], data["stars", "coordinates"], data["darkmatter", "coordinates"] )).to("kpc"), 
+                    pos_source=np.concatenate( (data["stars", "coordinates"], data["darkmatter", "coordinates"]) ).to("kpc"), 
                     pos_target=data["darkmatter", "coordinates"].to("kpc"), 
-                    m_source=np.concatenate(( data["gas", "mass"], data["stars", "mass"], data["darkmatter", "mass"] )).to("Msun"), 
+                    m_source=np.concatenate( (data["stars", "mass"], data["darkmatter", "mass"]) ).to("Msun"), 
                     softening_target=data["darkmatter", "softening"].to("kpc"),
-                    softening_source=np.concatenate(( data["gas", "softening"], data["stars", "softening"], data["darkmatter", "softening"] )).to("kpc"), 
+                    softening_source=np.concatenate( (data["stars", "softening"], data["darkmatter", "softening"]) ).to("kpc"), 
                     G=4.300917270038e-06,
                     theta=0.6,
                     parallel=True,
                     quadrupole=True
                 ), 
                 "km**2/s**2"
-            )
+            )            
         
         self._ds.add_field(
             ("darkmatter", "grav_potential"),
@@ -275,16 +245,16 @@ class SnapshotHalo(BaseHaloObject):
     def _compute_total_E(self):
         """Adds total energy field
         """
+        #self._ds.add_field(
+        #    ("gas", "total_energy"),
+        #    function=lambda field, data: data["gas", "grav_potential"] + data["gas", "kinetic_energy"] + data["gas", "thermal_energy"],
+        #    sampling_type="local",
+        #    units="Msun*km**2/s**2",
+        #    force_override=True
+        #)
         self._ds.add_field(
             ("stars", "total_energy"),
             function=lambda field, data: data["stars", "grav_potential"] + data["stars", "kinetic_energy"],
-            sampling_type="local",
-            units="Msun*km**2/s**2",
-            force_override=True
-        )
-        self._ds.add_field(
-            ("gas", "total_energy"),
-            function=lambda field, data: data["gas", "grav_potential"] + data["gas", "kinetic_energy"] + data["gas", "thermal_energy"],
             sampling_type="local",
             units="Msun*km**2/s**2",
             force_override=True
@@ -296,6 +266,35 @@ class SnapshotHalo(BaseHaloObject):
             units="Msun*km**2/s**2",
             force_override=True
         )        
+        self._update_data()
+        
+    def _add_bound_filters(self):
+        #yt.add_particle_filter(
+        #    "gas_bound", 
+        #    function=lambda pfilter, data: data[pfilter.filtered_type, "total_energy"] < 0, 
+        #    filtered_type="gas", 
+        #    requires=["total_energy"]
+        #
+        #)
+        #self._ds.add_particle_filter("gas_bound")
+        
+        yt.add_particle_filter(
+            "stars_bound", 
+            function=lambda pfilter, data: data[pfilter.filtered_type, "total_energy"] < 0, 
+            filtered_type="stars", 
+            requires=["total_energy"]
+
+        )
+        self._ds.add_particle_filter("stars_bound")
+
+        yt.add_particle_filter(
+            "darkmatter_bound", 
+            function=lambda pfilter, data: data[pfilter.filtered_type, "total_energy"] < 0, 
+            filtered_type="darkmatter", 
+            requires=["total_energy"]
+
+        )
+        self._ds.add_particle_filter("darkmatter_bound")
         self._update_data()
 
     def info(self, get_str=False):
@@ -314,7 +313,7 @@ class SnapshotHalo(BaseHaloObject):
         """
         output = []
         
-        output.append(f"\ngeneral information")
+        output.append("\ngeneral information")
         output.append(f"{'':-<21}")
         output.append(f"{'snapshot path':<20}: {'/'.join(self.fn.split('/')[:-1])}")
         output.append(f"{'snapshot file':<20}: {self.fn.split('/')[-1]}")
@@ -329,7 +328,7 @@ class SnapshotHalo(BaseHaloObject):
         output.append(f"{'Mdyn':<20}: {None if self.Mhl is None else f'{self.Mhl:.3e}'}")
 
 
-        output.append(f"\ncoordinate basis")
+        output.append("\ncoordinate basis")
         output.append(f"{'':-<21}")
         output.append(f"{'type':<20}: orthonormal")
         output.append(f"{'line-of-sight':<20}: {self.los}")
@@ -411,27 +410,27 @@ class SnapshotHalo(BaseHaloObject):
     def compute_gravitational_energy(self, **kwargs):
         """Adds gravitational energy to stars, dm and gas. Fields are computed on demand by yt.
         """
+        #self._compute_grav_gas(**kwargs)
         self._compute_grav_dm(**kwargs)
         self._compute_grav_stars(**kwargs)
-        self._compute_grav_gas(**kwargs)
         self._update_data()
    
-    def compute_kinetic_energy(self, v_cm=None, **kwargs):
+    def compute_kinetic_energy(self, v_cm, **kwargs):
         """Adds kinetic energy to yt dataset.
         """
         if v_cm is None:
-            _, v_cm = self.darkmatter.refined_center6d(method=kwargs.get("method", "adaptative"), **kwargs)
+            _, v_cm = self.darkmatter.refined_center6d(method=kwargs.get("method", "adaptative"), nmin=kwargs.get("nmin", 50), rc_scale=kwargs.get("rc_scale", 0.5))
         
+        #self._ds.add_field(
+        #    ("gas", "kinetic_energy"),
+        #    function=lambda field, data: 0.5 * data["gas", "mass"] * ( (data["gas","velocity_x"] - v_cm[0])**2 + (data["gas","velocity_y"] - v_cm[1])**2 + (data["gas","velocity_z"] - v_cm[2])**2 ),
+        #    sampling_type="local",
+        #    units="Msun*km**2/s**2",
+        #    force_override=True
+        #)  
         self._ds.add_field(
             ("stars", "kinetic_energy"),
             function=lambda field, data: 0.5 * data["stars", "mass"] * np.linalg.norm(data["stars","velocity"] - v_cm, axis=1) ** 2,
-            sampling_type="local",
-            units="Msun*km**2/s**2",
-            force_override=True
-        )
-        self._ds.add_field(
-            ("gas", "kinetic_energy"),
-            function=lambda field, data: 0.5 * data["gas", "mass"] * np.linalg.norm(data["gas","velocity"] - v_cm, axis=1) ** 2,
             sampling_type="local",
             units="Msun*km**2/s**2",
             force_override=True
@@ -442,7 +441,7 @@ class SnapshotHalo(BaseHaloObject):
             sampling_type="local",
             units="Msun*km**2/s**2",
             force_override=True
-        )        
+        )
         self._update_data()
    
     def compute_energy(self,  
@@ -476,6 +475,7 @@ class SnapshotHalo(BaseHaloObject):
                 bound_subset_mask = E < 0
                 
             if not refine:
+                self._add_bound_filters()
                 break
                 
             if cm_weighting.lower() == "most-bound":
@@ -519,40 +519,89 @@ class SnapshotHalo(BaseHaloObject):
                 self.update_shared_attr("halo", "vcm", new_vcm)
                 self.compute_kinetic_energy(v_cm=new_vcm)
                 self._compute_total_E()
-
+                self._add_bound_filters()
                 break
             cm, vcm = new_cm, new_vcm
 
-    def get_bound_halo(self):
+    def switch_to_bound(self):
         """Returns a SnapshotHalo instance where only bound particles are present. Only usable after running compute_energies and compute_bound_stars.
         """
+        self._switch_to_bound()            
+        self.stars._switch_to_bound()
+        self.darkmatter._switch_to_bound()
+        return None
+            
+    def switch_to_all(self):
+        """Returns a SnapshotHalo instance where only bound particles are present. Only usable after running compute_energies and compute_bound_stars.
+        """
+        self._switch_to_all()            
+        self.stars._switch_to_all()
+        self.darkmatter._switch_to_all()
+        return None
+    
+    
+    
+    
+    def compute_stars_in_halo(self,
+                              verbose=False,
+                              **kwargs
+                             ):
+        halo_params = {
+            'center': self.get_shared_attr("halo", "rockstar_center"),
+            'center_vel': self.get_shared_attr("halo", "rockstar_velocity"),
+            'rvir': self.get_shared_attr("halo", "rockstar_rvir"),
+            'vmax': self.get_shared_attr("halo", "rockstar_vmax"),
+            'vrms': self.get_shared_attr("halo", "rockstar_vrms")                           
+        }
+        
+        for key in halo_params.keys():
+            halo_params[key] = halo_params[key] if key not in kwargs.keys() else kwargs[key]
+        
+        
+        indices, mask, delta_rel = compute_stars_in_halo(
+            self.stars["coordinates"],
+            self.stars["mass"],
+            self.stars["velocity"],
+            self.stars["index"],
+            halo_params=halo_params,
+            max_radius=(30, 'kpc') if "max_radius" not in kwargs.keys() else kwargs["max_radius"],
+            imax=200 if "imax" not in kwargs.keys() else int(kwargs["imax"]),
+            verbose=verbose
+        )
+        
+        self.stars.delta_rel = delta_rel
+        
         yt.add_particle_filter(
             "stars_bound", 
-            function=lambda pfilter, data: data[pfilter.filtered_type, "total_energy"] < 0, 
+            function=lambda pfilter, data: np.isin( data[pfilter.filtered_type, "index"], indices),
             filtered_type="stars", 
-            requires=["total_energy"]
-
-        )
-        yt.add_particle_filter(
-            "gas_bound", 
-            function=lambda pfilter, data: data[pfilter.filtered_type, "total_energy"] < 0, 
-            filtered_type="gas", 
-            requires=["total_energy"]
-
-        )
-        yt.add_particle_filter(
-            "darkmatter_bound", 
-            function=lambda pfilter, data: data[pfilter.filtered_type, "total_energy"] < 0, 
-            filtered_type="darkmatter", 
-            requires=["total_energy"]
+            requires=["index"]
 
         )
         self._ds.add_particle_filter("stars_bound")
-        self._ds.add_particle_filter("gas_bound")
-        self._ds.add_particle_filter("darkmatter_bound")
         self._update_data()
-        return None
-            
+
+        return None  
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     def plot(self, normal="z", catalogue=None, smooth_particles = False, **kwargs):
         """Plots the projected darkmatter, stars and gas distributions along a given normal direction. The projection direction can be changed with
         the "normal" argument. If catalogue is provided, halos of massgreater than 5E7 will be displayed on top of the darkmatter plot.
@@ -569,10 +618,9 @@ class SnapshotHalo(BaseHaloObject):
         fig : matplotlib figure object
         """
         import cmyt
-        from matplotlib import gridspec
         import matplotlib.pyplot as plt
-        from mpl_toolkits.axes_grid1 import AxesGrid, make_axes_locatable
-        from matplotlib.patches import Circle, Rectangle
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
+        from matplotlib.patches import Circle
         from mpl_toolkits.axes_grid1.inset_locator import mark_inset
         
         try:
@@ -613,7 +661,7 @@ class SnapshotHalo(BaseHaloObject):
         if not self.gas.empty: plots += 1
 
         if plots == 0:
-            raise ValueError(f"It Seems that all components are empty!")
+            raise ValueError("It Seems that all components are empty!")
 
         if normal=="x" or normal==[1,0,0]: cindex = [1,2]
         elif normal=="y" or normal==[0,1,0]: cindex = [2,0]
@@ -624,7 +672,7 @@ class SnapshotHalo(BaseHaloObject):
         if smooth_particles:
             ds_dm = create_sph_dataset(
                 ds,
-                self.ptypes["darkmatter"],
+                "darkmatter",
                 data_source=sp_source,
                 n_neighbours=100 if "n_neighbours" not in kwargs.keys() else kwargs["n_neighbours"][0] if isinstance(kwargs["n_neighbours"], list) else kwargs["n_neighbours"],
                 kernel="wendland2" if "kernel" not in kwargs.keys() else kwargs["kernel"],
@@ -633,7 +681,7 @@ class SnapshotHalo(BaseHaloObject):
 
             ds_st = create_sph_dataset(
                 ds,
-                self.ptypes["stars"],
+                "stars",
                 data_source=sp_source,
                 n_neighbours=100 if "n_neighbours" not in kwargs.keys() else kwargs["n_neighbours"][1] if isinstance(kwargs["n_neighbours"], list) else kwargs["n_neighbours"],
                 kernel="wendland2" if "kernel" not in kwargs.keys() else kwargs["kernel"],
@@ -643,10 +691,10 @@ class SnapshotHalo(BaseHaloObject):
             sp_source_dm = ds_dm.sphere(center, source_factor*plot_radii.max())
             sp_source_st = ds_st.sphere(center, source_factor*plot_radii.max())
         else:
-            dm_type = (self.ptypes["darkmatter"], "mass")  
-            star_type = (self.ptypes["stars"], "mass")            
+            dm_type = ("darkmatter", "mass")  
+            star_type = ("stars", "mass")            
 
-        gas_type = (self.ptypes["gas"], "density")        
+        gas_type = ("gas", "density")        
             
         if "cm" not in kwargs:
             cmyt.arbre.set_bad(cmyt.arbre.get_under())

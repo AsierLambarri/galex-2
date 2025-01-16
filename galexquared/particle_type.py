@@ -3,7 +3,6 @@ from scipy.spatial import KDTree
 from unyt import unyt_array, unyt_quantity
 from copy import copy
 
-from .config import config
 from .base import BaseHaloObject
 from .class_methods import (
                             gram_schmidt, 
@@ -15,8 +14,7 @@ from .class_methods import (
                             easy_los_velocity,
                             softmax,
                             density_profile,
-                            velocity_profile,
-                            random_vector_spherical
+                            velocity_profile
                             )
 
 
@@ -41,15 +39,22 @@ class Component(BaseHaloObject):
         """
         super().__init__()
 
-        self.ptype, self._base_ptype = tag, self.ptypes[tag]
+        self.ptype = tag
 
         self.arr = self._ds.arr
         self.quant = self._ds.quan
         self.clean_shared_attrs(self.ptype)
         self.set_shared_attrs(self.ptype, kwargs)
-        self._default_center_of_mass()
         
-        del self.ptypes
+        if self["mass"].sum() == 0:
+            self.empty = True
+        else:
+            self.empty = False
+            
+        if self.ptype != "gas":
+            self._default_center_of_mass()
+            
+        
         
     @property
     def q(self):
@@ -69,10 +74,14 @@ class Component(BaseHaloObject):
     def __getitem__(self, key):
         """Retrieve the value for the given key, dynamically computing it if it's a dynamic field.
         """
-        if key in ["coordinates", "velocity"]:
-            return vectorized_base_change(np.linalg.inv(self.basis), self._data[self._base_ptype, key])
+        if self.bound and self.ptype != "gas":
+            pt = self.ptype + "_bound"
         else:
-            return self._data[self._base_ptype, key]
+            pt = self.ptype            
+        if key in ["coordinates", "velocity"]:
+            return vectorized_base_change(np.linalg.inv(self.basis), self._data[pt, key])
+        else:
+            return self._data[pt, key]
 
     def info(self, 
              get_str=False
@@ -164,8 +173,9 @@ class Component(BaseHaloObject):
         dist : foat
         """   
         if not self.empty:
-            self._KDTree = KDTree(self["coordinates"])        
-            distances, _ = tree.query(center_point, k=k)
+            if not hasattr(self, "_KDTree"):
+                self._KDTree = KDTree(self["coordinates"])        
+            distances, _ = self._KDTree.query(center_point, k=k)
             return distances[-1] * self["coordinates"].units
         else:
             return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no center-of-mass to refine!")
@@ -324,7 +334,7 @@ class Component(BaseHaloObject):
         """
         if self.empty:
             return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no half mass radius to compute!")
-        else:   
+        else:                
             if lines_of_sight is None:
                 lines_of_sight = np.array([self.los])
             elif np.array(lines_of_sight).ndim == 1:
@@ -359,7 +369,7 @@ class Component(BaseHaloObject):
                     self.ptype,
                     {"rh3d": tmp_rh_arr.mean(),"e_rh3d": tmp_rh_arr.std()}
                 )             
-        return tmp_rh_arr.mean(), tmp_rh_arr.std()
+        return tmp_rh_arr
 
     def los_dispersion(self, rcyl=(1, 'kpc'), lines_of_sight=None):
         """Computes the line of sight velocity dispersion:  the width/std of f(v)dv of particles iside rcyl along the L.O.S. This is NOT the
@@ -378,9 +388,15 @@ class Component(BaseHaloObject):
         stdvel : unyt_quantity
         los_velocities : unyt_array
         """
+        
         if self.empty:
             return AttributeError(f"Compoennt {self.ptype} is empty! and therefore there is no line of sight velocity to compute!")
         else:   
+            if self.bound and self.ptype != "gas":
+                pt = self.ptype + "_bound"
+            else:
+                pt = self.ptype 
+                
             if lines_of_sight is None:
                 lines_of_sight = np.array([self.los])
             elif np.array(lines_of_sight).ndim == 1:
@@ -393,14 +409,14 @@ class Component(BaseHaloObject):
             tmp_disp_arr = self.arr( -9999 * np.ones((lines_of_sight.shape[0])), self["velocity"].units)
             for i, los in enumerate(lines_of_sight):
                 cyl = self._ds.disk(self.basis @ self.q["cm"], los, radius=rcyl, height=(np.inf, 'kpc'), data_source=self._data)
-                tmp_disp_arr[i] = easy_los_velocity(cyl[self._base_ptype, "velocity"], los).std()
+                tmp_disp_arr[i] = easy_los_velocity(cyl[pt, "velocity"], los).std()
 
         self.set_shared_attrs(
             self.ptype,
             {"sigma_los": tmp_disp_arr.mean(), "e_sigma_los": tmp_disp_arr.std()}
         ) 
       
-        return tmp_disp_arr.mean(), tmp_disp_arr.std()
+        return tmp_disp_arr
 
     def enclosed_mass(self, r0, center):
         """Computes the enclosed mass on a sphere centered on center, and with radius r0.
@@ -462,9 +478,9 @@ class Component(BaseHaloObject):
             
             pos = vectorized_base_change(
                 np.linalg.inv(self.basis), 
-                sp[self._base_ptype, "coordinates"].to(self["coordinates"].units)
+                sp[self.ptype, "coordinates"].to(self["coordinates"].units)
             )
-            mass = sp[self._base_ptype, "mass"].to(self["mass"].units)
+            mass = sp[self.ptype, "mass"].to(self["mass"].units)
             
         else:
             pos = self["coordinates"]
@@ -554,13 +570,13 @@ class Component(BaseHaloObject):
             
             pos = vectorized_base_change(
                 np.linalg.inv(self.basis), 
-                sp[self._base_ptype, "coordinates"].to(self["coordinates"].units)
+                sp[self.ptype, "coordinates"].to(self["coordinates"].units)
             )
             vels = vectorized_base_change(
                 np.linalg.inv(self.basis), 
-                sp[self._base_ptype, "velocity"].to(self["velocity"].units)
+                sp[self.ptype, "velocity"].to(self["velocity"].units)
             ) 
-            mass = sp[self._base_ptype, "mass"].to(self["mass"].units)
+            mass = sp[self.ptype, "mass"].to(self["mass"].units)
             
         else:
             pos = self["coordinates"]
