@@ -197,7 +197,6 @@ class MergerTree:
         
         self.size = len(self.CompleteTree)
         
-        return None
 
     def set_equivalence(self, equiv):
         """Loads and sets equivalence table.
@@ -214,7 +213,6 @@ class MergerTree:
         else:
             raise AttributeError(f"Could not set equivalence table!")
             
-        return None
         
     def construc_df_tree(self, treenum, maingal = False):
         """Constructs merger-tree for a single tree.

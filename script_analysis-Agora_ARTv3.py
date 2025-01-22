@@ -18,7 +18,8 @@ from galexquared.class_methods import random_vector_spherical
 
 
 gal.config.code = "ART"
-files = ["ART_satellitesV5_Rvir1.0.csv", "ART_satellitesV5_Rvir1.5.csv", "ART_satellitesV5_Rvir2.0.csv", "ART_satellitesV5_Rvir3.0.csv", "ART_satellitesV5_Rvir4.0.csv", "ART_satellitesV5_Rvir5.0.csv"]
+#files = ["ART_satellitesV5_Rvir1.0.csv", "ART_satellitesV5_Rvir1.5.csv", "ART_satellitesV5_Rvir2.0.csv", "ART_satellitesV5_Rvir3.0.csv", "ART_satellitesV5_Rvir4.0.csv", "ART_satellitesV5_Rvir5.0.csv"]
+files = ["ART_satellitesV5_Rvir1.5.csv"]
 
 for f in files:
     print(f"ANALYZING FILE {f}")
