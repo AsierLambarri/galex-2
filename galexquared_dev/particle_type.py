@@ -3,7 +3,7 @@ from scipy.spatial import KDTree
 from unyt import unyt_array, unyt_quantity
 from copy import copy
 
-from .base import BaseHaloObject
+from .geometry import Geometry
 from .class_methods import (
                             gram_schmidt, 
                             vectorized_base_change, 
@@ -18,7 +18,7 @@ from .class_methods import (
                             )
 
 
-class Component(BaseHaloObject):
+class Component(Geometry):
     """ptype class that contains the particle data, for each particle type present/relevant to your analysis, in the simulation. 
     Fields are stored as attributes and have units thanks to unyt. The class might have as much fields as wished by the user,
     but a few are mandatory:

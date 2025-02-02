@@ -5,7 +5,7 @@ from .class_methods import gram_schmidt
 
 
 
-class BaseHaloObject:
+class Geometry:
     """BaseSimulationObject that contains information shared between all objects in a simulation.
     """
     def __init__(self):
@@ -14,8 +14,6 @@ class BaseHaloObject:
         self.los = [1, 0, 0]
         self.basis = np.identity(3)
         self._old_to_new_base = np.identity(3)
-        self.bound = False
-        self.bound_method = None
 
 
 
@@ -24,12 +22,9 @@ class BaseHaloObject:
         """
         self._parent = parent
         if self._parent:
-            if self.units is None:
-                self.units = self._parent.units
             if self.basis is None:
                 self.basis = self._parent.basis
     
-        return None 
             
     def _set_los(self, los):
         """Sets the coordinate basis for this object and propagates to children if any.
@@ -41,10 +36,3 @@ class BaseHaloObject:
         if self._parent:
             self._parent._set_los(los)   
 
-        return None
-    
-    def _switch_to_bound(self):
-        self.bound = True
-        
-    def _switch_to_all(self):
-        self.bound = False

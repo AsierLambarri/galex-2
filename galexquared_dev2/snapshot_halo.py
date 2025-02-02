@@ -41,12 +41,10 @@ class SnapshotHalo(BaseHaloObject):
     
     """
     def __init__(self,
-                 fn,
-                 from_catalogue=None,
-                 center=None,
-                 radius=None,
-                 dataset=None,
-                 bound=False,
+                 stars,
+                 darkmatter,
+                 gas,
+                 catalogue=None,
                  **kwargs
                 ):
         """Initialize function.
@@ -66,28 +64,17 @@ class SnapshotHalo(BaseHaloObject):
         
         self._dq = {}
 
-        
-        self.fn = fn
-        self.bound = bound
-        if from_catalogue is not None:
-            self._cathalo = from_catalogue.iloc[0]
-            self.sp_radius = unyt_quantity(self._cathalo['virial_radius'] / (1 + self._cathalo['Redshift']), 'kpc')
-            self.sp_center = unyt_array(self._cathalo[['position_x', 'position_y', 'position_z']].values.astype(float) / (1 + self._cathalo['Redshift']), 'kpc')
-        elif center is not None and radius is not None:
-            self.sp_center = unyt_array(center[0], center[1])
-            self.sp_radius = unyt_quantity(radius[0], radius[1])        
-        else:
-            raise ValueError("You did not provide neither (center, radius) or from_catalogue!!")
+
 
         self._kwargs = kwargs
-        self._load_and_parse_data(dataset)
+        self._load_and_parse_data(stars, darkmatter, gas)
         self.arr = self._ds.arr
         self.quant = self._ds.quan        
-        if from_catalogue is not None:
-            self._setup_sha()
-        else:
-            self.sp_center = self.arr(center[0], center[1])
-            self.sp_radius = self.quant(radius[0], radius[1])             
+        #if from_catalogue is not None:
+        #    self._setup_sha()
+        #else:
+        #    self.sp_center = self.arr(center[0], center[1])
+        #    self.sp_radius = self.quant(radius[0], radius[1])             
             
         
 
@@ -141,32 +128,10 @@ class SnapshotHalo(BaseHaloObject):
         self.sp_center = fields["halo", "rck_center"]
         self.sp_radius = fields["halo", "rck_rvir"]
     
-    def _load_and_parse_data(self, dataset):
+    def _load_and_parse_data(self, stars, darkmatter, gas):
+        """Loads data
         """
-        Calls the module-level parser to parse the loaded dataset. This function is directly linked to the loader, sinde it works with the object
-        type provided on it. If you attempt to change one, you must change both and make sure that the data is returned in the correct format 
-        and specified order:
-            
-                                                                 units : dict[str : str]
-                        config.parser(fn, center, radius) -----> metadata : dict[str : str | float | unyt_quantity]
-                                                                 data : hashable as data[particle_type, field]
-                                                                 
-        As the particle type names change from one scheme to another, these MUST be set by the user beforehand as: config.particles : dict[str : str], where the equivalences between
-        gas, dm and star particles are listed.
-                                                                 
-
-        Returns
-        -------
-        base_units : dict[str : str]
-        metadata : dict[str : str | float | unyt_quantity]
-        parsed_data : returned object is of the type returned by (user) specified config.parser
-        
-        Each return is saved as an attribute of the config, zHalo or zHalo.ptype instance: parsed_data is saved inside ptype, for each particle type. base_units are saved inside config and
-        the metadata is saved inside zHalo.
-        """
-        self._ds = config.loader(self.fn) if dataset is None else dataset
-        self._data = self._ds.sphere(self.sp_center, self.sp_radius)
-        self._all_data = self._ds.all_data()
+        self._ds = stars.ds
 
         self._metadata = {
             'redshift': self._ds.current_redshift,
@@ -181,123 +146,93 @@ class SnapshotHalo(BaseHaloObject):
             self._ds.cosmology.omega_radiation + self._ds.cosmology.omega_curvature
         }
              
-        infix = "_bound" if self.bound else ""
         
         self.stars = Component(
-            "stars" + infix, 
-            self._data,
+            "stars", 
+            stars,
             **self._kwargs["stars_params"] if "stars_params" in self._kwargs else {}
         )
         self.darkmatter = Component(
-            "darkmatter" + infix, 
-            self._data,
+            "darkmatter", 
+            darkmatter,
             **self._kwargs["dm_params"] if "dm_params" in self._kwargs else {}
         )
         self.gas = Component(
-            "gas" + infix,
-            self._data,
+            "gas",
+            gas,
             **self._kwargs["gas_params"] if "gas_params" in self._kwargs else {}
         )
 
-        self.stars.sp_center, self.stars.sp_radius = self.sp_center, self.sp_radius
-        self.darkmatter.sp_center, self.darkmatter.sp_radius = self.sp_center, self.sp_radius
-        self.gas.sp_center, self.gas.sp_radius = self.sp_center, self.sp_radius
 
-    def _update_data(self):
-        """Updates dataset after adding fields.
-        """
-        self._data = self._ds.sphere(self.sp_center, self.sp_radius)
-        self._all_data = self._ds.all_data()
-
-        self.stars._update_data(self._ds, self._data)
-        self.darkmatter._update_data(self._ds, self._data)        
-        self.gas._update_data(self._ds, self._data)        
         
-        
-
-
-
     def _compute_grav_stars(self, **kwargs):
         """Adds gravitational potential for stars.
-        """    
-        from pytreegrav import PotentialTarget    
+        """
+        #theta = kwargs.get("theta", 0.7)
+        #parallel = kwargs.get("parallel", True)
+        #quadrupole = kwargs.get("quadrupole", True)
+    
+        def _grav_function(field, data):
+            from pytreegrav import PotentialTarget    
 
-        pot = self.stars["mass"] * self._ds.arr(
-            PotentialTarget(
-                pos_source=np.concatenate( (self.gas["coordinates"], self.stars["coordinates"], self.darkmatter["coordinates"]) ).to("kpc"), 
-                pos_target=self.stars["coordinates"].to("kpc"), 
-                m_source=np.concatenate( (self.gas["mass"], self.stars["mass"], self.darkmatter["mass"]) ).to("Msun"), 
-                softening_target=self.stars["softening"].to("kpc"),
-                softening_source=np.concatenate( (self.gas["softening"], self.stars["softening"], self.darkmatter["softening"]) ).to("kpc"), 
-                G=4.300917270038e-06,
-                theta=0.6,
-                parallel=True,
-                quadrupole=True
-            ), 
-            "km**2/s**2"
-        ) 
+            return data["stars", "mass"] * unyt_array(
+                PotentialTarget(
+                    pos_source=np.concatenate( (data["stars", "coordinates"], data["darkmatter", "coordinates"]) ).to("kpc"), 
+                    pos_target=data["stars", "coordinates"].to("kpc"), 
+                    m_source=np.concatenate( (data["stars", "mass"], data["darkmatter", "mass"]) ).to("Msun"), 
+                    softening_target=data["stars", "softening"].to("kpc"),
+                    softening_source=np.concatenate( (data["stars", "softening"], data["darkmatter", "softening"]) ).to("kpc"), 
+                    G=4.300917270038e-06,
+                    theta=0.6,
+                    parallel=True,
+                    quadrupole=True
+                ), 
+                "km**2/s**2"
+            ) 
         
         self._ds.add_field(
             ("stars", "grav_potential"),
-            function=lambda field, data: pot,
+            function=_grav_function,
             sampling_type="local",
             units="Msun*km**2/s**2",
             force_override=True
         )
 
-    
     def _compute_grav_gas(self, **kwargs):
         """Adds gravitational potential for stars.
         """
-        from pytreegrav import PotentialTarget    
-
-        pot = self.gas["mass"] * self._ds.arr(
-            PotentialTarget(
-                pos_source=np.concatenate( (self.gas["coordinates"], self.stars["coordinates"], self.darkmatter["coordinates"]) ).to("kpc"), 
-                pos_target=self.gas["coordinates"].to("kpc"), 
-                m_source=np.concatenate( (self.gas["mass"], self.stars["mass"], self.darkmatter["mass"]) ).to("Msun"), 
-                softening_target=self.gas["softening"].to("kpc"),
-                softening_source=np.concatenate( (self.gas["softening"], self.stars["softening"], self.darkmatter["softening"]) ).to("kpc"), 
-                G=4.300917270038e-06,
-                theta=0.6,
-                parallel=True,
-                quadrupole=True
-            ), 
-            "km**2/s**2"
-        )           
-        
-        self._ds.add_field(
-            ("gas", "grav_potential"),
-            function=lambda field, data: pot,
-            sampling_type="local",
-            units="Msun*km**2/s**2",
-            force_override=True
-        )
-
-        
+        theta = kwargs.get("theta", 0.7)
+        parallel = kwargs.get("parallel", True)
+        quadrupole = kwargs.get("quadrupole", True)
+    
     def _compute_grav_dm(self, **kwargs):
         """Adds gravitational potential for stars.
-        """    
-        from pytreegrav import PotentialTarget    
+        """
+        #theta = kwargs.get("theta", 0.7)
+        #parallel = kwargs.get("parallel", True)
+        #quadrupole = kwargs.get("quadrupole", True)
+    
+        def _grav_function(field, data):
+            from pytreegrav import PotentialTarget    
 
-        pot = self.darkmatter["mass"] * self._ds.arr(
-            PotentialTarget(
-                pos_source=np.concatenate( (self.gas["coordinates"], self.stars["coordinates"], self.darkmatter["coordinates"]) ).to("kpc"), 
-                pos_target=self.darkmatter["coordinates"].to("kpc"), 
-                m_source=np.concatenate( (self.gas["mass"], self.stars["mass"], self.darkmatter["mass"]) ).to("Msun"), 
-                softening_target=self.darkmatter["softening"].to("kpc"),
-                softening_source=np.concatenate( (self.gas["softening"], self.stars["softening"], self.darkmatter["softening"]) ).to("kpc"), 
-                G=4.300917270038e-06,
-                theta=0.6,
-                parallel=True,
-                quadrupole=True
-            ), 
-            "km**2/s**2"
-        )           
+            return data["darkmatter", "mass"] * unyt_array(
+                PotentialTarget(
+                    pos_source=np.concatenate( (data["stars", "coordinates"], data["darkmatter", "coordinates"]) ).to("kpc"), 
+                    pos_target=data["darkmatter", "coordinates"].to("kpc"), 
+                    m_source=np.concatenate( (data["stars", "mass"], data["darkmatter", "mass"]) ).to("Msun"), 
+                    softening_target=data["darkmatter", "softening"].to("kpc"),
+                    softening_source=np.concatenate( (data["stars", "softening"], data["darkmatter", "softening"]) ).to("kpc"), 
+                    G=4.300917270038e-06,
+                    theta=0.6,
+                    parallel=True,
+                    quadrupole=True
+                ), 
+                "km**2/s**2"
+            )            
         
         self._ds.add_field(
             ("darkmatter", "grav_potential"),
-            function=lambda field, data: pot,
+            function=_grav_function,
             sampling_type="local",
             units="Msun*km**2/s**2",
             force_override=True

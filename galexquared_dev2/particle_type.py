@@ -49,13 +49,13 @@ class Component(BaseHaloObject):
         
         self._dq = {}
         
-        if self["mass"].sum() == 0:
-            self.empty = True
-        else:
-            self.empty = False
+       # if self["mass"].sum() == 0:
+       #     self.empty = True
+       # else:
+       #     self.empty = False
             
-        if self.ptype != "gas":
-            self._default_center_of_mass()
+        #if self.ptype != "gas":
+        #    self._default_center_of_mass()
             
         
         

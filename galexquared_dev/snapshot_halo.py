@@ -3,7 +3,7 @@ import numpy as np
 from unyt import unyt_array, unyt_quantity
 
 from .config import config
-from .base import BaseHaloObject
+from .geometry import Geometry
 from .particle_type import Component
 from .class_methods import create_sph_dataset, softmax, create_subset_mask, compute_stars_in_halo
 
@@ -11,7 +11,7 @@ from .class_methods import create_sph_dataset, softmax, create_subset_mask, comp
 
 
     
-class SnapshotHalo(BaseHaloObject):
+class SnapshotHalo(Geometry):
     """zHalo class that implements a variety of functions to analyze the internal structure of a halo at a certain redshift, and the galaxy that
     is contained within it, such as computing their respective moments (x_cm and v_cm), projected and deprojected half-mass radii, total and LOS
     velocity dispersions, surface and volumetric density profiles, computation of dynamical and M_x masses and much more!
@@ -123,6 +123,7 @@ class SnapshotHalo(BaseHaloObject):
 
     def __getitem__(self, key):
         return self.dq[key]
+
         
     def _setup_sha(self):
         """Loads the parameters present in the catalogue.
@@ -140,6 +141,7 @@ class SnapshotHalo(BaseHaloObject):
             
         self.sp_center = fields["halo", "rck_center"]
         self.sp_radius = fields["halo", "rck_rvir"]
+
     
     def _load_and_parse_data(self, dataset):
         """
@@ -203,6 +205,7 @@ class SnapshotHalo(BaseHaloObject):
         self.darkmatter.sp_center, self.darkmatter.sp_radius = self.sp_center, self.sp_radius
         self.gas.sp_center, self.gas.sp_radius = self.sp_center, self.sp_radius
 
+    
     def _update_data(self):
         """Updates dataset after adding fields.
         """
@@ -214,15 +217,12 @@ class SnapshotHalo(BaseHaloObject):
         self.gas._update_data(self._ds, self._data)        
         
         
-
-
-
     def _compute_grav_stars(self, **kwargs):
         """Adds gravitational potential for stars.
         """    
         from pytreegrav import PotentialTarget    
 
-        pot = self.stars["mass"] * self._ds.arr(
+        self.stars["mass"] * self._ds.arr(
             PotentialTarget(
                 pos_source=np.concatenate( (self.gas["coordinates"], self.stars["coordinates"], self.darkmatter["coordinates"]) ).to("kpc"), 
                 pos_target=self.stars["coordinates"].to("kpc"), 
@@ -239,7 +239,7 @@ class SnapshotHalo(BaseHaloObject):
         
         self._ds.add_field(
             ("stars", "grav_potential"),
-            function=lambda field, data: pot,
+            function=_grav_function,
             sampling_type="local",
             units="Msun*km**2/s**2",
             force_override=True
@@ -249,9 +249,7 @@ class SnapshotHalo(BaseHaloObject):
     def _compute_grav_gas(self, **kwargs):
         """Adds gravitational potential for stars.
         """
-        from pytreegrav import PotentialTarget    
-
-        pot = self.gas["mass"] * self._ds.arr(
+        self.gas["mass"] * self._ds.arr(
             PotentialTarget(
                 pos_source=np.concatenate( (self.gas["coordinates"], self.stars["coordinates"], self.darkmatter["coordinates"]) ).to("kpc"), 
                 pos_target=self.gas["coordinates"].to("kpc"), 
@@ -267,8 +265,8 @@ class SnapshotHalo(BaseHaloObject):
         )           
         
         self._ds.add_field(
-            ("gas", "grav_potential"),
-            function=lambda field, data: pot,
+            ("darkmatter", "grav_potential"),
+            function=_grav_function,
             sampling_type="local",
             units="Msun*km**2/s**2",
             force_override=True
@@ -280,7 +278,7 @@ class SnapshotHalo(BaseHaloObject):
         """    
         from pytreegrav import PotentialTarget    
 
-        pot = self.darkmatter["mass"] * self._ds.arr(
+        self.darkmatter["mass"] * self._ds.arr(
             PotentialTarget(
                 pos_source=np.concatenate( (self.gas["coordinates"], self.stars["coordinates"], self.darkmatter["coordinates"]) ).to("kpc"), 
                 pos_target=self.darkmatter["coordinates"].to("kpc"), 
@@ -297,7 +295,7 @@ class SnapshotHalo(BaseHaloObject):
         
         self._ds.add_field(
             ("darkmatter", "grav_potential"),
-            function=lambda field, data: pot,
+            function=_grav_function,
             sampling_type="local",
             units="Msun*km**2/s**2",
             force_override=True
@@ -306,13 +304,13 @@ class SnapshotHalo(BaseHaloObject):
     def _compute_total_E(self):
         """Adds total energy field
         """
-        #self._ds.add_field(
-        #    ("gas", "total_energy"),
-        #    function=lambda field, data: data["gas", "grav_potential"] + data["gas", "kinetic_energy"] + data["gas", "thermal_energy"],
-        #    sampling_type="local",
-        #    units="Msun*km**2/s**2",
-        #    force_override=True
-        #)
+        self._ds.add_field(
+            ("gas", "total_energy"),
+            function=lambda field, data: data["gas", "grav_potential"] + data["gas", "kinetic_energy"] + data["gas", "thermal_energy"],
+            sampling_type="local",
+            units="Msun*km**2/s**2",
+            force_override=True
+        )
         self._ds.add_field(
             ("stars", "total_energy"),
             function=lambda field, data: data["stars", "grav_potential"] + data["stars", "kinetic_energy"],
@@ -468,7 +466,7 @@ class SnapshotHalo(BaseHaloObject):
     def compute_gravitational_energy(self, **kwargs):
         """Adds gravitational energy to stars, dm and gas. Fields are computed on demand by yt.
         """
-        #self._compute_grav_gas(**kwargs)
+        self._compute_grav_gas(**kwargs)
         self._compute_grav_dm(**kwargs)
         self._compute_grav_stars(**kwargs)
         self._update_data()
@@ -488,14 +486,14 @@ class SnapshotHalo(BaseHaloObject):
         #)  
         self._ds.add_field(
             ("stars", "kinetic_energy"),
-            function=lambda field, data: 0.5 * data["stars", "mass"] * np.linalg.norm(data["stars","velocity"] - v_cm, axis=1) ** 2,
+            function=lambda field, data: 0.5 * self.stars["mass"] * np.linalg.norm(data["stars","velocity"] - v_cm, axis=1) ** 2,
             sampling_type="local",
             units="Msun*km**2/s**2",
             force_override=True
         )
         self._ds.add_field(
             ("darkmatter", "kinetic_energy"),
-            function=lambda field, data: 0.5 * data["darkmatter", "mass"] * np.linalg.norm(data["darkmatter","velocity"] - v_cm, axis=1) ** 2,
+            function=lambda field, data: 0.5 * self.darkmatter["mass"] * np.linalg.norm(data["darkmatter","velocity"] - v_cm, axis=1) ** 2,
             sampling_type="local",
             units="Msun*km**2/s**2",
             force_override=True
